@@ -20,19 +20,21 @@ import useForceLayout from "../../lib/graph/useForceLayout";
 export type KnowledgeGraphViewProps = {
   nodes: GraphNodeDTO[];
   edges: GraphEdgeDTO[];
-  selectedNodeId: string | null;
+  selectedNodeId?: string | null;
   onSelectNode: (nodeId: string) => void;
+  highlightedNodeIds?: string[];
+  brightnessAttribute?: keyof GraphNodeDTO;
 };
 
 const nodeTypes = { graphNode: GraphNode };
 const edgeTypes = { graphEdge: GraphEdge };
 
-function buildFlowNodes(nodes: GraphNodeDTO[]): Node[] {
+function buildFlowNodes(nodes: GraphNodeDTO[], brightnessAttribute: keyof GraphNodeDTO): Node[] {
   return nodes.map((node, index) => ({
     id: node.id,
     type: "graphNode",
     position: { x: 0, y: 0 },
-    data: node,
+    data: { ...node, brightnessAttribute },
     selected: false,
   }));
 }
@@ -51,8 +53,10 @@ export default function KnowledgeGraphView({
   edges,
   selectedNodeId,
   onSelectNode,
+  highlightedNodeIds,
+  brightnessAttribute = 'proven_knowledge_rating',
 }: KnowledgeGraphViewProps) {
-  const baseNodes = useMemo(() => buildFlowNodes(nodes), [nodes]);
+  const baseNodes = useMemo(() => buildFlowNodes(nodes, brightnessAttribute), [nodes, brightnessAttribute]);
   const baseEdges = useMemo(() => buildFlowEdges(edges), [edges]);
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState(baseEdges);
@@ -81,10 +85,13 @@ export default function KnowledgeGraphView({
     setFlowNodes((current) =>
       current.map((node) => ({
         ...node,
-        selected: node.id === selectedNodeId,
+        selected: 
+          highlightedNodeIds && highlightedNodeIds.length > 0
+            ? highlightedNodeIds.includes(node.id)
+            : node.id === selectedNodeId,
       }))
     );
-  }, [selectedNodeId, setFlowNodes]);
+  }, [selectedNodeId, highlightedNodeIds, setFlowNodes]);
 
   useEffect(() => {
     setFlowEdges(baseEdges);

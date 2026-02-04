@@ -1,51 +1,62 @@
+import { apiFetch } from "./client";
 import type { GraphSummaryDTO, NodeDTO, QuestionDTO } from "../types";
 
 export async function listNodes(): Promise<NodeDTO[]> {
-  return Promise.resolve([]);
+  return apiFetch<NodeDTO[]>("/graph/nodes");
 }
 
 export async function listQuestions(): Promise<QuestionDTO[]> {
-  return Promise.resolve([]);
+  return apiFetch<QuestionDTO[]>("/graph/questions");
 }
 
 export async function fetchGraphSummary(): Promise<GraphSummaryDTO> {
-  return Promise.resolve({
-    nodes: [
-      {
-        id: "node-1",
-        topic_name: "Active Recall",
-        proven_knowledge_rating: 0.72,
-        user_estimated_knowledge_rating: 0.7,
-        importance: 0.9,
-        relevance: 0.8,
-        view_frequency: 4,
-        source_material_ids: ["material-1"],
-        forgetting_score: 0.3,
-        linked_questions_count: 3,
-        linked_materials_count: 1,
-      },
-      {
-        id: "node-2",
-        topic_name: "Spaced Repetition",
-        proven_knowledge_rating: 0.45,
-        user_estimated_knowledge_rating: 0.4,
-        importance: 0.8,
-        relevance: 0.7,
-        view_frequency: 2,
-        source_material_ids: ["material-2"],
-        forgetting_score: 0.6,
-        linked_questions_count: 2,
-        linked_materials_count: 1,
-      },
-    ],
-    edges: [
-      {
-        id: "edge-1",
-        source: "node-1",
-        target: "node-2",
-        type: "PREREQUISITE",
-        weight: 1,
-      },
-    ],
+  return apiFetch<GraphSummaryDTO>("/graph");
+}
+
+export async function createNode(
+  topicName: string,
+  importance: number = 0.5,
+  relevance: number = 0.5
+): Promise<NodeDTO> {
+  return apiFetch<NodeDTO>("/graph/nodes", {
+    method: "POST",
+    body: JSON.stringify({
+      topic_name: topicName,
+      importance,
+      relevance,
+    }),
+  });
+}
+
+export async function updateNode(
+  nodeId: string,
+  updates: Partial<{
+    topic_name: string;
+    proven_knowledge_rating: number;
+    user_estimated_knowledge_rating: number;
+    importance: number;
+    relevance: number;
+  }>
+): Promise<NodeDTO> {
+  return apiFetch<NodeDTO>(`/graph/nodes/${nodeId}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function createEdge(
+  fromNodeId: string,
+  toNodeId: string,
+  edgeType: string = "PREREQUISITE",
+  weight: number = 1.0
+): Promise<any> {
+  return apiFetch(`/graph/edges`, {
+    method: "POST",
+    body: JSON.stringify({
+      from_node_id: fromNodeId,
+      to_node_id: toNodeId,
+      edge_type: edgeType,
+      weight,
+    }),
   });
 }

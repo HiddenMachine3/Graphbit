@@ -3,7 +3,7 @@ import { Handle, Position } from "reactflow";
 import type { GraphNodeDTO } from "../../lib/types";
 
 type GraphNodeProps = {
-  data: GraphNodeDTO;
+  data: GraphNodeDTO & { brightnessAttribute?: keyof GraphNodeDTO };
   selected: boolean;
 };
 
@@ -11,8 +11,19 @@ function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
 
+function normalizeValue(value: any, attribute: keyof GraphNodeDTO): number {
+  // Some attributes like view_frequency can be large integers, so we normalize them
+  if (attribute === 'view_frequency') {
+    // Assuming max view frequency is around 100
+    return clamp(Math.min(value / 100, 1));
+  }
+  return clamp(value);
+}
+
 export default function GraphNode({ data, selected }: GraphNodeProps) {
-  const brightness = clamp(data.proven_knowledge_rating);
+  const brightnessAttribute = data.brightnessAttribute || 'proven_knowledge_rating';
+  const brightnessValue = data[brightnessAttribute];
+  const brightness = normalizeValue(brightnessValue, brightnessAttribute);
   const borderIntensity = clamp(data.forgetting_score);
   const importance = clamp(data.importance);
 
@@ -25,7 +36,7 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
 
   return (
     <div
-      title={`PKR: ${data.proven_knowledge_rating.toFixed(2)} | Importance: ${data.importance.toFixed(
+      title={`${brightnessAttribute.replace(/_/g, ' ')}: ${brightnessValue.toFixed(2)} | Importance: ${data.importance.toFixed(
         2
       )} | Forgetting: ${data.forgetting_score.toFixed(2)}`}
       className={`flex flex-col items-center justify-center rounded-full border-2 text-center text-[11px] shadow-sm transition ${
@@ -34,7 +45,7 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
       style={{ backgroundColor, borderColor, width: size, height: size }}
     >
       <div className="px-2 font-semibold text-slate-900">{data.topic_name}</div>
-      <div className="mt-1 text-[10px] text-slate-700">PKR {data.proven_knowledge_rating.toFixed(2)}</div>
+      <div className="mt-1 text-[10px] text-slate-700">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </div>
