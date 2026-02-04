@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
-from src.models import (
+from backend.app.domain import (
     UserNodeState,
     SUCCESS_PKR_GAIN,
     SUCCESS_STABILITY_GAIN,

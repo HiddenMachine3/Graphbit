@@ -4,7 +4,7 @@ Phase 2 Demo: Knowledge Graph Reasoning Operations
 Demonstrates the new graph reasoning capabilities added in Phase 2.
 """
 
-from models import Graph, Node, Edge, EdgeType
+from backend.app.domain import Graph, Node, Edge, EdgeType
 
 
 def main():

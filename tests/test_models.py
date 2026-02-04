@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from src.models import (
+from backend.app.domain import (
     Community,
     Edge,
     EdgeType,

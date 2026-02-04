@@ -568,7 +568,7 @@ Both methods:
 ### Example Usage
 
 ```python
-from src.models import QuestionBank, Question, Graph, Node, Edge, EdgeType
+from backend.app.domain import QuestionBank, Question, Graph, Node, Edge, EdgeType
 
 # Build knowledge graph
 graph = Graph()

@@ -5,7 +5,7 @@ This demonstrates tracking individual user knowledge states over time with forge
 """
 
 from datetime import datetime, timedelta
-from models import Node, UserNodeState
+from backend.app.domain import Node, UserNodeState
 
 print("=" * 70)
 print("PHASE 3: User Knowledge State & Forgetting Model")
