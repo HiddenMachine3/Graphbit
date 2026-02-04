@@ -18,6 +18,7 @@ class Node(BaseModel):
     importance: float = Field(default=0.0, ge=0.0)
     relevance: float = Field(default=0.0, ge=0.0)
     view_frequency: int = Field(default=0, ge=0)
+    source_material_ids: set[str] = Field(default_factory=set)
     
     def update_proven_rating(self, new_rating: float) -> None:
         """

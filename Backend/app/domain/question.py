@@ -36,6 +36,7 @@ class Question(BaseModel):
     difficulty: int = Field(default=3, ge=1, le=5)
     tags: set[str] = Field(default_factory=set)
     last_attempted_at: Optional[datetime] = None
+    source_material_ids: set[str] = Field(default_factory=set)
     
     @field_validator('covered_node_ids')
     @classmethod
