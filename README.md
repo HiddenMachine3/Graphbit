@@ -488,14 +488,185 @@ The `demo_phase3.py` script demonstrates:
 
 ---
 
+## Phase 4: Question Bank & Tagging System ✅
+
+**Status**: Complete
+
+### Overview
+
+Phase 4 extends the Question model with difficulty ratings and tagging support, and introduces the **QuestionBank** class for managing collections of questions with advanced query capabilities and graph-based coverage validation.
+
+### Question Model Enhancements
+
+**New Fields:**
+- `difficulty`: Integer rating from 1 (easiest) to 5 (hardest), defaults to 3
+- `tags`: Set of string tags for categorization (e.g., `{"basics", "syntax"}`)
+- `last_attempted_at`: Optional datetime tracking when question was last attempted
+
+**New Methods:**
+- `record_attempt(success: bool, timestamp: datetime)`: Records attempt and updates both metadata (hits/misses) and last_attempted_at
+
+### QuestionBank Class
+
+Centralized question repository with validation and query capabilities.
+
+**Core Operations:**
+```python
+bank = QuestionBank()
+
+# Add questions (with optional graph validation)
+bank.add_question(question)
+bank.add_question(question, graph=graph)  # Validates coverage
+
+# Remove questions
+bank.remove_question("q1")
+
+# Retrieve questions
+question = bank.get_question("q1")
+count = bank.count_questions()
+```
+
+**Coverage Validation:**
+
+When adding a question with a graph:
+1. Ensures all `covered_node_ids` exist in the graph
+2. For multi-node coverage, validates nodes form a connected subgraph using `graph.is_valid_coverage()`
+3. Raises `ValueError` if validation fails
+
+**Query Methods:**
+
+```python
+# By node coverage
+python_questions = bank.get_questions_by_node("python")
+
+# By tag
+basics_questions = bank.get_questions_by_tag("basics")
+
+# By difficulty range
+easy_questions = bank.get_questions_by_difficulty(1, 2)
+hard_questions = bank.get_questions_by_difficulty(4, 5)
+
+# By question type
+flashcards = bank.get_questions_by_type(QuestionType.FLASHCARD)
+```
+
+**Performance Tracking:**
+
+```python
+# Record successful answer
+bank.record_question_success("q1", datetime.now())
+
+# Record failed answer
+bank.record_question_failure("q1", datetime.now())
+```
+
+Both methods:
+- Update question metadata (hits/misses)
+- Update `last_attempted_at` timestamp
+- Raise `KeyError` if question not found
+
+### Example Usage
+
+```python
+from src.models import QuestionBank, Question, Graph, Node, Edge, EdgeType
+
+# Build knowledge graph
+graph = Graph()
+graph.add_node(Node(id="python", topic_name="Python"))
+graph.add_node(Node(id="variables", topic_name="Variables"))
+graph.add_edge(Edge(
+    from_node_id="python",
+    to_node_id="variables",
+    type=EdgeType.PREREQUISITE,
+    weight=1.0
+))
+
+# Create question bank
+bank = QuestionBank()
+
+# Add questions with tags and difficulty
+q1 = Question(
+    id="q1",
+    text="What is Python?",
+    answer="A high-level programming language",
+    covered_node_ids=["python"],
+    difficulty=1,
+    tags={"basics", "intro"},
+    # ... other required fields
+)
+
+q2 = Question(
+    id="q2",
+    text="How do you declare a variable?",
+    answer="name = value",
+    covered_node_ids=["variables"],
+    difficulty=2,
+    tags={"basics", "syntax"},
+    # ... other required fields
+)
+
+# Add with graph validation
+bank.add_question(q1, graph=graph)
+bank.add_question(q2, graph=graph)
+
+# Query by tags
+basics = bank.get_questions_by_tag("basics")  # Returns [q1, q2]
+
+# Query by difficulty
+easy = bank.get_questions_by_difficulty(1, 2)  # Returns [q1, q2]
+```
+
+### Testing
+
+```bash
+# Run Phase 4 tests only
+pytest tests/test_question_bank.py -v
+
+# Run all tests (Phases 1-4)
+pytest tests/ -v
+```
+
+**Test Coverage:**
+- 31 comprehensive tests across 6 test classes
+- Question enhancements (difficulty, tags, last_attempted_at)
+- CRUD operations
+- Coverage validation with graph integration
+- Query methods (by node, tag, difficulty, type)
+- Performance tracking
+- Integration test with realistic learning scenario
+
+### Key Design Decisions
+
+✅ **Graph Integration**: Coverage validation uses Phase 2's `is_valid_coverage()` with configurable max_hops (default: 3) and all edge types
+
+✅ **Optional Validation**: Questions can be added without graph validation for flexibility
+
+✅ **Immutable Queries**: All query methods return new lists, not references to internal storage
+
+✅ **Type Safety**: Uses Pydantic validation for difficulty ranges (1-5) and non-empty tags
+
+✅ **Performance Tracking**: `record_attempt()` updates both metadata and timestamp atomically
+
+✅ **Simple Queries**: No complex ranking, sorting, or priority queues—query results returned in insertion order
+
+### Constraints
+
+- Difficulty must be 1-5 (validated by Pydantic)
+- Tags must be non-empty strings
+- Coverage validation requires max_hops=3 and checks all edge types
+- Question IDs must be unique within bank
+- No implicit question generation or LLM integration
+
+---
+
 ## Next Phases (Not Yet Implemented)
 
-**Phase 4**: Graph-based Question Selection
+**Phase 5**: Graph-based Question Selection
 - Combine graph reasoning with user knowledge state
 - Smart question prioritization based on weakness, graph structure, and learning paths
 - Coverage-aware selection algorithms
 
-**Phase 5**: Persistence Layer
+**Phase 6**: Persistence Layer
 - Database models and repositories
 - Data access patterns
 
