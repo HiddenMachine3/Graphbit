@@ -4,18 +4,44 @@ Combines all API routers into a single main router.
 This router is then included in the FastAPI app with the /api/v1 prefix.
 """
 from fastapi import APIRouter
-from app.api import auth
+from app.api import auth, graph, communities, revision, sessions, materials
 
 # Create main API router
 api_router = APIRouter()
 
 # Authentication routes
-# POST /auth/register - Register new user
-# POST /auth/login - Login and get JWT token (accepts form data)
-# GET /auth/me - Get current user info (protected)
-# POST /auth/logout - Logout (optional, mostly client-side)
 api_router.include_router(
     auth.router,
     prefix="/auth",
     tags=["Authentication"]
+)
+
+# Graph routes
+api_router.include_router(
+    graph.router,
+    tags=["Graph"]
+)
+
+# Community routes
+api_router.include_router(
+    communities.router,
+    tags=["Communities"]
+)
+
+# Revision session routes
+api_router.include_router(
+    revision.router,
+    tags=["Revision"]
+)
+
+# Content session routes
+api_router.include_router(
+    sessions.router,
+    tags=["Sessions"]
+)
+
+# Materials routes
+api_router.include_router(
+    materials.router,
+    tags=["Materials"]
 )
