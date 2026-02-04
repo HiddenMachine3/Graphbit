@@ -10,9 +10,11 @@ Core idea:
 This project is built using test-driven development.
 Each phase must be correct, validated, and independently testable.
 
-Current phase: Phase 1 – Core Domain Models.
-Only define domain entities, validation rules, and safe update logic.
-No algorithms, persistence, APIs, or UI should be implemented yet.
+---
+
+## Quick Start
+
+For setup instructions, see [SETUP.md](./SETUP.md)
 
 ---
 
@@ -659,6 +661,79 @@ pytest tests/ -v
 
 ---
 
+## Frontend Features ✨
+
+The frontend provides an interactive knowledge graph visualization and management interface built with Next.js, React, and React Flow.
+
+### Knowledge Graph Visualization
+
+**Interactive Graph Display**
+- Visual representation of knowledge nodes and their relationships
+- Responsive node layout with force-directed physics simulation
+- Real-time updates when nodes or edges are created/modified
+
+**Node Display**
+- Node brightness correlates with selected numeric attribute
+- Selectable brightness attributes:
+  - **Proven Knowledge**: System-measured mastery (default)
+  - **User Estimated Knowledge**: User's self-assessment
+  - **Importance**: Node importance score
+  - **Relevance**: Relevance score
+  - **View Frequency**: Number of times viewed
+- Node size correlates with importance score
+- Hover tooltips show detailed node information
+
+### Node Management
+
+**Create Nodes**
+- Add new knowledge concepts to the graph
+- Set initial values for knowledge ratings, importance, and relevance
+
+**Edit Nodes**
+- Update node attributes
+- View node details and connections
+
+**View Details**
+- See all node metrics and relationships
+- Track view frequency and ratings
+
+### Edge Management
+
+**Create Connections**
+- Two methods to create edges:
+  1. **Click Mode**: Click nodes directly in the graph to select and connect
+  2. **Manual Mode**: Use dropdown selectors to choose nodes
+- Set relationship type:
+  - **PREREQUISITE**: Node must be learned before dependent node
+  - **DEPENDS_ON**: Node requires knowledge of dependency
+  - **APPLIED_WITH**: Node concepts are applied together
+  - **SUBCONCEPT_OF**: Node is a detailed aspect of parent concept
+- Adjust connection strength (0.0 - 1.0 weight slider)
+
+### Legend & Guidance
+
+- Visual legend explaining node colors, sizes, and relationship types
+- Clear UI feedback for all operations
+
+---
+
+## Architecture
+
+### Backend
+- **Framework**: FastAPI (Python)
+- **Database**: PostgreSQL 18
+- **Domain Models**: Pure Python with Pydantic validation
+- **API**: RESTful endpoints for graph operations
+
+### Frontend
+- **Framework**: Next.js 13+ with TypeScript
+- **Visualization**: React Flow for interactive graph
+- **Styling**: Tailwind CSS
+- **State Management**: React Hooks
+- **Styling**: Responsive design for desktop and tablet
+
+---
+
 ## Next Phases (Not Yet Implemented)
 
 **Phase 5**: Graph-based Question Selection
@@ -666,16 +741,9 @@ pytest tests/ -v
 - Smart question prioritization based on weakness, graph structure, and learning paths
 - Coverage-aware selection algorithms
 
-**Phase 6**: Persistence Layer
-- Database models and repositories
-- Data access patterns
-
-**Phase 6**: API Layer
-- RESTful API endpoints
-- Request/response models
-
-**Phase 7**: Frontend UI
-- Interactive graph visualization
-- Question interface
-- Progress tracking
+**Phase 6**: Persistence & Advanced Features
+- Advanced caching strategies
+- User analytics and learning insights
+- Question recommendation engine based on user progress
+- Community collaboration features
 
