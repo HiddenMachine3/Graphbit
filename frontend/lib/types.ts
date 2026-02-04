@@ -1,0 +1,128 @@
+export interface NodeDTO {
+  id: string;
+  topic_name: string;
+  proven_knowledge_rating: number;
+  user_estimated_knowledge_rating: number;
+  importance: number;
+  relevance: number;
+  view_frequency: number;
+  source_material_ids: string[];
+}
+
+export interface GraphNodeDTO extends NodeDTO {
+  forgetting_score: number;
+  linked_questions_count: number;
+  linked_materials_count: number;
+}
+
+export interface GraphEdgeDTO {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  weight: number;
+}
+
+export interface GraphSummaryDTO {
+  nodes: GraphNodeDTO[];
+  edges: GraphEdgeDTO[];
+}
+
+export interface QuestionMetadataDTO {
+  created_by: string;
+  created_at: string;
+  importance: number;
+  hits: number;
+  misses: number;
+}
+
+export type QuestionType = "FLASHCARD" | "CLOZE" | "MCQ" | "OPEN";
+
+export interface QuestionDTO {
+  id: string;
+  text: string;
+  answer: string;
+  question_type: QuestionType;
+  knowledge_type: string;
+  covered_node_ids: string[];
+  metadata: QuestionMetadataDTO;
+  difficulty: number;
+  tags: string[];
+  last_attempted_at: string | null;
+  source_material_ids: string[];
+}
+
+export interface SessionDTO {
+  session_id: string;
+  material_id: string;
+  user_id: string;
+  started_at: string;
+  last_interjection_at: string | null;
+  consumed_chunks: number;
+}
+
+export type ContentSessionDTO = SessionDTO;
+
+export interface InterjectionDecisionDTO {
+  should_interject: boolean;
+  reason?: string | null;
+}
+
+export interface RevisionSessionDTO {
+  session_id: string;
+  max_questions: number | null;
+}
+
+export interface RevisionFeedbackDTO {
+  correct: boolean;
+  correct_answer?: string | null;
+  explanation?: string | null;
+}
+
+export interface CommunityDTO {
+  id: string;
+  name: string;
+  description: string;
+  node_importance_overrides: Record<string, number>;
+}
+
+export interface CommunityProgressDTO {
+  community_id: string;
+  overall_progress: number;
+  relevant_topics: number;
+}
+
+export interface LeaderboardEntryDTO {
+  user_id: string;
+  score: number;
+  rank: number;
+}
+
+export interface WhyThisQuestionDTO {
+  target_nodes: string[];
+  weakness_level: "low" | "medium" | "high";
+  forgetting_cue: string;
+}
+
+export interface WeaknessNodeDTO {
+  node_id: string;
+  topic: string;
+  weakness_level: "low" | "medium" | "high";
+  explanation: string;
+}
+
+export interface RevisionPlanItemDTO {
+  node_id: string;
+  topic: string;
+  reason: string;
+  timing: string;
+}
+
+export interface MaterialDTO {
+  id: string;
+  title: string;
+  material_type: string;
+  source: string;
+  created_at: string;
+  metadata: Record<string, string>;
+}
