@@ -13,6 +13,9 @@ This package provides domain models organized into logical modules:
 - question_bank: Question bank management
 - clustering: Weak node clustering for targeted learning
 - ranking: Question ranking and selection engine
+- session: Revision session orchestration
+- material: Material models for content ingestion
+- ingestion: Content ingestion APIs
 """
 
 # Enums
@@ -58,6 +61,43 @@ from .ranking import (
     QuestionRankingEngine,
 )
 
+# Session
+from .session import (
+    SessionConfig,
+    RevisionSession,
+)
+
+# Material and Ingestion (Phase 8)
+from .material import (
+    Material,
+    MaterialType,
+    MaterialRegistry,
+)
+
+from .ingestion import (
+    create_node_from_material,
+    create_question_from_material,
+    CSVQuestionImporter,
+)
+
+# Community Features (Phase 9)
+from .community_features import (
+    CommunityMembership,
+    CommunityMembershipRegistry,
+    CommunityContext,
+    select_next_question_for_community,
+    compute_user_progress_in_community,
+    compute_leaderboard,
+)
+
+# Interjection and Revision Planning (Phase 10)
+from .interjection import (
+    ContentSession,
+    InterjectionPolicy,
+    InterjectionEngine,
+    RevisionPlanner,
+)
+
 __all__ = [
     # Enums
     "EdgeType",
@@ -92,4 +132,26 @@ __all__ = [
     "score_question",
     "compute_redundancy_penalty",
     "QuestionRankingEngine",
+    # Session
+    "SessionConfig",
+    "RevisionSession",
+    # Material and Ingestion
+    "Material",
+    "MaterialType",
+    "MaterialRegistry",
+    "create_node_from_material",
+    "create_question_from_material",
+    "CSVQuestionImporter",
+    # Community Features
+    "CommunityMembership",
+    "CommunityMembershipRegistry",
+    "CommunityContext",
+    "select_next_question_for_community",
+    "compute_user_progress_in_community",
+    "compute_leaderboard",
+    # Interjection and Revision Planning
+    "ContentSession",
+    "InterjectionPolicy",
+    "InterjectionEngine",
+    "RevisionPlanner",
 ]
