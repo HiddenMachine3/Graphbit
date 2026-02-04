@@ -11,6 +11,8 @@ This package provides domain models organized into logical modules:
 - community: Community model
 - user_knowledge: User knowledge state with forgetting model
 - question_bank: Question bank management
+- clustering: Weak node clustering for targeted learning
+- ranking: Question ranking and selection engine
 """
 
 # Enums
@@ -40,6 +42,22 @@ from .user_knowledge import (
     MAX_STABILITY,
 )
 
+# Clustering
+from .clustering import (
+    Cluster,
+    WeakNodeDetector,
+    WeakNodeClusterer,
+    MAX_CLUSTER_SIZE,
+)
+
+# Ranking
+from .ranking import (
+    score_cluster,
+    score_question,
+    compute_redundancy_penalty,
+    QuestionRankingEngine,
+)
+
 __all__ = [
     # Enums
     "EdgeType",
@@ -64,4 +82,14 @@ __all__ = [
     "FAILURE_STABILITY_LOSS",
     "MIN_STABILITY",
     "MAX_STABILITY",
+    # Clustering
+    "Cluster",
+    "WeakNodeDetector",
+    "WeakNodeClusterer",
+    "MAX_CLUSTER_SIZE",
+    # Ranking
+    "score_cluster",
+    "score_question",
+    "compute_redundancy_penalty",
+    "QuestionRankingEngine",
 ]
