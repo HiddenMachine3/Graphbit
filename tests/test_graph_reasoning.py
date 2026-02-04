@@ -7,7 +7,7 @@ Comprehensive unit tests for graph reasoning operations added to the Graph model
 import pytest
 from pydantic import ValidationError
 
-from src.models import Graph, Node, Edge, EdgeType
+from backend.app.domain import Graph, Node, Edge, EdgeType
 
 
 # ============================================================

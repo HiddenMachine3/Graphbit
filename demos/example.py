@@ -5,7 +5,7 @@ Demonstrates creating a simple knowledge graph with nodes, edges, and questions.
 
 from datetime import datetime
 
-from models import (
+from backend.app.domain import (
     Community,
     Edge,
     EdgeType,
