@@ -50,6 +50,7 @@ export interface QuestionDTO {
   tags: string[];
   last_attempted_at: string | null;
   source_material_ids: string[];
+  options?: string[];
 }
 
 export interface SessionDTO {
