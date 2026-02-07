@@ -17,19 +17,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-50">
-        <div className="grid min-h-screen grid-cols-1 md:grid-cols-[240px_1fr]">
-          <div className="hidden md:block">
-            <Sidebar />
-          </div>
-          <div className="flex min-h-screen flex-col">
+      <body className="min-h-screen bg-[#0a0a0f] overflow-hidden">
+        <div className="flex h-screen">
+          <Sidebar />
+          <div className="flex flex-1 flex-col overflow-hidden">
             <Topbar />
-            <main className="flex-1 p-6">
-              <div className="md:hidden mb-4 rounded border border-slate-200 bg-white p-3 text-xs text-slate-500">
-                Menu available on larger screens.
-              </div>
-              {children}
-            </main>
+            <main className="flex-1 overflow-auto">{children}</main>
           </div>
         </div>
       </body>

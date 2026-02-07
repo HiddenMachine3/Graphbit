@@ -24,5 +24,15 @@ redis==5.0.8
 
 pytest
 
+# --- Video transcripts ---
+youtube-transcript-api==0.6.2
+
+# --- Local LLM (Hugging Face) ---
+transformers==4.47.1
+accelerate==0.33.0
+torch
+sentencepiece
+safetensors
+
 psycopg
 sqlalchemy
