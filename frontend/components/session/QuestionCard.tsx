@@ -1,10 +1,11 @@
-import type { QuestionDTO } from "../../lib/types";
+import type { QuestionDTO, RevisionFeedbackDTO } from "../../lib/types";
 
 type QuestionCardProps = {
   question: QuestionDTO;
   selectedOption?: string;
   onOptionSelect?: (option: string) => void;
   disabled?: boolean;
+  feedback?: RevisionFeedbackDTO | null;
 };
 
 export default function QuestionCard({
@@ -12,6 +13,7 @@ export default function QuestionCard({
   selectedOption,
   onOptionSelect,
   disabled = false,
+  feedback = null,
 }: QuestionCardProps) {
   const isMCQ = question.question_type === "MCQ";
 
@@ -37,7 +39,16 @@ export default function QuestionCard({
                   : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
               } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
-              {option}
+              <div>{option}</div>
+              {feedback && selectedOption === option && feedback.explanation && (
+                <div
+                  className={`mt-2 text-xs font-semibold ${
+                    feedback.correct ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {feedback.explanation}
+                </div>
+              )}
             </button>
           ))}
         </div>
