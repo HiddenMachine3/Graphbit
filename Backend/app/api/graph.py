@@ -1,10 +1,24 @@
 """Graph and knowledge node API endpoints."""
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from app.domain import Node, Graph, Edge, EdgeType, Question, QuestionMetadata, QuestionType, KnowledgeType
 from datetime import datetime
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from app.domain import (
+    Edge,
+    EdgeType,
+    Graph,
+    KnowledgeType,
+    Node,
+    Question,
+    QuestionMetadata,
+    QuestionType,
+)
+from app.domain.material import Material, MaterialRegistry, MaterialType
+from app.services.topic_extraction import extract_topics_from_text
+from app.services.video_transcripts import fetch_youtube_transcript
 
 router = APIRouter()
 
@@ -30,10 +44,24 @@ class CreateEdgeRequest(BaseModel):
     weight: float = 1.0
 
 
+class VideoIngestRequest(BaseModel):
+    video_url: str
+    title: str
+    transcript: Optional[str] = None
+    channel: Optional[str] = None
+    topics: Optional[list[str]] = None
+
+
 # In-memory storage for demo (replace with database queries)
 _graph = Graph()
 _questions = {}
 _node_counter = 0
+_material_counter = 0
+_material_registry = MaterialRegistry()
+_material_index_by_source: dict[str, str] = {}
+_topic_index_by_key: dict[str, str] = {}
+_chapter_index_by_source: dict[str, str] = {}
+_topic_chapter_index: dict[str, set[str]] = {}
 
 # Initialize with sample data
 def _init_sample_data():
@@ -127,9 +155,25 @@ def _init_sample_data():
 _init_sample_data()
 
 
-@router.get("/graph")
-async def get_graph_summary():
-    """Get complete knowledge graph summary with nodes and edges."""
+def _normalize_topic_key(topic_name: str) -> str:
+    cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in topic_name)
+    return " ".join(cleaned.split())
+
+
+def _topic_id_from_key(topic_key: str) -> str:
+    return "topic_" + topic_key.replace(" ", "_")[:48]
+
+
+def _edge_exists(from_node_id: str, to_node_id: str, edge_type: EdgeType) -> bool:
+    return any(
+        edge.from_node_id == from_node_id
+        and edge.to_node_id == to_node_id
+        and edge.type == edge_type
+        for edge in _graph.edges
+    )
+
+
+def _serialize_graph_summary():
     return {
         "nodes": [
             {
@@ -142,8 +186,10 @@ async def get_graph_summary():
                 "view_frequency": node.view_frequency,
                 "source_material_ids": list(node.source_material_ids),
                 "forgetting_score": 1.0 - node.proven_knowledge_rating,
-                "linked_questions_count": sum(1 for q in _questions.values() if node.id in q.covered_node_ids),
-                "linked_materials_count": 0,
+                "linked_questions_count": sum(
+                    1 for q in _questions.values() if node.id in q.covered_node_ids
+                ),
+                "linked_materials_count": len(node.source_material_ids),
             }
             for node in _graph.nodes.values()
         ],
@@ -160,25 +206,92 @@ async def get_graph_summary():
     }
 
 
+def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) -> Material:
+    global _material_counter
+
+    existing_id = _material_index_by_source.get(video_url)
+    if existing_id and _material_registry.has_material(existing_id):
+        return _material_registry.get_material(existing_id)
+
+    _material_counter += 1
+    material_id = f"material-{_material_counter}"
+    material = Material(
+        id=material_id,
+        title=title,
+        material_type=MaterialType.VIDEO,
+        source=video_url,
+        created_at=datetime.now(),
+        metadata={"channel": channel or ""},
+    )
+    _material_registry.add_material(material)
+    _material_index_by_source[video_url] = material_id
+    return material
+
+
+def _get_or_create_chapter_node(
+    material: Material,
+    title: str,
+    video_url: str,
+) -> str:
+    existing = _chapter_index_by_source.get(video_url)
+    if existing and existing in _graph.nodes:
+        return existing
+
+    chapter_id = f"chapter_{len(_chapter_index_by_source) + 1}"
+    chapter_node = Node(
+        id=chapter_id,
+        topic_name=title,
+        proven_knowledge_rating=0.0,
+        user_estimated_knowledge_rating=0.0,
+        importance=0.9,
+        relevance=1.0,
+        view_frequency=1,
+        source_material_ids={material.id},
+    )
+    _graph.add_node(chapter_node)
+    _chapter_index_by_source[video_url] = chapter_id
+    return chapter_id
+
+
+def _get_or_create_topic_node(topic_name: str, material_id: str) -> str:
+    topic_key = _normalize_topic_key(topic_name)
+    if not topic_key:
+        raise ValueError("Topic name cannot be empty")
+
+    existing_id = _topic_index_by_key.get(topic_key)
+    if existing_id and existing_id in _graph.nodes:
+        _graph.nodes[existing_id].source_material_ids.add(material_id)
+        return existing_id
+
+    node_id = _topic_id_from_key(topic_key)
+    if node_id in _graph.nodes:
+        node_id = f"{node_id}_{len(_graph.nodes)}"
+
+    node = Node(
+        id=node_id,
+        topic_name=topic_name.strip(),
+        proven_knowledge_rating=0.0,
+        user_estimated_knowledge_rating=0.0,
+        importance=0.6,
+        relevance=0.9,
+        view_frequency=0,
+        source_material_ids={material_id},
+    )
+    _graph.add_node(node)
+    _topic_index_by_key[topic_key] = node_id
+    return node_id
+
+
+@router.get("/graph")
+async def get_graph_summary():
+    """Get complete knowledge graph summary with nodes and edges."""
+    return _serialize_graph_summary()
+
+
 @router.get("/graph/nodes")
 async def list_nodes():
     """List all knowledge nodes."""
-    return [
-        {
-            "id": node.id,
-            "topic_name": node.topic_name,
-            "proven_knowledge_rating": node.proven_knowledge_rating,
-            "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,
-            "importance": node.importance,
-            "relevance": node.relevance,
-            "view_frequency": node.view_frequency,
-            "source_material_ids": list(node.source_material_ids),
-            "forgetting_score": 1.0 - node.proven_knowledge_rating,
-            "linked_questions_count": sum(1 for q in _questions.values() if node.id in q.covered_node_ids),
-            "linked_materials_count": 0,
-        }
-        for node in _graph.nodes.values()
-    ]
+    return _serialize_graph_summary()["nodes"]
 
 
 @router.get("/graph/questions")
@@ -237,7 +350,7 @@ async def create_node(request: CreateNodeRequest):
         "source_material_ids": list(node.source_material_ids),
         "forgetting_score": 1.0 - node.proven_knowledge_rating,
         "linked_questions_count": 0,
-        "linked_materials_count": 0,
+        "linked_materials_count": len(node.source_material_ids),
     }
 
 
@@ -271,7 +384,7 @@ async def update_node(node_id: str, request: UpdateNodeRequest):
         "source_material_ids": list(node.source_material_ids),
         "forgetting_score": 1.0 - node.proven_knowledge_rating,
         "linked_questions_count": sum(1 for q in _questions.values() if node_id in q.covered_node_ids),
-        "linked_materials_count": 0,
+        "linked_materials_count": len(node.source_material_ids),
     }
 
 
@@ -291,6 +404,15 @@ async def create_edge(request: CreateEdgeRequest):
         "SUBCONCEPT_OF": EdgeType.SUBCONCEPT_OF,
     }
     edge_type = edge_type_map.get(request.edge_type, EdgeType.PREREQUISITE)
+
+    if _edge_exists(request.from_node_id, request.to_node_id, edge_type):
+        return {
+            "id": f"{request.from_node_id}-{request.to_node_id}",
+            "source": request.from_node_id,
+            "target": request.to_node_id,
+            "type": edge_type.value,
+            "weight": request.weight,
+        }
     
     edge = Edge(
         from_node_id=request.from_node_id,
@@ -306,4 +428,78 @@ async def create_edge(request: CreateEdgeRequest):
         "target": edge.to_node_id,
         "type": edge.type.value,
         "weight": edge.weight,
+    }
+
+
+@router.post("/graph/ingest/video")
+async def ingest_video(request: VideoIngestRequest):
+    """Ingest a video transcript, extract topics, and merge into the graph."""
+    if not request.video_url.strip():
+        raise HTTPException(status_code=400, detail="video_url is required")
+    if not request.title.strip():
+        raise HTTPException(status_code=400, detail="title is required")
+
+    transcript = request.transcript
+    if not transcript:
+        transcript = fetch_youtube_transcript(request.video_url)
+
+    topics = request.topics or extract_topics_from_text(transcript, title=request.title)
+    topics = [topic.strip() for topic in topics if topic.strip()]
+
+    if not topics:
+        raise HTTPException(status_code=400, detail="No topics extracted")
+
+    material = _get_or_create_material(request.video_url, request.title, request.channel)
+
+    chapter_created = request.video_url not in _chapter_index_by_source
+    chapter_node_id = _get_or_create_chapter_node(material, request.title, request.video_url)
+
+    topics_result = []
+    edges_added = 0
+
+    for topic in topics:
+        topic_key = _normalize_topic_key(topic)
+        existing_topic_id = _topic_index_by_key.get(topic_key)
+        topic_node_id = _get_or_create_topic_node(topic, material.id)
+
+        if not _edge_exists(chapter_node_id, topic_node_id, EdgeType.SUBCONCEPT_OF):
+            edge = Edge(
+                from_node_id=chapter_node_id,
+                to_node_id=topic_node_id,
+                type=EdgeType.SUBCONCEPT_OF,
+                weight=0.9,
+            )
+            _graph.add_edge(edge)
+            edges_added += 1
+
+        chapter_neighbors = _topic_chapter_index.get(topic_node_id, set())
+        for other_chapter_id in sorted(chapter_neighbors):
+            if other_chapter_id == chapter_node_id:
+                continue
+            if not _edge_exists(other_chapter_id, chapter_node_id, EdgeType.APPLIED_WITH):
+                edge = Edge(
+                    from_node_id=other_chapter_id,
+                    to_node_id=chapter_node_id,
+                    type=EdgeType.APPLIED_WITH,
+                    weight=0.4,
+                )
+                _graph.add_edge(edge)
+                edges_added += 1
+
+        _topic_chapter_index.setdefault(topic_node_id, set()).add(chapter_node_id)
+
+        topics_result.append(
+            {
+                "topic": topic,
+                "node_id": topic_node_id,
+                "created": existing_topic_id is None,
+            }
+        )
+
+    return {
+        "chapter_node_id": chapter_node_id,
+        "chapter_created": chapter_created,
+        "topics": topics_result,
+        "edges_added": edges_added,
+        "graph": _serialize_graph_summary(),
     }

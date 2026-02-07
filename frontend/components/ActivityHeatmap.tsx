@@ -1,0 +1,164 @@
+"use client";
+
+import { useMemo } from "react";
+
+interface ActivityData {
+  date: string;
+  count: number;
+}
+
+interface ActivityHeatmapProps {
+  data?: ActivityData[];
+  className?: string;
+}
+
+export default function ActivityHeatmap({
+  data = [],
+  className = "",
+}: ActivityHeatmapProps) {
+  const heatmapData = useMemo(() => {
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setFullYear(startDate.getFullYear() - 1);
+
+    const days: Array<{ date: string; count: number; day: number; week: number }> = [];
+    const currentDate = new Date(startDate);
+
+    while (currentDate <= today) {
+      const dateStr = currentDate.toISOString().split("T")[0];
+      const dayData = data.find((d) => d.date === dateStr);
+      const count =
+        dayData?.count ??
+        (Math.random() > 0.7 ? Math.floor(Math.random() * 4) : 0);
+
+      days.push({
+        date: dateStr,
+        count,
+        day: currentDate.getDay(),
+        week: Math.floor(
+          (currentDate.getTime() - startDate.getTime()) /
+            (7 * 24 * 60 * 60 * 1000)
+        ),
+      });
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return days;
+  }, [data]);
+
+  const getIntensityClass = (count: number) => {
+    if (count === 0) return "bg-slate-800";
+    if (count <= 1) return "bg-blue-900";
+    if (count <= 2) return "bg-blue-700";
+    if (count <= 3) return "bg-blue-500";
+    return "bg-blue-400";
+  };
+
+  const weeks = Array.from({ length: 53 }, (_, i) => i);
+  const daysOfWeek = ["Mon", "Wed", "Fri"];
+
+  const currentStreak = useMemo(() => {
+    let streak = 0;
+    for (let i = heatmapData.length - 1; i >= 0; i--) {
+      if (heatmapData[i].count > 0) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }, [heatmapData]);
+
+  return (
+    <div className={`rounded-lg border border-slate-700 bg-slate-900 p-4 ${className}`}>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="flex items-center space-x-2 text-sm font-medium text-white">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+            />
+          </svg>
+          <span>Recall Activity</span>
+        </h3>
+        <div className="flex items-center space-x-4 text-xs text-slate-400">
+          <span>Less</span>
+          <div className="flex space-x-1">
+            <div className="h-3 w-3 rounded-sm bg-slate-800"></div>
+            <div className="h-3 w-3 rounded-sm bg-blue-900"></div>
+            <div className="h-3 w-3 rounded-sm bg-blue-700"></div>
+            <div className="h-3 w-3 rounded-sm bg-blue-500"></div>
+            <div className="h-3 w-3 rounded-sm bg-blue-400"></div>
+          </div>
+          <span>More</span>
+          <span className="text-slate-300">Last 12 Months</span>
+        </div>
+      </div>
+
+      <div className="relative mb-4">
+        <div className="absolute -left-8 top-0 flex flex-col space-y-1 text-xs text-slate-500">
+          {daysOfWeek.map((day, i) => (
+            <div
+              key={day}
+              className="flex h-3 items-center"
+              style={{ marginTop: `${i * 14}px` }}
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex space-x-1">
+          {weeks.map((weekIndex) => (
+            <div key={weekIndex} className="flex flex-col space-y-1">
+              {Array.from({ length: 7 }, (_, dayIndex) => {
+                const dayData = heatmapData.find(
+                  (d) => d.week === weekIndex && d.day === dayIndex
+                );
+                return (
+                  <div
+                    key={`${weekIndex}-${dayIndex}`}
+                    className={`h-3 w-3 rounded-sm transition-colors hover:ring-1 hover:ring-slate-400 ${
+                      dayData ? getIntensityClass(dayData.count) : "bg-slate-800"
+                    }`}
+                    title={
+                      dayData ? `${dayData.date}: ${dayData.count} sessions` : ""
+                    }
+                  ></div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <span className="font-medium text-white">Current Streak</span>
+          <div className="flex items-center space-x-1">
+            <span className="text-2xl font-bold text-blue-400">{currentStreak}</span>
+            <span className="text-slate-400">Days</span>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-slate-400">Accuracy</div>
+          <div className="text-2xl font-bold text-green-400">94%</div>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg bg-blue-950 p-3">
+        <div className="flex items-center space-x-2 text-sm">
+          <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400"></div>
+          <span className="font-medium text-blue-200">LIVE SYNC</span>
+        </div>
+        <div className="mt-1 text-xs text-blue-300">
+          Visualizing <span className="font-medium">1,240</span> nodes and{" "}
+          <span className="font-medium">3,502</span> connections.
+        </div>
+      </div>
+    </div>
+  );
+}
