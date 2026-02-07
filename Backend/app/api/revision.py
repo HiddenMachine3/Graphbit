@@ -1,242 +1,30 @@
 """Revision session and question answering API endpoints."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
 from datetime import datetime
 from app.api.llm_verification import verify_answer_with_llm
+from app.db.session import get_db
+from app.models import Question as QuestionModel, RevisionSession as RevisionSessionModel
+import uuid
 
 router = APIRouter()
 
-# In-memory storage for demo
-_sessions = {}
-_session_counter = 0
-
-# All available questions with MCQ options
-_all_questions = [
-    {
-        "id": "q1",
-        "text": "What is a variable in Python?",
-        "answer": "A variable is a named container that stores a value",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["variables"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 1,
-        "tags": ["fundamentals"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q2",
-        "text": "What are the basic data types in Python?",
-        "answer": "int, float, str, bool, list, dict, tuple, set",
-        "question_type": "MCQ",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["variables"],
-        "options": [
-            "int, float, str, bool, list, dict, tuple, set",
-            "int, float, string, boolean, array, object",
-            "integer, decimal, text, logical, collection, map",
-            "number, decimal, character, logic, array, hash"
-        ],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 2,
-        "tags": ["fundamentals"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q3",
-        "text": "What is the purpose of a function?",
-        "answer": "Functions encapsulate reusable code blocks",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["functions"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 2,
-        "tags": ["fundamentals"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q4",
-        "text": "How do you define a function in Python?",
-        "answer": "Using the def keyword",
-        "question_type": "MCQ",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["functions"],
-        "options": [
-            "Using the def keyword",
-            "Using the function keyword",
-            "Using the fn keyword",
-            "Using the func keyword"
-        ],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 1,
-        "tags": ["fundamentals"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q5",
-        "text": "What is a class in Python?",
-        "answer": "A blueprint for creating objects",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["classes"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 3,
-        "tags": ["oop"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q6",
-        "text": "What is inheritance in OOP?",
-        "answer": "A mechanism to inherit properties and methods from parent classes",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["inheritance"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 3,
-        "tags": ["oop"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q7",
-        "text": "What is polymorphism?",
-        "answer": "The ability to have multiple forms or behaviors",
-        "question_type": "MCQ",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["inheritance"],
-        "options": [
-            "The ability to have multiple forms or behaviors",
-            "The process of inheritance",
-            "The ability to hide implementation details",
-            "The reuse of code through inheritance"
-        ],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 4,
-        "tags": ["oop"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q8",
-        "text": "What are decorators used for?",
-        "answer": "Decorators modify the behavior of functions or classes",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["decorators"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 4,
-        "tags": ["advanced"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q9",
-        "text": "What is async programming?",
-        "answer": "Asynchronous programming allows concurrent execution",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["async"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 5,
-        "tags": ["advanced"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-    {
-        "id": "q10",
-        "text": "What is OOP?",
-        "answer": "Object-Oriented Programming is a paradigm based on objects and classes",
-        "question_type": "OPEN",
-        "knowledge_type": "CONCEPT",
-        "covered_node_ids": ["oop"],
-        "metadata": {
-            "created_by": "system",
-            "created_at": datetime.now().isoformat(),
-            "importance": 1,
-            "hits": 0,
-            "misses": 0,
-        },
-        "difficulty": 2,
-        "tags": ["oop"],
-        "last_attempted_at": None,
-        "source_material_ids": [],
-    },
-]
-
 
 @router.post("/revision/sessions")
-async def start_revision_session():
+async def start_revision_session(db: AsyncSession = Depends(get_db)):
     """Start a new revision session."""
-    global _session_counter
-    _session_counter += 1
+    session_id = f"session-{uuid.uuid4().hex[:12]}"
     
-    session_id = f"session-{_session_counter}"
-    _sessions[session_id] = {
-        "session_id": session_id,
-        "max_questions": 10,
-        "started_at": datetime.now().isoformat(),
-        "questions_answered": 0,
-        "question_index": 0,
-    }
+    session = RevisionSessionModel(
+        id=session_id,
+        max_questions=10,
+        started_at=datetime.now(),
+    )
+    
+    db.add(session)
+    await db.commit()
     
     return {
         "session_id": session_id,
@@ -245,78 +33,131 @@ async def start_revision_session():
 
 
 @router.get("/revision/sessions/{session_id}/next-question")
-async def get_next_question(session_id: str):
+async def get_next_question(session_id: str, db: AsyncSession = Depends(get_db)):
     """Get the next question for a revision session."""
-    if session_id not in _sessions:
+    # Fetch session from database
+    result = await db.execute(
+        select(RevisionSessionModel).where(RevisionSessionModel.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    
+    if not session:
         return {"error": "Session not found"}, 404
     
-    session = _sessions[session_id]
-    question_index = session.get("question_index", 0)
+    # Fetch all questions
+    result = await db.execute(select(QuestionModel))
+    all_questions = result.scalars().all()
+    
+    if not all_questions:
+        return {"error": "No questions available"}, 404
     
     # Cycle through questions
-    if question_index >= len(_all_questions):
+    question_index = session.question_index
+    if question_index >= len(all_questions):
         question_index = 0
     
-    question = dict(_all_questions[question_index])
-    session["question_index"] = question_index + 1
-    session["current_question_id"] = question["id"]
+    db_question = all_questions[question_index]
     
-    # Don't return the answer to the frontend
-    question_response = {k: v for k, v in question.items() if k != "answer"}
+    # Update session
+    await db.execute(
+        update(RevisionSessionModel)
+        .where(RevisionSessionModel.id == session_id)
+        .values(
+            question_index=question_index + 1,
+            current_question_id=db_question.id
+        )
+    )
+    await db.commit()
     
-    return question_response
+    # Return question without the answer
+    return {
+        "id": db_question.id,
+        "text": db_question.text,
+        "options": db_question.options,
+        "question_type": db_question.question_type,
+        "knowledge_type": db_question.knowledge_type,
+        "covered_node_ids": db_question.covered_node_ids,
+        "difficulty": db_question.difficulty,
+        "tags": db_question.tags,
+    }
 
 
 @router.post("/revision/sessions/{session_id}/submit-answer")
-async def submit_revision_answer(session_id: str, data: dict):
+async def submit_revision_answer(session_id: str, data: dict, db: AsyncSession = Depends(get_db)):
     """Submit an answer to a question in a revision session."""
-    if session_id not in _sessions:
+    # Fetch session from database
+    result = await db.execute(
+        select(RevisionSessionModel).where(RevisionSessionModel.id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    
+    if not session:
         return {"error": "Session not found"}, 404
     
-    session = _sessions[session_id]
     question_id = data.get("question_id")
     user_answer = data.get("answer", "").strip()
     
     # Increment question counter
-    session["questions_answered"] = session.get("questions_answered", 0) + 1
+    await db.execute(
+        update(RevisionSessionModel)
+        .where(RevisionSessionModel.id == session_id)
+        .values(questions_answered=session.questions_answered + 1)
+    )
     
     if not user_answer:
+        await db.commit()
         return {
             "correct": False,
             "correct_answer": "Please provide an answer.",
         }
     
-    # Find the question
-    question = None
-    for q in _all_questions:
-        if q["id"] == question_id:
-            question = q
-            break
+    # Find the question in database
+    result = await db.execute(
+        select(QuestionModel).where(QuestionModel.id == question_id)
+    )
+    question = result.scalar_one_or_none()
     
     if not question:
+        await db.commit()
         return {
             "correct": False,
             "correct_answer": "Question not found.",
         }
     
     # For MCQ questions, check if the answer matches exactly
-    if question["question_type"] == "MCQ":
-        is_correct = user_answer.lower() == question["answer"].lower()
+    if question.question_type == "MCQ":
+        is_correct = user_answer.lower() == question.answer.lower()
+        explanation = None
+        if question.option_explanations and user_answer in question.option_explanations:
+            explanation = question.option_explanations[user_answer]
+        else:
+            if is_correct:
+                explanation = "Correct. This is the right answer."
+            else:
+                explanation = f"Incorrect. The correct answer is: {question.answer}"
+        await db.commit()
         return {
             "correct": is_correct,
-            "correct_answer": question["answer"],
-            "explanation": "Correct!" if is_correct else f"Not quite. The correct answer is: {question['answer']}",
+            "correct_answer": question.answer,
+            "explanation": explanation,
         }
     
     # For OPEN questions, use LLM verification
     verification_result = await verify_answer_with_llm(
         user_answer=user_answer,
-        correct_answer=question["answer"],
-        question_text=question["text"],
+        correct_answer=question.answer,
+        question_text=question.text,
     )
     
-    return {
+    response = {
         "correct": verification_result["correct"],
-        "correct_answer": question["answer"],
+        "correct_answer": question.answer,
         "explanation": verification_result["explanation"],
     }
+    
+    # Include score if available (from Hugging Face reward model)
+    if verification_result.get("score") is not None:
+        response["score"] = verification_result["score"]
+    
+    await db.commit()
+    return response
