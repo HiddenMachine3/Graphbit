@@ -33,6 +33,8 @@ class Question(BaseModel):
     knowledge_type: KnowledgeType
     covered_node_ids: list[str] = Field(..., min_length=1)
     metadata: QuestionMetadata
+    options: Optional[list[str]] = None
+    option_explanations: Optional[dict[str, str]] = None
     difficulty: int = Field(default=3, ge=1, le=5)
     tags: set[str] = Field(default_factory=set)
     last_attempted_at: Optional[datetime] = None
@@ -56,6 +58,19 @@ class Question(BaseModel):
         for tag in v:
             if not tag or not isinstance(tag, str):
                 raise ValueError("All tags must be non-empty strings")
+        return v
+
+    @field_validator('options')
+    @classmethod
+    def validate_options(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """Ensure MCQ options are non-empty strings when provided."""
+        if v is None:
+            return v
+        if not v:
+            raise ValueError("options must contain at least one value")
+        for option in v:
+            if not option or not isinstance(option, str):
+                raise ValueError("All options must be non-empty strings")
         return v
     
     def record_hit(self) -> None:
