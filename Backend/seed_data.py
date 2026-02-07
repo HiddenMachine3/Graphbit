@@ -4,9 +4,13 @@ Seed script to populate the database with example data.
 Run with: python seed_data.py
 """
 
+import argparse
 import asyncio
+import json
+import sys
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
@@ -16,13 +20,45 @@ from app.domain import (
     User, Community,
     QuestionBank
 )
+from app.models import Base, Question as QuestionModel
 
 
-async def seed_database():
+async def seed_database(reset_db: bool = False):
     """Populate the database with example data."""
     
     # Create engine and session
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    
+    # Create all tables (optionally reset first)
+    async with engine.begin() as conn:
+        if reset_db:
+            await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+        # Ensure MCQ options column exists for existing databases
+        options_check = await conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name='questions' AND column_name='options'"
+            )
+        )
+        if options_check.scalar() is None:
+            try:
+                await conn.execute(text("ALTER TABLE questions ADD COLUMN options JSONB"))
+            except Exception:
+                await conn.execute(text("ALTER TABLE questions ADD COLUMN options JSON"))
+
+        explanations_check = await conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name='questions' AND column_name='option_explanations'"
+            )
+        )
+        if explanations_check.scalar() is None:
+            try:
+                await conn.execute(text("ALTER TABLE questions ADD COLUMN option_explanations JSONB"))
+            except Exception:
+                await conn.execute(text("ALTER TABLE questions ADD COLUMN option_explanations JSON"))
+    
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     
     print("🌱 Seeding database with example data...\n")
@@ -68,8 +104,8 @@ async def seed_database():
         ("python_basics", "functions", EdgeType.APPLIED_WITH, 0.6),
         ("oop", "inheritance", EdgeType.PREREQUISITE, 0.9),
         ("inheritance", "decorators", EdgeType.APPLIED_WITH, 0.7),
-        ("variables", "oop", EdgeType.RELATED, 0.5),
-        ("functions", "classes", EdgeType.RELATED, 0.8),
+        ("variables", "oop", EdgeType.DEPENDS_ON, 0.5),
+        ("functions", "classes", EdgeType.DEPENDS_ON, 0.8),
     ]
     
     for from_id, to_id, edge_type, weight in edges:
@@ -82,43 +118,212 @@ async def seed_database():
         graph.add_edge(edge)
         print(f"  ✓ {from_id} → {to_id} ({edge_type.value})")
     
-    # 3. Create questions
+    # 3. Create questions in database
     print("\n❓ Creating questions...")
-    question_bank = QuestionBank()
-    
     questions_data = [
-        ("q1", "What is a variable in Python?", "A variable is a named container that stores a value", "variables", QuestionType.OPEN, 1),
-        ("q2", "What are the basic data types in Python?", "int, float, str, bool, list, dict, tuple, set", "variables", QuestionType.MCQ, 2),
-        ("q3", "What is the purpose of a function?", "Functions encapsulate reusable code blocks", "functions", QuestionType.OPEN, 2),
-        ("q4", "How do you define a function in Python?", "Using the def keyword", "functions", QuestionType.MCQ, 1),
-        ("q5", "What is a class in Python?", "A blueprint for creating objects", "classes", QuestionType.OPEN, 3),
-        ("q6", "What is inheritance in OOP?", "A mechanism to inherit properties and methods from parent classes", "inheritance", QuestionType.OPEN, 3),
-        ("q7", "What is polymorphism?", "The ability to have multiple forms or behaviors", "inheritance", QuestionType.MCQ, 4),
-        ("q8", "What are decorators used for?", "Decorators modify the behavior of functions or classes", "decorators", QuestionType.OPEN, 4),
-        ("q9", "What is async programming?", "Asynchronous programming allows concurrent execution", "async", QuestionType.OPEN, 5),
-        ("q10", "What is OOP?", "Object-Oriented Programming is a paradigm based on objects and classes", "oop", QuestionType.OPEN, 2),
-    ]
+        (
+            "q1",
+            "What is a variable in Python?",
+            "A variable is a named container that stores a value",
+            "variables",
+            QuestionType.OPEN,
+            1,
+            None,
+            None,
+        ),
+        (
+            "q2",
+            "What are the basic data types in Python?",
+            "int, float, str, bool, list, dict, tuple, set",
+            "variables",
+            QuestionType.MCQ,
+            2,
+            [
+                "int, float, str, bool, list, dict, tuple, set",
+                "int, float, string, boolean, array, object",
+                "integer, decimal, text, logical, collection, map",
+                "number, decimal, character, logic, array, hash",
+            ],
+            {
+                "int, float, str, bool, list, dict, tuple, set": "These are the standard core Python data types.",
+                "int, float, string, boolean, array, object": "Python uses str, bool, list, and dict instead of these terms.",
+                "integer, decimal, text, logical, collection, map": "These describe concepts but are not Python type names.",
+                "number, decimal, character, logic, array, hash": "Python does not define these as built-in type names.",
+            },
+        ),
+        (
+            "q3",
+            "What is the purpose of a function?",
+            "Functions encapsulate reusable code blocks",
+            "functions",
+            QuestionType.OPEN,
+            2,
+            None,
+            None,
+        ),
+        (
+            "q4",
+            "How do you define a function in Python?",
+            "Using the def keyword",
+            "functions",
+            QuestionType.MCQ,
+            1,
+            [
+                "Using the def keyword",
+                "Using the function keyword",
+                "Using the fn keyword",
+                "Using the func keyword",
+            ],
+            {
+                "Using the def keyword": "Python functions are defined with the def keyword.",
+                "Using the function keyword": "Python does not use a function keyword.",
+                "Using the fn keyword": "fn is not a Python keyword.",
+                "Using the func keyword": "func is not a Python keyword.",
+            },
+        ),
+            (
+                "q5",
+                "What is a class in Python?",
+                "A blueprint for creating objects",
+                "classes",
+                QuestionType.OPEN,
+                3,
+                None,
+                None,
+            ),
+            (
+                "q6",
+                "What is inheritance in OOP?",
+                "A mechanism to inherit properties and methods from parent classes",
+                "inheritance",
+                QuestionType.OPEN,
+                3,
+                None,
+                None,
+            ),
+            (
+                "q7",
+                "What is polymorphism?",
+                "The ability to have multiple forms or behaviors",
+                "inheritance",
+                QuestionType.MCQ,
+                4,
+                [
+                    "The ability to have multiple forms or behaviors",
+                    "The process of inheritance",
+                    "The ability to hide implementation details",
+                    "The reuse of code through inheritance",
+                ],
+                {
+                    "The ability to have multiple forms or behaviors": "Polymorphism means the same interface can have different implementations.",
+                    "The process of inheritance": "Inheritance is related but is not polymorphism itself.",
+                    "The ability to hide implementation details": "That describes encapsulation, not polymorphism.",
+                    "The reuse of code through inheritance": "That's a benefit of inheritance, not polymorphism.",
+                },
+            ),
+            (
+                "q8",
+                "What are decorators used for?",
+                "Decorators modify the behavior of functions or classes",
+                "decorators",
+                QuestionType.OPEN,
+                4,
+                None,
+                None,
+            ),
+            (
+                "q9",
+                "What is async programming?",
+                "Asynchronous programming allows concurrent execution",
+                "async",
+                QuestionType.OPEN,
+                5,
+                None,
+                None,
+            ),
+            (
+                "q10",
+                "What is OOP?",
+                "Object-Oriented Programming is a paradigm based on objects and classes",
+                "oop",
+                QuestionType.OPEN,
+                2,
+                None,
+                None,
+            ),
+        ]
     
     now = datetime.now()
-    for qid, text, answer, node_id, qtype, difficulty in questions_data:
-        question = Question(
-            id=qid,
-            text=text,
-            answer=answer,
-            question_type=qtype,
-            knowledge_type=KnowledgeType.CONCEPT,
-            covered_node_ids=[node_id],
-            metadata=QuestionMetadata(
-                created_by="system",
-                created_at=now - timedelta(days=difficulty),
-                importance=difficulty * 0.2
-            ),
-            difficulty=difficulty,
-            tags={"fundamentals", "python"},
-            last_attempted_at=now - timedelta(days=1) if qid != "q1" else None
-        )
-        question_bank.add_question(question, graph)
-        print(f"  ✓ {qid}: {text[:50]}...")
+    async with async_session() as session:
+        existing_ids_result = await session.execute(select(QuestionModel.id))
+        existing_ids = {row[0] for row in existing_ids_result.fetchall()}
+
+        for (
+            qid,
+            question_text,
+            answer,
+            node_id,
+            qtype,
+            difficulty,
+            options,
+            option_explanations,
+        ) in questions_data:
+            if qid in existing_ids:
+                if options:
+                    await session.execute(
+                        update(QuestionModel)
+                        .where(QuestionModel.id == qid)
+                        .values(options=options, option_explanations=option_explanations)
+                    )
+                    print(f"  ↻ {qid} exists, updated options")
+                else:
+                    print(f"  ↷ {qid} already exists, skipping")
+                continue
+            # Create domain Question for validation
+            question_domain = Question(
+                id=qid,
+                text=question_text,
+                answer=answer,
+                question_type=qtype,
+                knowledge_type=KnowledgeType.CONCEPT,
+                covered_node_ids=[node_id],
+                metadata=QuestionMetadata(
+                    created_by="system",
+                    created_at=now - timedelta(days=difficulty),
+                    importance=difficulty * 0.2
+                ),
+                difficulty=difficulty,
+                tags={"fundamentals", "python"},
+                last_attempted_at=now - timedelta(days=1) if qid != "q1" else None
+            )
+            
+            # Create database Question model
+            db_question = QuestionModel(
+                id=qid,
+                text=question_text,
+                answer=answer,
+                    options=options,
+                option_explanations=option_explanations,
+                question_type=qtype.value,
+                knowledge_type=KnowledgeType.CONCEPT.value,
+                covered_node_ids=[node_id],
+                difficulty=difficulty,
+                tags=list({"fundamentals", "python"}),
+                question_metadata={
+                    "created_by": "system",
+                    "created_at": (now - timedelta(days=difficulty)).isoformat(),
+                    "importance": difficulty * 0.2,
+                    "hits": 0,
+                    "misses": 0,
+                },
+                last_attempted_at=now - timedelta(days=1) if qid != "q1" else None,
+                source_material_ids=[]
+            )
+            
+            session.add(db_question)
+            print(f"  ✓ {qid}: {question_text[:50]}...")
+        
+        await session.commit()
     
     # 4. Create communities
     print("\n👥 Creating communities...")
@@ -168,4 +373,15 @@ async def seed_database():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed_database())
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    parser = argparse.ArgumentParser(description="Seed the database with example data.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Drop and recreate all tables before seeding.",
+    )
+    args = parser.parse_args()
+
+    asyncio.run(seed_database(reset_db=args.reset))
