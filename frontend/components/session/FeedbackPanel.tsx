@@ -25,6 +25,11 @@ export default function FeedbackPanel({
           Correct answer: {feedback.correct_answer}
         </div>
       )}
+      {!feedback.correct && feedback.explanation && (
+        <div className="mt-2 text-sm text-slate-600">
+          {feedback.explanation}
+        </div>
+      )}
       <button
         className="mt-4 rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
         onClick={onNext}

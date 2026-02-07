@@ -171,6 +171,7 @@ export default function SessionContainer() {
                 : undefined
             }
             disabled={loading}
+            feedback={currentQuestion.question_type === "MCQ" ? feedback : null}
           />
 
           {!feedback && (
@@ -208,7 +209,19 @@ export default function SessionContainer() {
             </div>
           )}
 
-          {feedback && (
+          {feedback && currentQuestion.question_type === "MCQ" && (
+            <div className="rounded border border-slate-200 bg-white p-4">
+              <button
+                className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+                onClick={handleNextQuestion}
+                disabled={loading}
+              >
+                Next Question
+              </button>
+            </div>
+          )}
+
+          {feedback && currentQuestion.question_type === "OPEN" && (
             <FeedbackPanel
               feedback={feedback}
               onNext={handleNextQuestion}
