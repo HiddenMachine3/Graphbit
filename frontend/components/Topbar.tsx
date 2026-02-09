@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import ActiveCommunityBadge from "./communities/ActiveCommunityBadge";
 import { ProjectSwitcher } from "./ProjectSwitcher";
@@ -9,6 +10,12 @@ import type { UserDTO } from "../lib/types";
 
 export default function Topbar() {
   const [currentUser, setCurrentUser] = useState<UserDTO | null>(null);
+  const pathname = usePathname();
+
+  const linkClass = (href: string) =>
+    pathname === href
+      ? "rounded-lg px-4 py-2 text-sm font-medium text-blue-400 bg-blue-950 border border-blue-800"
+      : "rounded-lg px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800";
 
   useEffect(() => {
     let mounted = true;
@@ -58,13 +65,13 @@ export default function Topbar() {
 
         <div className="flex items-center space-x-6">
           <nav className="flex space-x-1">
-            <a href="/" className="rounded-lg px-4 py-2 text-sm font-medium text-blue-400 bg-blue-950 border border-blue-800">
+            <a href="/" className={linkClass("/")}>
               Dashboard
             </a>
-            <a href="/projects" className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800">
+            <a href="/projects" className={linkClass("/projects")}>
               Projects
             </a>
-            <a href="/graph" className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800">
+            <a href="/graph" className={linkClass("/graph")}>
               Graph
             </a>
           </nav>

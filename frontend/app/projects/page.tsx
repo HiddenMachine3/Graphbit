@@ -17,16 +17,20 @@ import {
   listQuestions as listQuestionBank,
   createQuestion,
   deleteQuestion,
+  updateQuestion,
 } from "@/lib/api/question";
 import {
   listMaterials,
   createMaterial,
   deleteMaterial,
+  fetchMaterial,
+  updateMaterial,
 } from "@/lib/api/material";
 import {
   listCommunities,
   createCommunity,
   deleteCommunity,
+  updateCommunity,
 } from "@/lib/api/community";
 import { getCurrentUser } from "@/lib/api/user";
 
@@ -90,14 +94,28 @@ export default function ProjectsPage() {
   const [questionDifficulty, setQuestionDifficulty] = useState(1);
   const [questionTags, setQuestionTags] = useState("");
   const [questionNodeIds, setQuestionNodeIds] = useState("");
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [editQuestionText, setEditQuestionText] = useState("");
+  const [editQuestionAnswer, setEditQuestionAnswer] = useState("");
+  const [editQuestionType, setEditQuestionType] = useState("OPEN");
+  const [editQuestionDifficulty, setEditQuestionDifficulty] = useState(1);
+  const [editQuestionTags, setEditQuestionTags] = useState("");
+  const [editQuestionNodeIds, setEditQuestionNodeIds] = useState("");
 
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialText, setMaterialText] = useState("");
   const [materialFiles, setMaterialFiles] = useState<FileList | null>(null);
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
+  const [editMaterialTitle, setEditMaterialTitle] = useState("");
+  const [editMaterialText, setEditMaterialText] = useState("");
 
   const [communityName, setCommunityName] = useState("");
   const [communityDescription, setCommunityDescription] = useState("");
   const [communityProjectIds, setCommunityProjectIds] = useState("");
+  const [editingCommunityId, setEditingCommunityId] = useState<string | null>(null);
+  const [editCommunityName, setEditCommunityName] = useState("");
+  const [editCommunityDescription, setEditCommunityDescription] = useState("");
+  const [editCommunityProjectIds, setEditCommunityProjectIds] = useState("");
 
   const currentProjectId = useAppStore((state) => state.currentProjectId);
   const setCurrentProjectId = useAppStore((state) => state.setCurrentProjectId);
@@ -320,6 +338,52 @@ export default function ProjectsPage() {
     }
   };
 
+  const beginEditQuestion = (question: QuestionDTO) => {
+    setEditingQuestionId(question.id);
+    setEditQuestionText(question.text);
+    setEditQuestionAnswer(question.answer);
+    setEditQuestionType(question.question_type ?? "OPEN");
+    setEditQuestionDifficulty(question.difficulty ?? 1);
+    setEditQuestionTags((question.tags ?? []).join(", "));
+    setEditQuestionNodeIds((question.covered_node_ids ?? []).join(", "));
+  };
+
+  const cancelEditQuestion = () => {
+    setEditingQuestionId(null);
+  };
+
+  const handleUpdateQuestion = async (questionId: string) => {
+    if (!currentProjectId) {
+      return;
+    }
+    if (!editQuestionText.trim() || !editQuestionAnswer.trim()) {
+      setStatus({
+        type: "error",
+        message: "Question text and answer are required",
+      });
+      return;
+    }
+    resetStatus();
+    setBusy(true);
+    try {
+      await updateQuestion(questionId, {
+        text: editQuestionText.trim(),
+        answer: editQuestionAnswer.trim(),
+        question_type: editQuestionType,
+        difficulty: editQuestionDifficulty,
+        tags: parseCsv(editQuestionTags),
+        covered_node_ids: parseCsv(editQuestionNodeIds),
+      });
+      await refreshProjectData(currentProjectId);
+      setEditingQuestionId(null);
+      setStatus({ type: "success", message: "Question updated" });
+    } catch {
+      setStatus({ type: "error", message: "Failed to update question" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleCreateMaterial = async () => {
     if (!currentProjectId) {
       setStatus({ type: "error", message: "Select a project first" });
@@ -347,6 +411,53 @@ export default function ProjectsPage() {
       setStatus({ type: "success", message: "Material created" });
     } catch {
       setStatus({ type: "error", message: "Failed to create material" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginEditMaterial = async (material: MaterialDTO) => {
+    resetStatus();
+    setBusy(true);
+    try {
+      const fullMaterial = await fetchMaterial(material.id);
+      setEditingMaterialId(material.id);
+      setEditMaterialTitle(material.title);
+      setEditMaterialText(fullMaterial.chunks.join("\n\n"));
+    } catch {
+      setStatus({ type: "error", message: "Failed to load material" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelEditMaterial = () => {
+    setEditingMaterialId(null);
+  };
+
+  const handleUpdateMaterial = async (materialId: string) => {
+    if (!currentProjectId) {
+      return;
+    }
+    if (!editMaterialTitle.trim() || !editMaterialText.trim()) {
+      setStatus({
+        type: "error",
+        message: "Material title and text are required",
+      });
+      return;
+    }
+    resetStatus();
+    setBusy(true);
+    try {
+      await updateMaterial(materialId, {
+        title: editMaterialTitle.trim(),
+        content_text: editMaterialText.trim(),
+      });
+      await refreshProjectData(currentProjectId);
+      setEditingMaterialId(null);
+      setStatus({ type: "success", message: "Material updated" });
+    } catch {
+      setStatus({ type: "error", message: "Failed to update material" });
     } finally {
       setBusy(false);
     }
@@ -426,6 +537,40 @@ export default function ProjectsPage() {
       setStatus({ type: "success", message: "Community created" });
     } catch {
       setStatus({ type: "error", message: "Failed to create community" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginEditCommunity = (community: CommunityDTO) => {
+    setEditingCommunityId(community.id);
+    setEditCommunityName(community.name);
+    setEditCommunityDescription(community.description ?? "");
+    setEditCommunityProjectIds((community.project_ids ?? []).join(", "));
+  };
+
+  const cancelEditCommunity = () => {
+    setEditingCommunityId(null);
+  };
+
+  const handleUpdateCommunity = async (communityId: string) => {
+    if (!editCommunityName.trim()) {
+      setStatus({ type: "error", message: "Community name is required" });
+      return;
+    }
+    resetStatus();
+    setBusy(true);
+    try {
+      await updateCommunity(communityId, {
+        name: editCommunityName.trim(),
+        description: editCommunityDescription.trim(),
+        project_ids: parseCsv(editCommunityProjectIds),
+      });
+      await refreshCommunities();
+      setEditingCommunityId(null);
+      setStatus({ type: "success", message: "Community updated" });
+    } catch {
+      setStatus({ type: "error", message: "Failed to update community" });
     } finally {
       setBusy(false);
     }
@@ -679,22 +824,99 @@ export default function ProjectsPage() {
                 </button>
               </div>
               <div className="grid gap-2">
-                {questions.map((question) => (
-                  <div
-                    key={question.id}
-                    className="rounded-lg border border-slate-800 bg-[#0b0b12] p-3"
-                  >
-                    <div className="text-sm font-semibold text-white">{question.text}</div>
-                    <div className="text-xs text-slate-400">Answer: {question.answer}</div>
-                    <button
-                      onClick={() => handleDeleteQuestion(question.id)}
-                      disabled={busy}
-                      className="mt-2 rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                {questions.map((question) => {
+                  const isEditing = editingQuestionId === question.id;
+                  return (
+                    <div
+                      key={question.id}
+                      className="rounded-lg border border-slate-800 bg-[#0b0b12] p-3"
                     >
-                      Delete
-                    </button>
-                  </div>
-                ))}
+                      {isEditing ? (
+                        <div className="grid gap-2">
+                          <textarea
+                            value={editQuestionText}
+                            onChange={(event) => setEditQuestionText(event.target.value)}
+                            className="min-h-[70px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <textarea
+                            value={editQuestionAnswer}
+                            onChange={(event) => setEditQuestionAnswer(event.target.value)}
+                            className="min-h-[60px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <select
+                              value={editQuestionType}
+                              onChange={(event) => setEditQuestionType(event.target.value)}
+                              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            >
+                              <option value="OPEN">Open</option>
+                              <option value="FLASHCARD">Flashcard</option>
+                              <option value="CLOZE">Cloze</option>
+                              <option value="MCQ">Multiple choice</option>
+                            </select>
+                            <input
+                              type="number"
+                              min={1}
+                              max={5}
+                              value={editQuestionDifficulty}
+                              onChange={(event) => setEditQuestionDifficulty(Number(event.target.value))}
+                              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            />
+                          </div>
+                          <input
+                            value={editQuestionTags}
+                            onChange={(event) => setEditQuestionTags(event.target.value)}
+                            placeholder="Tags (comma separated)"
+                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <input
+                            value={editQuestionNodeIds}
+                            onChange={(event) => setEditQuestionNodeIds(event.target.value)}
+                            placeholder="Covered node ids"
+                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => handleUpdateQuestion(question.id)}
+                              disabled={busy}
+                              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditQuestion}
+                              disabled={busy}
+                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-semibold text-white">{question.text}</div>
+                          <div className="text-xs text-slate-400">Answer: {question.answer}</div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              onClick={() => beginEditQuestion(question)}
+                              disabled={busy}
+                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuestion(question.id)}
+                              disabled={busy}
+                              className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
                 {questions.length === 0 && (
                   <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
                     No questions yet for this project.
@@ -754,26 +976,71 @@ export default function ProjectsPage() {
               </div>
 
               <div className="grid gap-2">
-                {materials.map((material) => (
-                  <div
-                    key={material.id}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2"
-                  >
-                    <div>
-                      <div className="text-sm font-semibold text-white">{material.title}</div>
-                      <div className="text-xs text-slate-400">
-                        {material.chunk_count} chunks
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteMaterial(material.id)}
-                      disabled={busy}
-                      className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                {materials.map((material) => {
+                  const isEditing = editingMaterialId === material.id;
+                  return (
+                    <div
+                      key={material.id}
+                      className="rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2"
                     >
-                      Delete
-                    </button>
-                  </div>
-                ))}
+                      {isEditing ? (
+                        <div className="grid gap-2">
+                          <input
+                            value={editMaterialTitle}
+                            onChange={(event) => setEditMaterialTitle(event.target.value)}
+                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <textarea
+                            value={editMaterialText}
+                            onChange={(event) => setEditMaterialText(event.target.value)}
+                            className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => handleUpdateMaterial(material.id)}
+                              disabled={busy}
+                              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={cancelEditMaterial}
+                              disabled={busy}
+                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-semibold text-white">{material.title}</div>
+                            <div className="text-xs text-slate-400">
+                              {material.chunk_count} chunks
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => beginEditMaterial(material)}
+                              disabled={busy}
+                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMaterial(material.id)}
+                              disabled={busy}
+                              className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {materials.length === 0 && (
                   <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
                     No materials yet for this project.
@@ -815,26 +1082,77 @@ export default function ProjectsPage() {
             </div>
 
             <div className="grid gap-2">
-              {communities.map((community) => (
-                <div
-                  key={community.id}
-                  className="flex items-start justify-between gap-2 rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2"
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-white">{community.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {community.description || "No description"}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteCommunity(community.id)}
-                    disabled={busy}
-                    className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+              {communities.map((community) => {
+                const isEditing = editingCommunityId === community.id;
+                return (
+                  <div
+                    key={community.id}
+                    className="rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2"
                   >
-                    Delete
-                  </button>
-                </div>
-              ))}
+                    {isEditing ? (
+                      <div className="grid gap-2">
+                        <input
+                          value={editCommunityName}
+                          onChange={(event) => setEditCommunityName(event.target.value)}
+                          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                        />
+                        <textarea
+                          value={editCommunityDescription}
+                          onChange={(event) => setEditCommunityDescription(event.target.value)}
+                          className="min-h-[70px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                        />
+                        <input
+                          value={editCommunityProjectIds}
+                          onChange={(event) => setEditCommunityProjectIds(event.target.value)}
+                          placeholder="Project ids (comma separated)"
+                          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => handleUpdateCommunity(community.id)}
+                            disabled={busy}
+                            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={cancelEditCommunity}
+                            disabled={busy}
+                            className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-semibold text-white">{community.name}</div>
+                          <div className="text-xs text-slate-400">
+                            {community.description || "No description"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => beginEditCommunity(community)}
+                            disabled={busy}
+                            className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCommunity(community.id)}
+                            disabled={busy}
+                            className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {communities.length === 0 && (
                 <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
                   No communities yet.

@@ -5,7 +5,7 @@ They provide automatic validation and documentation.
 """
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 
 
 class UserCreate(BaseModel):
@@ -44,8 +44,7 @@ class UserResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True  # Allows creating from SQLAlchemy models
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LoginRequest(BaseModel):

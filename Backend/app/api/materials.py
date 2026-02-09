@@ -99,6 +99,27 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
     return _serialize_material(material)
 
 
+@router.patch("/materials/{material_id}")
+async def update_material(material_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Update a material title or content."""
+    result = await db.execute(
+        select(MaterialModel).where(MaterialModel.id == material_id)
+    )
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    if "title" in data:
+        material.title = data["title"]
+    if "content_text" in data:
+        material.content_text = data["content_text"]
+    material.updated_at = datetime.now()
+
+    await db.commit()
+    await db.refresh(material)
+    return _serialize_material(material)
+
+
 @router.delete("/materials/{material_id}")
 async def delete_material(material_id: str, db: AsyncSession = Depends(get_db)):
     """Delete a material."""
