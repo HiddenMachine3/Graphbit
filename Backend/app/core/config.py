@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables.
@@ -21,8 +21,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour token lifetime
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"  # Ignore extra fields from .env
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

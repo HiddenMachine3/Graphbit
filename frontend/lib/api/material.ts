@@ -34,6 +34,16 @@ export async function deleteMaterial(materialId: string): Promise<void> {
   await apiFetch<void>(`/materials/${materialId}`, { method: "DELETE" });
 }
 
+export async function updateMaterial(
+  materialId: string,
+  updates: { title?: string; content_text?: string }
+): Promise<MaterialDTO> {
+  return apiFetch<MaterialDTO>(`/materials/${materialId}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
 export async function startContentSession(
   materialId: string,
   userId: string
