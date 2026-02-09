@@ -18,6 +18,7 @@ import QuestionCard from "./QuestionCard";
 import AnswerInput from "./AnswerInput";
 import FeedbackPanel from "./FeedbackPanel";
 import SessionProgress from "./SessionProgress";
+import { useAppStore } from "../../lib/store";
 
 export default function SessionContainer() {
   const [session, setSession] = useState<RevisionSessionDTO | null>(null);
@@ -28,6 +29,7 @@ export default function SessionContainer() {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const currentProjectId = useAppStore((state) => state.currentProjectId);
 
   const handleStartSession = useCallback(async () => {
     setLoading(true);
@@ -36,7 +38,11 @@ export default function SessionContainer() {
     setAnswer("");
     setCompleted(false);
     try {
-      const newSession = await startSession();
+      if (!currentProjectId) {
+        setError("Select a project to start a session");
+        return;
+      }
+      const newSession = await startSession(currentProjectId);
       setSession(newSession);
       const next = await getNextQuestion(newSession.session_id);
       setCurrentQuestion(next);
@@ -49,7 +55,7 @@ export default function SessionContainer() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentProjectId]);
 
   const handleSubmitAnswer = useCallback(async () => {
     if (!session || !currentQuestion) {

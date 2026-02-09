@@ -7,6 +7,7 @@ import { createEdge } from '../../lib/api/graph';
 type EdgeManagementPanelProps = {
   nodes: GraphNodeDTO[];
   selectedNodeId: string | null;
+  projectId: string | null;
   onEdgeCreated: () => void;
   clickModeActive?: boolean;
   onClickModeChange?: (active: boolean) => void;
@@ -17,6 +18,7 @@ type EdgeManagementPanelProps = {
 export default function EdgeManagementPanel({
   nodes,
   selectedNodeId,
+  projectId,
   onEdgeCreated,
   clickModeActive = false,
   onClickModeChange,
@@ -43,6 +45,10 @@ export default function EdgeManagementPanel({
     const from = clickModeActive ? selectedNodesForEdge[0] : fromNodeId;
     const to = clickModeActive ? selectedNodesForEdge[1] : toNodeId;
 
+    if (!projectId) {
+      setError('Select a project first');
+      return;
+    }
     if (!from || !to) {
       setError('Both nodes must be selected');
       return;
@@ -55,7 +61,7 @@ export default function EdgeManagementPanel({
     setLoading(true);
     setError(null);
     try {
-      await createEdge(from, to, edgeType, weight);
+      await createEdge(projectId, from, to, edgeType, weight);
       setToNodeId('');
       setEdgeType('PREREQUISITE');
       setWeight(1.0);
@@ -72,7 +78,7 @@ export default function EdgeManagementPanel({
     } finally {
       setLoading(false);
     }
-  }, [clickModeActive, selectedNodesForEdge, fromNodeId, toNodeId, edgeType, weight, onEdgeCreated, onClickModeChange, onNodesChange]);
+  }, [clickModeActive, selectedNodesForEdge, fromNodeId, toNodeId, edgeType, weight, projectId, onEdgeCreated, onClickModeChange, onNodesChange]);
 
   const handleNodeClick = (nodeId: string) => {
     if (!onNodesChange) return;

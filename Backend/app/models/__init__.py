@@ -43,6 +43,7 @@ class Question(Base):
     __tablename__ = "questions"
 
     id = Column(String, primary_key=True, nullable=False)
+    project_id = Column(String, nullable=False)
     text = Column(String, nullable=False)
     answer = Column(Text, nullable=False)
     options = Column(JSON, nullable=True)  # MCQ options when applicable
@@ -70,11 +71,56 @@ class RevisionSession(Base):
 
     id = Column(String, primary_key=True, nullable=False)
     user_id = Column(String, nullable=True)  # Optional user ID
+    project_id = Column(String, nullable=True)
     max_questions = Column(Integer, default=10, nullable=False)
     questions_answered = Column(Integer, default=0, nullable=False)
     question_index = Column(Integer, default=0, nullable=False)
     current_question_id = Column(String, nullable=True)
     started_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     ended_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
+class Project(Base):
+    """Project model for knowledge graphs and learning content."""
+    __tablename__ = "projects"
+
+    id = Column(String, primary_key=True, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="")
+    owner_id = Column(String, nullable=False)
+    visibility = Column(String, nullable=False, default="private")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
+class Node(Base):
+    """Knowledge graph node model."""
+    __tablename__ = "nodes"
+
+    id = Column(String, primary_key=True, nullable=False)
+    project_id = Column(String, nullable=False)
+    topic_name = Column(String, nullable=False)
+    proven_knowledge_rating = Column(Float, nullable=False, default=0.0)
+    user_estimated_knowledge_rating = Column(Float, nullable=False, default=0.0)
+    importance = Column(Float, nullable=False, default=0.5)
+    relevance = Column(Float, nullable=False, default=0.5)
+    view_frequency = Column(Integer, nullable=False, default=0)
+    source_material_ids = Column(JSON, nullable=False, default=lambda: [])
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
+class Edge(Base):
+    """Knowledge graph edge model."""
+    __tablename__ = "edges"
+
+    id = Column(String, primary_key=True, nullable=False)
+    project_id = Column(String, nullable=False)
+    source = Column(String, nullable=False)
+    target = Column(String, nullable=False)
+    type = Column(String, nullable=False)
+    weight = Column(Float, nullable=False, default=1.0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())

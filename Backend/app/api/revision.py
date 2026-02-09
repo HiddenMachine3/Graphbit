@@ -13,12 +13,16 @@ router = APIRouter()
 
 
 @router.post("/revision/sessions")
-async def start_revision_session(db: AsyncSession = Depends(get_db)):
+async def start_revision_session(data: dict, db: AsyncSession = Depends(get_db)):
     """Start a new revision session."""
+    project_id = data.get("project_id") if data else None
+    if not project_id:
+        return {"error": "project_id is required"}, 400
     session_id = f"session-{uuid.uuid4().hex[:12]}"
     
     session = RevisionSessionModel(
         id=session_id,
+        project_id=project_id,
         max_questions=10,
         started_at=datetime.now(),
     )
@@ -29,6 +33,7 @@ async def start_revision_session(db: AsyncSession = Depends(get_db)):
     return {
         "session_id": session_id,
         "max_questions": 10,
+        "project_id": project_id,
     }
 
 
@@ -44,8 +49,11 @@ async def get_next_question(session_id: str, db: AsyncSession = Depends(get_db))
     if not session:
         return {"error": "Session not found"}, 404
     
-    # Fetch all questions
-    result = await db.execute(select(QuestionModel))
+    # Fetch questions for project
+    query = select(QuestionModel)
+    if session.project_id:
+        query = query.where(QuestionModel.project_id == session.project_id)
+    result = await db.execute(query)
     all_questions = result.scalars().all()
     
     if not all_questions:

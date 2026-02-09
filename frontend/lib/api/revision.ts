@@ -1,10 +1,10 @@
 import { apiFetch } from "./client";
 import type { QuestionDTO, RevisionFeedbackDTO, RevisionSessionDTO } from "../types";
 
-export async function startSession(): Promise<RevisionSessionDTO> {
+export async function startSession(projectId: string): Promise<RevisionSessionDTO> {
   return apiFetch<RevisionSessionDTO>("/revision/sessions", {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({ project_id: projectId }),
   });
 }
 
