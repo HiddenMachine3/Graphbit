@@ -1,119 +1,194 @@
 """Community management API endpoints."""
 
-from fastapi import APIRouter
-from app.domain import Community
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db
+from app.models import Community as CommunityModel, AppUser as AppUserModel, Node as NodeModel
 
 router = APIRouter()
 
-# In-memory storage for demo (replace with database queries)
-_communities = {
-    "python_fundamentals": Community(
-        id="python_fundamentals",
-        name="Python Fundamentals",
-        description="Learn the basics of Python programming",
-        node_importance_overrides={"default": {"python_basics": 1.0, "variables": 1.0, "functions": 0.8}}
-    ),
-    "advanced_python": Community(
-        id="advanced_python",
-        name="Advanced Python",
-        description="Master advanced concepts like OOP and decorators",
-        node_importance_overrides={"default": {"oop": 1.5, "classes": 1.5, "decorators": 1.2, "inheritance": 1.0}}
-    ),
-    "async_programming": Community(
-        id="async_programming",
-        name="Async Programming",
-        description="Learn concurrent and asynchronous programming",
-        node_importance_overrides={"default": {"async": 2.0, "functions": 1.0}}
-    ),
-}
 
-_active_community = "python_fundamentals"
-
-
-@router.get("/communities")
-async def list_communities():
-    """List all available communities."""
-    return [
-        {
-            "id": c.id,
-            "name": c.name,
-            "description": c.description,
-            "node_importance_overrides": c.node_importance_overrides,
-        }
-        for c in _communities.values()
-    ]
-
-
-@router.get("/communities/{community_id}")
-async def get_community(community_id: str):
-    """Get a specific community."""
-    if community_id not in _communities:
-        return {"error": "Community not found"}, 404
-    
-    c = _communities[community_id]
+def _serialize_community(community: CommunityModel) -> dict:
     return {
-        "id": c.id,
-        "name": c.name,
-        "description": c.description,
-        "node_importance_overrides": c.node_importance_overrides,
+        "id": community.id,
+        "name": community.name,
+        "description": community.description,
+        "created_by": community.created_by,
+        "project_ids": community.project_ids or [],
+        "member_ids": community.member_ids or [],
+        "node_importance_overrides": community.node_importance_overrides or {},
+        "question_importance_overrides": community.question_importance_overrides or {},
     }
 
 
+async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
+    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
+    return result.scalar_one_or_none()
+
+
+@router.get("/communities")
+async def list_communities(db: AsyncSession = Depends(get_db)):
+    """List all available communities."""
+    result = await db.execute(select(CommunityModel))
+    communities = result.scalars().all()
+    return [_serialize_community(community) for community in communities]
+
+
+@router.get("/communities/{community_id}")
+async def get_community(community_id: str, db: AsyncSession = Depends(get_db)):
+    """Get a specific community."""
+    result = await db.execute(
+        select(CommunityModel).where(CommunityModel.id == community_id)
+    )
+    community = result.scalar_one_or_none()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+    return _serialize_community(community)
+
+
+@router.post("/communities")
+async def create_community(data: dict, db: AsyncSession = Depends(get_db)):
+    """Create a new community."""
+    name = data.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    community_id = data.get("id") or f"community-{int(datetime.now().timestamp())}"
+    result = await db.execute(select(CommunityModel).where(CommunityModel.id == community_id))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Community already exists")
+
+    default_user = await _get_default_user(db)
+    created_by = data.get("created_by") or (default_user.username if default_user else "")
+
+    community = CommunityModel(
+        id=community_id,
+        name=name,
+        description=data.get("description", ""),
+        created_by=created_by,
+        project_ids=data.get("project_ids", []),
+        member_ids=data.get("member_ids", []),
+        node_importance_overrides=data.get("node_importance_overrides", {}),
+        question_importance_overrides=data.get("question_importance_overrides", {}),
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(community)
+    await db.commit()
+    await db.refresh(community)
+    return _serialize_community(community)
+
+
+@router.patch("/communities/{community_id}")
+async def update_community(community_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Update an existing community."""
+    result = await db.execute(select(CommunityModel).where(CommunityModel.id == community_id))
+    community = result.scalar_one_or_none()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    for field in (
+        "name",
+        "description",
+        "project_ids",
+        "member_ids",
+        "node_importance_overrides",
+        "question_importance_overrides",
+    ):
+        if field in data:
+            setattr(community, field, data[field])
+    community.updated_at = datetime.now()
+
+    await db.commit()
+    await db.refresh(community)
+    return _serialize_community(community)
+
+
+@router.delete("/communities/{community_id}")
+async def delete_community(community_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a community."""
+    result = await db.execute(select(CommunityModel).where(CommunityModel.id == community_id))
+    community = result.scalar_one_or_none()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    await db.delete(community)
+    await db.commit()
+    return {"status": "deleted"}
+
+
 @router.post("/communities/active")
-async def set_active_community(data: dict):
-    """Set the active community."""
-    global _active_community
+async def set_active_community(data: dict, db: AsyncSession = Depends(get_db)):
+    """Set the active community for the current user."""
     community_id = data.get("community_id")
-    if community_id not in _communities:
-        return {"error": "Community not found"}, 404
-    
-    _active_community = community_id
+    if not community_id:
+        raise HTTPException(status_code=400, detail="community_id is required")
+
+    result = await db.execute(
+        select(CommunityModel).where(CommunityModel.id == community_id)
+    )
+    community = result.scalar_one_or_none()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    user_id = data.get("user_id")
+    if user_id:
+        user_result = await db.execute(
+            select(AppUserModel).where(AppUserModel.id == user_id)
+        )
+        user = user_result.scalar_one_or_none()
+    else:
+        user = await _get_default_user(db)
+
+    if not user:
+        raise HTTPException(status_code=400, detail="No user available")
+
+    user.active_community_id = community_id
+    await db.commit()
     return {"community_id": community_id}
 
 
 @router.get("/communities/{community_id}/progress")
-async def get_community_progress(community_id: str):
+async def get_community_progress(community_id: str, db: AsyncSession = Depends(get_db)):
     """Get progress metrics for a community."""
-    if community_id not in _communities:
-        return {"error": "Community not found"}, 404
-    
-    # Mock progress data
-    progress_map = {
-        "python_fundamentals": {"overall_progress": 0.68, "relevant_topics": 12},
-        "advanced_python": {"overall_progress": 0.42, "relevant_topics": 8},
-        "async_programming": {"overall_progress": 0.35, "relevant_topics": 5},
-    }
-    
-    progress = progress_map.get(community_id, {"overall_progress": 0.5, "relevant_topics": 5})
+    result = await db.execute(
+        select(CommunityModel).where(CommunityModel.id == community_id)
+    )
+    community = result.scalar_one_or_none()
+    if not community:
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    project_ids = community.project_ids or []
+    override_count = sum(
+        len(nodes) for nodes in (community.node_importance_overrides or {}).values()
+    )
+
+    total_nodes = 0
+    if project_ids:
+        result = await db.execute(
+            select(func.count(NodeModel.id)).where(NodeModel.project_id.in_(project_ids))
+        )
+        total_nodes = result.scalar_one() or 0
+
+    overall_progress = override_count / total_nodes if total_nodes else 0.0
+
     return {
         "community_id": community_id,
-        "overall_progress": progress["overall_progress"],
-        "relevant_topics": progress["relevant_topics"],
+        "overall_progress": overall_progress,
+        "relevant_topics": override_count,
     }
 
 
 @router.get("/communities/{community_id}/leaderboard")
-async def get_community_leaderboard(community_id: str):
+async def get_community_leaderboard(community_id: str, db: AsyncSession = Depends(get_db)):
     """Get leaderboard for a community."""
-    if community_id not in _communities:
-        return {"error": "Community not found"}, 404
-    
-    # Mock leaderboard data
-    leaderboard_map = {
-        "python_fundamentals": [
-            {"user_id": "alice", "score": 0.8, "rank": 1},
-            {"user_id": "charlie", "score": 0.7, "rank": 2},
-            {"user_id": "bob", "score": 0.6, "rank": 3},
-        ],
-        "advanced_python": [
-            {"user_id": "bob", "score": 0.75, "rank": 1},
-            {"user_id": "charlie", "score": 0.65, "rank": 2},
-            {"user_id": "alice", "score": 0.55, "rank": 3},
-        ],
-        "async_programming": [
-            {"user_id": "bob", "score": 0.7, "rank": 1},
-            {"user_id": "alice", "score": 0.5, "rank": 2},
-        ],
-    }
-    
-    return leaderboard_map.get(community_id, [])
+    result = await db.execute(
+        select(CommunityModel.id).where(CommunityModel.id == community_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Community not found")
+
+    return []

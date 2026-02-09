@@ -1,10 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import ActiveCommunityBadge from "./communities/ActiveCommunityBadge";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { getCurrentUser } from "../lib/api/user";
+import type { UserDTO } from "../lib/types";
 
 export default function Topbar() {
+  const [currentUser, setCurrentUser] = useState<UserDTO | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getCurrentUser()
+      .then((user) => {
+        if (mounted) {
+          setCurrentUser(user);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setCurrentUser(null);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <header className="border-b border-slate-800 bg-[#0a0a0f] px-6 py-4">
       <div className="flex items-center justify-between">
@@ -37,6 +61,9 @@ export default function Topbar() {
             <a href="/" className="rounded-lg px-4 py-2 text-sm font-medium text-blue-400 bg-blue-950 border border-blue-800">
               Dashboard
             </a>
+            <a href="/projects" className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800">
+              Projects
+            </a>
             <a href="/graph" className="rounded-lg px-4 py-2 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800">
               Graph
             </a>
@@ -50,8 +77,25 @@ export default function Topbar() {
             </button>
             
             <ActiveCommunityBadge />
-            
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500"></div>
+
+            <button className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-200 transition hover:border-slate-600">
+              <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-slate-700">
+                {currentUser?.avatar_url ? (
+                  <img
+                    src={currentUser.avatar_url}
+                    alt="User avatar"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xs font-semibold text-slate-200">
+                    {(currentUser?.name ?? currentUser?.username ?? "U").slice(0, 1)}
+                  </span>
+                )}
+              </div>
+              <span className="hidden max-w-[140px] truncate sm:inline">
+                {currentUser?.name ?? currentUser?.username ?? "User"}
+              </span>
+            </button>
           </div>
         </div>
       </div>

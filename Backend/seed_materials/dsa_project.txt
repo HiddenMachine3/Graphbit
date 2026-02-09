@@ -1,0 +1,1 @@
+Data structures organize data; algorithms transform it. Focus on arrays, stacks, trees, and sorting basics.
