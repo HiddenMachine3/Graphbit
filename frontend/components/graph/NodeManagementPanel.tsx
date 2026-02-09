@@ -6,12 +6,14 @@ import { createNode, updateNode } from '../../lib/api/graph';
 
 type NodeManagementPanelProps = {
   selectedNode: GraphNodeDTO | null;
+  projectId: string | null;
   onNodeCreated: () => void;
   onNodeUpdated: () => void;
 };
 
 export default function NodeManagementPanel({
   selectedNode,
+  projectId,
   onNodeCreated,
   onNodeUpdated,
 }: NodeManagementPanelProps) {
@@ -27,6 +29,10 @@ export default function NodeManagementPanel({
   const [error, setError] = useState<string | null>(null);
 
   const handleCreateNode = useCallback(async () => {
+    if (!projectId) {
+      setError('Select a project first');
+      return;
+    }
     if (!newTopicName.trim()) {
       setError('Topic name is required');
       return;
@@ -35,7 +41,7 @@ export default function NodeManagementPanel({
     setLoading(true);
     setError(null);
     try {
-      await createNode(newTopicName, newImportance, newRelevance);
+      await createNode(projectId, newTopicName, newImportance, newRelevance);
       setNewTopicName('');
       setNewImportance(0.5);
       setNewRelevance(0.5);
@@ -49,12 +55,12 @@ export default function NodeManagementPanel({
   }, [newTopicName, newImportance, newRelevance, onNodeCreated]);
 
   const handleUpdateNode = useCallback(async () => {
-    if (!selectedNode) return;
+    if (!selectedNode || !projectId) return;
 
     setLoading(true);
     setError(null);
     try {
-      await updateNode(selectedNode.id, {
+      await updateNode(projectId, selectedNode.id, {
         topic_name: editedTopic || selectedNode.topic_name,
         importance: editedImportance,
         relevance: editedRelevance,
@@ -66,7 +72,7 @@ export default function NodeManagementPanel({
     } finally {
       setLoading(false);
     }
-  }, [selectedNode, editedTopic, editedImportance, editedRelevance, onNodeUpdated]);
+  }, [selectedNode, projectId, editedTopic, editedImportance, editedRelevance, onNodeUpdated]);
 
   const openEditForm = () => {
     if (selectedNode) {
@@ -94,7 +100,7 @@ export default function NodeManagementPanel({
           <button
             className='w-full rounded bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700 disabled:opacity-60'
             onClick={() => setShowCreateForm(true)}
-            disabled={loading}
+            disabled={loading || !projectId}
           >
             + Add New Node
           </button>

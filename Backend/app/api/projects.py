@@ -1,77 +1,96 @@
 """Project management API endpoints."""
 
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.session import get_db
+from app.models import Project as ProjectModel
 
 router = APIRouter()
 
-# In-memory storage for demo projects (replace with database queries)
-_now = datetime.now().isoformat()
-_projects = {
-    "demo_project": {
-        "id": "demo_project",
-        "name": "Demo Project",
-        "description": "Default demo project for development",
-        "owner_id": "demo_user",
-        "visibility": "private",
-        "created_at": _now,
-        "updated_at": _now,
+
+def _serialize_project(project: ProjectModel) -> dict:
+    return {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "owner_id": project.owner_id,
+        "visibility": project.visibility,
+        "created_at": project.created_at.isoformat() if project.created_at else None,
+        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
     }
-}
 
 
 @router.get("/projects")
-async def list_projects():
+async def list_projects(db: AsyncSession = Depends(get_db)):
     """List all available projects."""
-    return list(_projects.values())
+    result = await db.execute(select(ProjectModel))
+    projects = result.scalars().all()
+    return [_serialize_project(project) for project in projects]
 
 
 @router.get("/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get a specific project by ID."""
-    if project_id not in _projects:
-        return {"error": "Project not found"}, 404
-    return _projects[project_id]
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return _serialize_project(project)
 
 
 @router.post("/projects")
-async def create_project(data: dict):
-    """Create a new project (demo-only in-memory)."""
-    project_id = data.get("id") or f"project-{len(_projects) + 1}"
-    now = datetime.now().isoformat()
-    project = {
-        "id": project_id,
-        "name": data.get("name", "Untitled Project"),
-        "description": data.get("description", ""),
-        "owner_id": data.get("owner_id", "demo_user"),
-        "visibility": data.get("visibility", "private"),
-        "created_at": now,
-        "updated_at": now,
-    }
-    _projects[project_id] = project
-    return project
+async def create_project(data: dict, db: AsyncSession = Depends(get_db)):
+    """Create a new project."""
+    project_id = data.get("id") or f"project-{int(datetime.now().timestamp())}"
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Project already exists")
+
+    now = datetime.now()
+    project = ProjectModel(
+        id=project_id,
+        name=data.get("name", "Untitled Project"),
+        description=data.get("description", ""),
+        owner_id=data.get("owner_id", "user1"),
+        visibility=data.get("visibility", "private"),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(project)
+    await db.commit()
+    await db.refresh(project)
+    return _serialize_project(project)
 
 
 @router.patch("/projects/{project_id}")
-async def update_project(project_id: str, data: dict):
-    """Update an existing project (demo-only in-memory)."""
-    if project_id not in _projects:
-        return {"error": "Project not found"}, 404
+async def update_project(project_id: str, data: dict, db: AsyncSession = Depends(get_db)):
+    """Update an existing project."""
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    project = _projects[project_id]
-    for field in ("name", "description", "visibility"):
+    for field in ("name", "description", "visibility", "owner_id"):
         if field in data:
-            project[field] = data[field]
+            setattr(project, field, data[field])
+    project.updated_at = datetime.now()
 
-    project["updated_at"] = datetime.now().isoformat()
-    return project
+    await db.commit()
+    await db.refresh(project)
+    return _serialize_project(project)
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(project_id: str):
-    """Delete a project (demo-only in-memory)."""
-    if project_id not in _projects:
-        return {"error": "Project not found"}, 404
+async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a project."""
+    result = await db.execute(select(ProjectModel).where(ProjectModel.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-    del _projects[project_id]
+    await db.delete(project)
+    await db.commit()
     return {"status": "deleted"}

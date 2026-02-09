@@ -4,15 +4,23 @@ import { useEffect, useState } from "react";
 import KnowledgeGraphView from "../components/graph/KnowledgeGraphView";
 import ActivityHeatmap from "../components/ActivityHeatmap";
 import { fetchGraphSummary } from "../lib/api/graph";
+import { useAppStore } from "../lib/store";
 import type { GraphSummaryDTO } from "../lib/types";
 
 export default function HomePage() {
   const [graphData, setGraphData] = useState<GraphSummaryDTO | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const currentProjectId = useAppStore((state) => state.currentProjectId);
 
   useEffect(() => {
-    fetchGraphSummary()
+    if (!currentProjectId) {
+      setGraphData(null);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    fetchGraphSummary(currentProjectId)
       .then((data) => {
         setGraphData(data);
         setIsLoading(false);
@@ -21,7 +29,7 @@ export default function HomePage() {
         console.error("Failed to fetch graph data:", error);
         setIsLoading(false);
       });
-  }, []);
+  }, [currentProjectId]);
 
   if (isLoading) {
     return (

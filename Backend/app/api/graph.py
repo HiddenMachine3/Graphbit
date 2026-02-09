@@ -3,36 +3,29 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain import (
-    Edge,
-    EdgeType,
-    Graph,
-    KnowledgeType,
-    Node,
-    Question,
-    QuestionMetadata,
-    QuestionType,
-)
+from app.domain import EdgeType
 from app.domain.material import Material, MaterialRegistry, MaterialType
 from app.services.topic_extraction import extract_topics_from_text
 from app.services.video_transcripts import fetch_youtube_transcript
+from app.db.session import get_db
+from app.models import Node as NodeModel, Edge as EdgeModel, Question as QuestionModel
 
 router = APIRouter()
 
-# Default project ID for demo/development
-DEFAULT_PROJECT_ID = "demo_project"
-
-
 class CreateNodeRequest(BaseModel):
+    project_id: str
     topic_name: str
     importance: float = 0.5
     relevance: float = 0.5
 
 
 class UpdateNodeRequest(BaseModel):
+    project_id: str
     topic_name: Optional[str] = None
     proven_knowledge_rating: Optional[float] = None
     user_estimated_knowledge_rating: Optional[float] = None
@@ -41,6 +34,7 @@ class UpdateNodeRequest(BaseModel):
 
 
 class CreateEdgeRequest(BaseModel):
+    project_id: str
     from_node_id: str
     to_node_id: str
     edge_type: str = "PREREQUISITE"
@@ -48,6 +42,7 @@ class CreateEdgeRequest(BaseModel):
 
 
 class VideoIngestRequest(BaseModel):
+    project_id: str
     video_url: str
     title: str
     transcript: Optional[str] = None
@@ -55,110 +50,13 @@ class VideoIngestRequest(BaseModel):
     topics: Optional[list[str]] = None
 
 
-# In-memory storage for demo (replace with database queries)
-_graph = Graph(project_id=DEFAULT_PROJECT_ID)
-_questions = {}
-_node_counter = 0
+# In-memory storage for materials and ingest indexes
 _material_counter = 0
 _material_registry = MaterialRegistry()
 _material_index_by_source: dict[str, str] = {}
-_topic_index_by_key: dict[str, str] = {}
-_chapter_index_by_source: dict[str, str] = {}
-_topic_chapter_index: dict[str, set[str]] = {}
-
-# Initialize with sample data
-def _init_sample_data():
-    """Initialize with sample data."""
-    global _graph, _questions
-    
-    # Create nodes
-    nodes_data = [
-        ("python_basics", "Python Basics", 0.7, 0.75, 1.0),
-        ("variables", "Variables & Data Types", 0.65, 0.7, 0.9),
-        ("functions", "Functions & Scope", 0.5, 0.55, 0.8),
-        ("oop", "Object-Oriented Programming", 0.4, 0.45, 0.85),
-        ("classes", "Classes & Objects", 0.35, 0.4, 0.8),
-        ("inheritance", "Inheritance & Polymorphism", 0.2, 0.25, 0.75),
-        ("decorators", "Decorators & Metaprogramming", 0.15, 0.2, 0.7),
-        ("async", "Async & Concurrency", 0.1, 0.15, 0.65),
-    ]
-    
-    for node_id, topic_name, proven, estimated, importance in nodes_data:
-        node = Node(
-            id=node_id,
-            project_id=DEFAULT_PROJECT_ID,
-            topic_name=topic_name,
-            proven_knowledge_rating=proven,
-            user_estimated_knowledge_rating=estimated,
-            importance=importance,
-            relevance=0.8,
-            view_frequency=max(1, int(proven * 10))
-        )
-        _graph.add_node(node)
-    
-    # Create edges (connections between topics)
-    edges_data = [
-        ("python_basics", "variables", EdgeType.PREREQUISITE, 1.0),
-        ("variables", "functions", EdgeType.PREREQUISITE, 1.0),
-        ("functions", "oop", EdgeType.PREREQUISITE, 1.0),
-        ("oop", "classes", EdgeType.PREREQUISITE, 1.0),
-        ("classes", "inheritance", EdgeType.PREREQUISITE, 1.0),
-        ("classes", "decorators", EdgeType.APPLIED_WITH, 0.7),
-        ("functions", "async", EdgeType.APPLIED_WITH, 0.8),
-        ("python_basics", "functions", EdgeType.APPLIED_WITH, 0.6),
-        ("oop", "inheritance", EdgeType.PREREQUISITE, 0.9),
-        ("inheritance", "polymorphism", EdgeType.APPLIED_WITH, 0.8),
-    ]
-    
-    for from_id, to_id, edge_type, weight in edges_data:
-        # Only create edge if both nodes exist
-        if from_id in _graph.nodes and to_id in _graph.nodes:
-            edge = Edge(
-                from_node_id=from_id,
-                to_node_id=to_id,
-                project_id=DEFAULT_PROJECT_ID,
-                type=edge_type,
-                weight=weight
-            )
-            _graph.add_edge(edge)
-    
-    # Create questions
-    questions_data = [
-        ("q1", "What is a variable in Python?", "A variable is a named container that stores a value", "variables", QuestionType.OPEN, 1),
-        ("q2", "What are the basic data types in Python?", "int, float, str, bool, list, dict, tuple, set", "variables", QuestionType.MCQ, 2),
-        ("q3", "What is the purpose of a function?", "Functions encapsulate reusable code blocks", "functions", QuestionType.OPEN, 2),
-        ("q4", "How do you define a function in Python?", "Using the def keyword", "functions", QuestionType.MCQ, 1),
-        ("q5", "What is a class in Python?", "A blueprint for creating objects", "classes", QuestionType.OPEN, 3),
-        ("q6", "What is inheritance in OOP?", "A mechanism to inherit properties and methods from parent classes", "inheritance", QuestionType.OPEN, 3),
-        ("q7", "What is polymorphism?", "The ability to have multiple forms or behaviors", "inheritance", QuestionType.MCQ, 4),
-        ("q8", "What are decorators used for?", "Decorators modify the behavior of functions or classes", "decorators", QuestionType.OPEN, 4),
-        ("q9", "What is async programming?", "Asynchronous programming allows concurrent execution", "async", QuestionType.OPEN, 5),
-        ("q10", "What is OOP?", "Object-Oriented Programming is a paradigm based on objects and classes", "oop", QuestionType.OPEN, 2),
-    ]
-    
-    now = datetime.now()
-    for qid, text, answer, node_id, qtype, difficulty in questions_data:
-        question = Question(
-            id=qid,
-            project_id=DEFAULT_PROJECT_ID,
-            text=text,
-            answer=answer,
-            question_type=qtype,
-            knowledge_type=KnowledgeType.CONCEPT,
-            covered_node_ids=[node_id],
-            metadata=QuestionMetadata(
-                created_by="system",
-                created_at=now,
-                importance=difficulty * 0.2
-            ),
-            difficulty=difficulty,
-            tags={"fundamentals", "python"},
-        )
-        _questions[qid] = question
-
-
-# Initialize on module load
-_init_sample_data()
+_topic_index_by_key: dict[tuple[str, str], str] = {}
+_chapter_index_by_source: dict[tuple[str, str], str] = {}
+_topic_chapter_index: dict[tuple[str, str], set[str]] = {}
 
 
 def _normalize_topic_key(topic_name: str) -> str:
@@ -170,44 +68,73 @@ def _topic_id_from_key(topic_key: str) -> str:
     return "topic_" + topic_key.replace(" ", "_")[:48]
 
 
-def _edge_exists(from_node_id: str, to_node_id: str, edge_type: EdgeType) -> bool:
-    return any(
-        edge.from_node_id == from_node_id
-        and edge.to_node_id == to_node_id
-        and edge.type == edge_type
-        for edge in _graph.edges
+async def _edge_exists(
+    db: AsyncSession,
+    project_id: str,
+    from_node_id: str,
+    to_node_id: str,
+    edge_type: EdgeType,
+) -> bool:
+    result = await db.execute(
+        select(EdgeModel.id).where(
+            EdgeModel.project_id == project_id,
+            EdgeModel.source == from_node_id,
+            EdgeModel.target == to_node_id,
+            EdgeModel.type == edge_type.value,
+        )
     )
+    return result.scalar_one_or_none() is not None
 
 
-def _serialize_graph_summary():
+async def _serialize_graph_summary(project_id: str, db: AsyncSession):
+    nodes_result = await db.execute(
+        select(NodeModel).where(NodeModel.project_id == project_id)
+    )
+    nodes = nodes_result.scalars().all()
+
+    edges_result = await db.execute(
+        select(EdgeModel).where(EdgeModel.project_id == project_id)
+    )
+    edges = edges_result.scalars().all()
+
+    questions_result = await db.execute(
+        select(QuestionModel).where(QuestionModel.project_id == project_id)
+    )
+    questions = questions_result.scalars().all()
+
+    question_counts: dict[str, int] = {}
+    for question in questions:
+        for node_id in question.covered_node_ids:
+            question_counts[node_id] = question_counts.get(node_id, 0) + 1
+
     return {
         "nodes": [
             {
                 "id": node.id,
+                "project_id": node.project_id,
                 "topic_name": node.topic_name,
                 "proven_knowledge_rating": node.proven_knowledge_rating,
                 "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,
                 "importance": node.importance,
                 "relevance": node.relevance,
                 "view_frequency": node.view_frequency,
-                "source_material_ids": list(node.source_material_ids),
+                "source_material_ids": list(node.source_material_ids or []),
                 "forgetting_score": 1.0 - node.proven_knowledge_rating,
-                "linked_questions_count": sum(
-                    1 for q in _questions.values() if node.id in q.covered_node_ids
-                ),
-                "linked_materials_count": len(node.source_material_ids),
+                "linked_questions_count": question_counts.get(node.id, 0),
+                "linked_materials_count": len(node.source_material_ids or []),
             }
-            for node in _graph.nodes.values()
+            for node in nodes
         ],
         "edges": [
             {
-                "id": f"{edge.from_node_id}-{edge.to_node_id}",
-                "source": edge.from_node_id,
-                "target": edge.to_node_id,
-                "type": edge.type.value,
+                "id": edge.id,
+                "project_id": edge.project_id,
+                "source": edge.source,
+                "target": edge.target,
+                "type": edge.type,
                 "weight": edge.weight,
             }
-            for edge in _graph.edges
+            for edge in edges
         ],
     }
 
@@ -234,142 +161,187 @@ def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) 
     return material
 
 
-def _get_or_create_chapter_node(
+async def _get_or_create_chapter_node(
+    db: AsyncSession,
+    project_id: str,
     material: Material,
     title: str,
     video_url: str,
 ) -> str:
-    existing = _chapter_index_by_source.get(video_url)
-    if existing and existing in _graph.nodes:
-        return existing
+    index_key = (project_id, video_url)
+    existing = _chapter_index_by_source.get(index_key)
+    if existing:
+        result = await db.execute(
+            select(NodeModel.id).where(
+                NodeModel.project_id == project_id,
+                NodeModel.id == existing,
+            )
+        )
+        if result.scalar_one_or_none():
+            return existing
 
     chapter_id = f"chapter_{len(_chapter_index_by_source) + 1}"
-    chapter_node = Node(
+    chapter_node = NodeModel(
         id=chapter_id,
-        project_id=DEFAULT_PROJECT_ID,
+        project_id=project_id,
         topic_name=title,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
         importance=0.9,
         relevance=1.0,
         view_frequency=1,
-        source_material_ids={material.id},
+        source_material_ids=[material.id],
     )
-    _graph.add_node(chapter_node)
-    _chapter_index_by_source[video_url] = chapter_id
+    db.add(chapter_node)
+    await db.flush()
+    _chapter_index_by_source[index_key] = chapter_id
     return chapter_id
 
 
-def _get_or_create_topic_node(topic_name: str, material_id: str) -> str:
+async def _get_or_create_topic_node(
+    db: AsyncSession,
+    project_id: str,
+    topic_name: str,
+    material_id: str,
+) -> str:
     topic_key = _normalize_topic_key(topic_name)
     if not topic_key:
         raise ValueError("Topic name cannot be empty")
 
-    existing_id = _topic_index_by_key.get(topic_key)
-    if existing_id and existing_id in _graph.nodes:
-        _graph.nodes[existing_id].source_material_ids.add(material_id)
-        return existing_id
+    index_key = (project_id, topic_key)
+    existing_id = _topic_index_by_key.get(index_key)
+    if existing_id:
+        result = await db.execute(
+            select(NodeModel).where(
+                NodeModel.project_id == project_id,
+                NodeModel.id == existing_id,
+            )
+        )
+        existing_node = result.scalar_one_or_none()
+        if existing_node:
+            source_ids = set(existing_node.source_material_ids or [])
+            source_ids.add(material_id)
+            existing_node.source_material_ids = list(source_ids)
+            return existing_id
 
     node_id = _topic_id_from_key(topic_key)
-    if node_id in _graph.nodes:
-        node_id = f"{node_id}_{len(_graph.nodes)}"
 
-    node = Node(
+    node = NodeModel(
         id=node_id,
-        project_id=DEFAULT_PROJECT_ID,
+        project_id=project_id,
         topic_name=topic_name.strip(),
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
         importance=0.6,
         relevance=0.9,
         view_frequency=0,
-        source_material_ids={material_id},
+        source_material_ids=[material_id],
     )
-    _graph.add_node(node)
-    _topic_index_by_key[topic_key] = node_id
+    db.add(node)
+    await db.flush()
+    _topic_index_by_key[index_key] = node_id
     return node_id
 
 
 @router.get("/graph")
-async def get_graph_summary():
+async def get_graph_summary(
+    project_id: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
     """Get complete knowledge graph summary with nodes and edges."""
-    return _serialize_graph_summary()
+    return await _serialize_graph_summary(project_id, db)
 
 
 @router.get("/graph/nodes")
-async def list_nodes():
+async def list_nodes(
+    project_id: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
     """List all knowledge nodes."""
-    return _serialize_graph_summary()["nodes"]
+    summary = await _serialize_graph_summary(project_id, db)
+    return summary["nodes"]
 
 
 @router.get("/graph/questions")
-async def list_questions():
+async def list_questions(
+    project_id: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
     """List all questions."""
+    result = await db.execute(
+        select(QuestionModel).where(QuestionModel.project_id == project_id)
+    )
+    questions = result.scalars().all()
     return [
         {
             "id": q.id,
+            "project_id": q.project_id,
             "text": q.text,
             "answer": q.answer,
-            "question_type": q.question_type.value,
-            "knowledge_type": q.knowledge_type.value,
+            "question_type": q.question_type,
+            "knowledge_type": q.knowledge_type,
             "covered_node_ids": q.covered_node_ids,
-            "metadata": {
-                "created_by": q.metadata.created_by,
-                "created_at": q.metadata.created_at.isoformat(),
-                "importance": q.metadata.importance,
-                "hits": q.metadata.hits,
-                "misses": q.metadata.misses,
-            },
+            "metadata": q.question_metadata,
             "difficulty": q.difficulty,
-            "tags": list(q.tags),
+            "tags": q.tags,
             "last_attempted_at": q.last_attempted_at.isoformat() if q.last_attempted_at else None,
-            "source_material_ids": list(q.source_material_ids),
+            "source_material_ids": q.source_material_ids,
         }
-        for q in _questions.values()
+        for q in questions
     ]
 
 
 @router.post("/graph/nodes")
-async def create_node(request: CreateNodeRequest):
+async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get_db)):
     """Create a new knowledge node."""
-    global _node_counter
-    _node_counter += 1
-    
-    node_id = f"node_{_node_counter}"
-    node = Node(
+    node_id = f"node_{int(datetime.now().timestamp() * 1000)}"
+    node = NodeModel(
         id=node_id,
-        project_id=DEFAULT_PROJECT_ID,
+        project_id=request.project_id,
         topic_name=request.topic_name,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
         importance=request.importance,
         relevance=request.relevance,
-        view_frequency=0
+        view_frequency=0,
+        source_material_ids=[],
     )
-    _graph.add_node(node)
+    db.add(node)
+    await db.commit()
+    await db.refresh(node)
     
     return {
         "id": node.id,
+        "project_id": node.project_id,
         "topic_name": node.topic_name,
         "proven_knowledge_rating": node.proven_knowledge_rating,
         "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,
         "importance": node.importance,
         "relevance": node.relevance,
         "view_frequency": node.view_frequency,
-        "source_material_ids": list(node.source_material_ids),
+        "source_material_ids": list(node.source_material_ids or []),
         "forgetting_score": 1.0 - node.proven_knowledge_rating,
         "linked_questions_count": 0,
-        "linked_materials_count": len(node.source_material_ids),
+        "linked_materials_count": len(node.source_material_ids or []),
     }
 
 
 @router.put("/graph/nodes/{node_id}")
-async def update_node(node_id: str, request: UpdateNodeRequest):
+async def update_node(
+    node_id: str,
+    request: UpdateNodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
     """Update node properties."""
-    if node_id not in _graph.nodes:
+    result = await db.execute(
+        select(NodeModel).where(
+            NodeModel.project_id == request.project_id,
+            NodeModel.id == node_id,
+        )
+    )
+    node = result.scalar_one_or_none()
+    if not node:
         raise HTTPException(status_code=404, detail="Node not found")
-    
-    node = _graph.nodes[node_id]
     
     if request.topic_name is not None:
         node.topic_name = request.topic_name
@@ -382,27 +354,52 @@ async def update_node(node_id: str, request: UpdateNodeRequest):
     if request.relevance is not None:
         node.relevance = request.relevance
     
+    await db.commit()
+    await db.refresh(node)
+
+    result = await db.execute(
+        select(QuestionModel).where(QuestionModel.project_id == request.project_id)
+    )
+    questions = result.scalars().all()
+    linked_questions_count = sum(
+        1 for q in questions if node_id in q.covered_node_ids
+    )
+
     return {
         "id": node.id,
+        "project_id": node.project_id,
         "topic_name": node.topic_name,
         "proven_knowledge_rating": node.proven_knowledge_rating,
         "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,
         "importance": node.importance,
         "relevance": node.relevance,
         "view_frequency": node.view_frequency,
-        "source_material_ids": list(node.source_material_ids),
+        "source_material_ids": list(node.source_material_ids or []),
         "forgetting_score": 1.0 - node.proven_knowledge_rating,
-        "linked_questions_count": sum(1 for q in _questions.values() if node_id in q.covered_node_ids),
-        "linked_materials_count": len(node.source_material_ids),
+        "linked_questions_count": linked_questions_count,
+        "linked_materials_count": len(node.source_material_ids or []),
     }
 
 
 @router.post("/graph/edges")
-async def create_edge(request: CreateEdgeRequest):
+async def create_edge(request: CreateEdgeRequest, db: AsyncSession = Depends(get_db)):
     """Create a new connection between nodes."""
-    if request.from_node_id not in _graph.nodes:
+    from_node = await db.execute(
+        select(NodeModel.id).where(
+            NodeModel.project_id == request.project_id,
+            NodeModel.id == request.from_node_id,
+        )
+    )
+    if from_node.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="From node not found")
-    if request.to_node_id not in _graph.nodes:
+
+    to_node = await db.execute(
+        select(NodeModel.id).where(
+            NodeModel.project_id == request.project_id,
+            NodeModel.id == request.to_node_id,
+        )
+    )
+    if to_node.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="To node not found")
     
     # Map string to EdgeType
@@ -414,35 +411,41 @@ async def create_edge(request: CreateEdgeRequest):
     }
     edge_type = edge_type_map.get(request.edge_type, EdgeType.PREREQUISITE)
 
-    if _edge_exists(request.from_node_id, request.to_node_id, edge_type):
+    if await _edge_exists(db, request.project_id, request.from_node_id, request.to_node_id, edge_type):
         return {
-            "id": f"{request.from_node_id}-{request.to_node_id}",
+            "id": f"{request.from_node_id}-{request.to_node_id}-{edge_type.value}",
+            "project_id": request.project_id,
             "source": request.from_node_id,
             "target": request.to_node_id,
             "type": edge_type.value,
             "weight": request.weight,
         }
     
-    edge = Edge(
-        from_node_id=request.from_node_id,
-        to_node_id=request.to_node_id,
-        project_id=DEFAULT_PROJECT_ID,
-        type=edge_type,
-        weight=request.weight
+    edge_id = f"{request.from_node_id}-{request.to_node_id}-{edge_type.value}"
+    edge = EdgeModel(
+        id=edge_id,
+        project_id=request.project_id,
+        source=request.from_node_id,
+        target=request.to_node_id,
+        type=edge_type.value,
+        weight=request.weight,
     )
-    _graph.add_edge(edge)
+    db.add(edge)
+    await db.commit()
+    await db.refresh(edge)
     
     return {
-        "id": f"{edge.from_node_id}-{edge.to_node_id}",
-        "source": edge.from_node_id,
-        "target": edge.to_node_id,
-        "type": edge.type.value,
+        "id": edge.id,
+        "project_id": edge.project_id,
+        "source": edge.source,
+        "target": edge.target,
+        "type": edge.type,
         "weight": edge.weight,
     }
 
 
 @router.post("/graph/ingest/video")
-async def ingest_video(request: VideoIngestRequest):
+async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(get_db)):
     """Ingest a video transcript, extract topics, and merge into the graph."""
     if not request.video_url.strip():
         raise HTTPException(status_code=400, detail="video_url is required")
@@ -462,43 +465,71 @@ async def ingest_video(request: VideoIngestRequest):
     material = _get_or_create_material(request.video_url, request.title, request.channel)
 
     chapter_created = request.video_url not in _chapter_index_by_source
-    chapter_node_id = _get_or_create_chapter_node(material, request.title, request.video_url)
+    chapter_node_id = await _get_or_create_chapter_node(
+        db,
+        request.project_id,
+        material,
+        request.title,
+        request.video_url,
+    )
 
     topics_result = []
     edges_added = 0
 
     for topic in topics:
         topic_key = _normalize_topic_key(topic)
-        existing_topic_id = _topic_index_by_key.get(topic_key)
-        topic_node_id = _get_or_create_topic_node(topic, material.id)
+        index_key = (request.project_id, topic_key)
+        existing_topic_id = _topic_index_by_key.get(index_key)
+        topic_node_id = await _get_or_create_topic_node(
+            db,
+            request.project_id,
+            topic,
+            material.id,
+        )
 
-        if not _edge_exists(chapter_node_id, topic_node_id, EdgeType.SUBCONCEPT_OF):
-            edge = Edge(
-                from_node_id=chapter_node_id,
-                to_node_id=topic_node_id,
-                project_id=DEFAULT_PROJECT_ID,
-                type=EdgeType.SUBCONCEPT_OF,
+        if not await _edge_exists(
+            db,
+            request.project_id,
+            chapter_node_id,
+            topic_node_id,
+            EdgeType.SUBCONCEPT_OF,
+        ):
+            edge_id = f"{chapter_node_id}-{topic_node_id}-{EdgeType.SUBCONCEPT_OF.value}"
+            edge = EdgeModel(
+                id=edge_id,
+                project_id=request.project_id,
+                source=chapter_node_id,
+                target=topic_node_id,
+                type=EdgeType.SUBCONCEPT_OF.value,
                 weight=0.9,
             )
-            _graph.add_edge(edge)
+            db.add(edge)
             edges_added += 1
 
-        chapter_neighbors = _topic_chapter_index.get(topic_node_id, set())
+        chapter_neighbors = _topic_chapter_index.get((request.project_id, topic_node_id), set())
         for other_chapter_id in sorted(chapter_neighbors):
             if other_chapter_id == chapter_node_id:
                 continue
-            if not _edge_exists(other_chapter_id, chapter_node_id, EdgeType.APPLIED_WITH):
-                edge = Edge(
-                    from_node_id=other_chapter_id,
-                    to_node_id=chapter_node_id,
-                    project_id=DEFAULT_PROJECT_ID,
-                    type=EdgeType.APPLIED_WITH,
+            if not await _edge_exists(
+                db,
+                request.project_id,
+                other_chapter_id,
+                chapter_node_id,
+                EdgeType.APPLIED_WITH,
+            ):
+                edge_id = f"{other_chapter_id}-{chapter_node_id}-{EdgeType.APPLIED_WITH.value}"
+                edge = EdgeModel(
+                    id=edge_id,
+                    project_id=request.project_id,
+                    source=other_chapter_id,
+                    target=chapter_node_id,
+                    type=EdgeType.APPLIED_WITH.value,
                     weight=0.4,
                 )
-                _graph.add_edge(edge)
+                db.add(edge)
                 edges_added += 1
 
-        _topic_chapter_index.setdefault(topic_node_id, set()).add(chapter_node_id)
+        _topic_chapter_index.setdefault((request.project_id, topic_node_id), set()).add(chapter_node_id)
 
         topics_result.append(
             {
@@ -508,10 +539,12 @@ async def ingest_video(request: VideoIngestRequest):
             }
         )
 
+    await db.commit()
+
     return {
         "chapter_node_id": chapter_node_id,
         "chapter_created": chapter_created,
         "topics": topics_result,
         "edges_added": edges_added,
-        "graph": _serialize_graph_summary(),
+        "graph": await _serialize_graph_summary(request.project_id, db),
     }

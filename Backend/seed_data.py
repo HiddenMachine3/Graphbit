@@ -23,7 +23,7 @@ from app.domain import (
     User, Community, Project, ProjectVisibility,
     QuestionBank, UserNodeState
 )
-from app.models import Base, Question as QuestionModel
+from app.models import Base, Question as QuestionModel, Project as ProjectModel, Node as NodeModel, Edge as EdgeModel
 
 
 async def seed_database(reset_db: bool = False):
@@ -107,6 +107,15 @@ async def seed_database(reset_db: bool = False):
             visibility=ProjectVisibility.SHARED,
             created_at=now - timedelta(days=20),
             updated_at=now - timedelta(days=3),
+        ),
+        Project(
+            id="stoicism_project",
+            name="Stoicism",
+            description="Practice Stoic philosophy and apply core principles",
+            owner_id=user.id,
+            visibility=ProjectVisibility.PUBLIC,
+            created_at=now - timedelta(days=18),
+            updated_at=now - timedelta(days=2),
         ),
     ]
     
@@ -196,13 +205,99 @@ async def seed_database(reset_db: bool = False):
                 "bio_dna": 1.4,
             }
         },
+        "stoicism_project": {
+            "nodes": [
+                ("stoic_foundations", "Stoic Foundations", 0.55, 0.6, 0.9),
+                ("stoic_virtue", "Cardinal Virtues", 0.5, 0.55, 0.95),
+                ("stoic_dichotomy", "Dichotomy of Control", 0.6, 0.65, 1.0),
+                ("stoic_judgments", "Judgments and Impressions", 0.45, 0.5, 0.85),
+                ("stoic_emotions", "Emotions and Passions", 0.4, 0.45, 0.8),
+                ("stoic_practice", "Daily Stoic Practice", 0.5, 0.55, 0.9),
+                ("stoic_negative_vis", "Negative Visualization", 0.35, 0.4, 0.75),
+                ("stoic_role_ethics", "Role Ethics", 0.3, 0.35, 0.7),
+            ],
+            "edges": [
+                ("stoic_foundations", "stoic_virtue", EdgeType.PREREQUISITE, 1.0),
+                ("stoic_foundations", "stoic_dichotomy", EdgeType.PREREQUISITE, 1.0),
+                ("stoic_dichotomy", "stoic_judgments", EdgeType.PREREQUISITE, 0.9),
+                ("stoic_judgments", "stoic_emotions", EdgeType.PREREQUISITE, 0.9),
+                ("stoic_virtue", "stoic_role_ethics", EdgeType.APPLIED_WITH, 0.8),
+                ("stoic_dichotomy", "stoic_practice", EdgeType.APPLIED_WITH, 0.85),
+                ("stoic_negative_vis", "stoic_practice", EdgeType.APPLIED_WITH, 0.75),
+            ],
+            "questions": [
+                (
+                    "stoic_q1",
+                    "What is the dichotomy of control?",
+                    "A distinction between what is within our control and what is not",
+                    "stoic_dichotomy",
+                    1,
+                ),
+                (
+                    "stoic_q2",
+                    "Name the four cardinal virtues in Stoicism.",
+                    "Wisdom, justice, courage, and temperance",
+                    "stoic_virtue",
+                    2,
+                ),
+                (
+                    "stoic_q3",
+                    "What is negative visualization used for?",
+                    "To prepare for loss and cultivate gratitude",
+                    "stoic_negative_vis",
+                    2,
+                ),
+                (
+                    "stoic_q4",
+                    "How do Stoics view emotions?",
+                    "They arise from judgments and can be examined and corrected",
+                    "stoic_emotions",
+                    3,
+                ),
+                (
+                    "stoic_q5",
+                    "What is meant by role ethics?",
+                    "Fulfilling duties appropriate to one's roles with virtue",
+                    "stoic_role_ethics",
+                    3,
+                ),
+            ],
+            "community_overrides": {
+                "stoic_dichotomy": 1.3,
+                "stoic_virtue": 1.2,
+                "stoic_practice": 1.1,
+            }
+        },
     }
     
     print("\n📚 Seeding project data...")
     async with async_session() as session:
+        existing_project_ids_result = await session.execute(select(ProjectModel.id))
+        existing_project_ids = {row[0] for row in existing_project_ids_result.fetchall()}
         for project in projects:
             print(f"\n  Project: {project.name}")
+            if project.id not in existing_project_ids:
+                db_project = ProjectModel(
+                    id=project.id,
+                    name=project.name,
+                    description=project.description,
+                    owner_id=project.owner_id,
+                    visibility=project.visibility.value,
+                    created_at=project.created_at,
+                    updated_at=project.updated_at,
+                )
+                session.add(db_project)
+                existing_project_ids.add(project.id)
             data = project_data[project.id]
+
+            existing_node_ids_result = await session.execute(
+                select(NodeModel.id).where(NodeModel.project_id == project.id)
+            )
+            existing_node_ids = {row[0] for row in existing_node_ids_result.fetchall()}
+            existing_edge_ids_result = await session.execute(
+                select(EdgeModel.id).where(EdgeModel.project_id == project.id)
+            )
+            existing_edge_ids = {row[0] for row in existing_edge_ids_result.fetchall()}
             
             # Create graph for project
             graph = Graph(project_id=project.id)
@@ -232,6 +327,20 @@ async def seed_database(reset_db: bool = False):
                     last_reviewed_at=now - timedelta(days=int((1 - proven) * 10)),
                     stability=1.0 + proven
                 )
+                if node_id not in existing_node_ids:
+                    db_node = NodeModel(
+                        id=node_id,
+                        project_id=project.id,
+                        topic_name=topic_name,
+                        proven_knowledge_rating=proven,
+                        user_estimated_knowledge_rating=estimated,
+                        importance=importance,
+                        relevance=0.8,
+                        view_frequency=max(1, int(proven * 10)),
+                        source_material_ids=[],
+                    )
+                    session.add(db_node)
+                    existing_node_ids.add(node_id)
                 print(f"      ✓ {topic_name}")
             
             # Create edges
@@ -246,6 +355,18 @@ async def seed_database(reset_db: bool = False):
                 )
                 graph.add_edge(edge)
                 print(f"      ✓ {from_id} → {to_id}")
+                edge_id = f"{from_id}-{to_id}-{edge_type.value}"
+                if edge_id not in existing_edge_ids:
+                    db_edge = EdgeModel(
+                        id=edge_id,
+                        project_id=project.id,
+                        source=from_id,
+                        target=to_id,
+                        type=edge_type.value,
+                        weight=weight,
+                    )
+                    session.add(db_edge)
+                    existing_edge_ids.add(edge_id)
             
             # Create questions
             print(f"    Creating {len(data['questions'])} questions...")
@@ -260,6 +381,7 @@ async def seed_database(reset_db: bool = False):
                 # Create database Question model
                 db_question = QuestionModel(
                     id=qid,
+                    project_id=project.id,
                     text=question_text,
                     answer=answer,
                     options=None,

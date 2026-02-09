@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 
 import { fetchGraphSummary } from "../../lib/api/graph";
 import type { GraphSummaryDTO, GraphNodeDTO } from "../../lib/types";
+import { useAppStore } from "../../lib/store";
 import Loading from "../../components/Loading";
 import ErrorState from "../../components/ErrorState";
 import KnowledgeGraphView from "../../components/graph/KnowledgeGraphView";
@@ -21,11 +22,18 @@ export default function GraphPage() {
   const [clickModeActive, setClickModeActive] = useState(false);
   const [selectedNodesForEdge, setSelectedNodesForEdge] = useState<string[]>([]);
   const [brightnessAttribute, setBrightnessAttribute] = useState<keyof GraphNodeDTO>('proven_knowledge_rating');
+  const currentProjectId = useAppStore((state) => state.currentProjectId);
 
   const loadGraph = useCallback(async () => {
+    if (!currentProjectId) {
+      setSummary(null);
+      setSelectedNodeId(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const data = await fetchGraphSummary();
+      const data = await fetchGraphSummary(currentProjectId);
       setSummary(data);
       setSelectedNodeId(data.nodes[0]?.id ?? null);
     } catch (err) {
@@ -34,7 +42,7 @@ export default function GraphPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentProjectId]);
 
   useEffect(() => {
     loadGraph();
@@ -104,6 +112,7 @@ export default function GraphPage() {
           {editingNodeId === selectedNodeId && (
             <NodeManagementPanel
               selectedNode={selectedNode}
+              projectId={currentProjectId}
               onNodeCreated={() => {
                 setEditingNodeId(null);
                 loadGraph();
@@ -117,6 +126,7 @@ export default function GraphPage() {
           {editingNodeId !== selectedNodeId && (
             <NodeManagementPanel
               selectedNode={null}
+              projectId={currentProjectId}
               onNodeCreated={loadGraph}
               onNodeUpdated={loadGraph}
             />
@@ -124,6 +134,7 @@ export default function GraphPage() {
           <EdgeManagementPanel
             nodes={summary.nodes}
             selectedNodeId={selectedNodeId}
+            projectId={currentProjectId}
             onEdgeCreated={() => {
               setClickModeActive(false);
               setSelectedNodesForEdge([]);
