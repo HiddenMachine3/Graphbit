@@ -5,6 +5,7 @@ export interface ProjectDTO {
   name: string;
   description: string;
   owner_id: string;
+  created_by: string;
   visibility: ProjectVisibility;
   created_at: string;
   updated_at: string;
@@ -13,6 +14,7 @@ export interface ProjectDTO {
 export interface NodeDTO {
   id: string;
   project_id: string;
+  created_by?: string;
   topic_name: string;
   proven_knowledge_rating: number;
   user_estimated_knowledge_rating: number;
@@ -60,7 +62,8 @@ export interface QuestionDTO {
   question_type: QuestionType;
   knowledge_type: string;
   covered_node_ids: string[];
-  metadata: QuestionMetadataDTO;
+  metadata?: QuestionMetadataDTO;
+  question_metadata?: QuestionMetadataDTO;
   difficulty: number;
   tags: string[];
   last_attempted_at: string | null;
@@ -87,6 +90,7 @@ export interface InterjectionDecisionDTO {
 export interface RevisionSessionDTO {
   session_id: string;
   max_questions: number | null;
+  project_id?: string | null;
 }
 
 export interface RevisionFeedbackDTO {
@@ -99,7 +103,11 @@ export interface CommunityDTO {
   id: string;
   name: string;
   description: string;
-  node_importance_overrides: Record<string, number>;
+  created_by?: string;
+  project_ids?: string[];
+  member_ids?: string[];
+  node_importance_overrides: Record<string, Record<string, number>>;
+  question_importance_overrides?: Record<string, Record<string, number>>;
 }
 
 export interface CommunityProgressDTO {
@@ -136,9 +144,16 @@ export interface RevisionPlanItemDTO {
 
 export interface MaterialDTO {
   id: string;
+  project_id: string;
+  created_by: string;
   title: string;
-  material_type: string;
-  source: string;
-  created_at: string;
-  metadata: Record<string, string>;
+  chunk_count: number;
+}
+
+export interface UserDTO {
+  id: string;
+  username: string;
+  name: string;
+  avatar_url: string | null;
+  active_community_id: string | null;
 }

@@ -10,6 +10,20 @@ class Base(DeclarativeBase):
     pass
 
 
+class AppUser(Base):
+    """Application user model for local authentication."""
+    __tablename__ = "app_users"
+
+    id = Column(String, primary_key=True, nullable=False)
+    username = Column(String, unique=True, nullable=False)
+    name = Column(String, nullable=False)
+    password_hash = Column(String, nullable=False)
+    avatar_url = Column(String, nullable=True)
+    active_community_id = Column(String, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
 class User(Base):
     """User model for authentication.
     
@@ -44,6 +58,7 @@ class Question(Base):
 
     id = Column(String, primary_key=True, nullable=False)
     project_id = Column(String, nullable=False)
+    created_by = Column(String, nullable=False)
     text = Column(String, nullable=False)
     answer = Column(Text, nullable=False)
     options = Column(JSON, nullable=True)  # MCQ options when applicable
@@ -90,7 +105,24 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(Text, nullable=False, default="")
     owner_id = Column(String, nullable=False)
+    created_by = Column(String, nullable=False)
     visibility = Column(String, nullable=False, default="private")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
+class Community(Base):
+    """Community model for grouping projects and overrides."""
+    __tablename__ = "communities"
+
+    id = Column(String, primary_key=True, nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="")
+    created_by = Column(String, nullable=False)
+    project_ids = Column(JSON, nullable=False, default=lambda: [])
+    member_ids = Column(JSON, nullable=False, default=lambda: [])
+    node_importance_overrides = Column(JSON, nullable=False, default=lambda: {})
+    question_importance_overrides = Column(JSON, nullable=False, default=lambda: {})
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
@@ -101,6 +133,7 @@ class Node(Base):
 
     id = Column(String, primary_key=True, nullable=False)
     project_id = Column(String, nullable=False)
+    created_by = Column(String, nullable=False)
     topic_name = Column(String, nullable=False)
     proven_knowledge_rating = Column(Float, nullable=False, default=0.0)
     user_estimated_knowledge_rating = Column(Float, nullable=False, default=0.0)
@@ -122,5 +155,18 @@ class Edge(Base):
     target = Column(String, nullable=False)
     type = Column(String, nullable=False)
     weight = Column(Float, nullable=False, default=1.0)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
+class Material(Base):
+    """Study material model."""
+    __tablename__ = "materials"
+
+    id = Column(String, primary_key=True, nullable=False)
+    project_id = Column(String, nullable=False)
+    created_by = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    content_text = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())

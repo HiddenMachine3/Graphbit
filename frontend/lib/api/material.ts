@@ -2,16 +2,36 @@ import { apiFetch } from "./client";
 import type {
   ContentSessionDTO,
   InterjectionDecisionDTO,
+  MaterialDTO,
   QuestionDTO,
   RevisionFeedbackDTO,
 } from "../types";
 
-export async function listMaterials(): Promise<
-  Array<{ id: string; title: string; chunk_count: number }>
-> {
-  return apiFetch<Array<{ id: string; title: string; chunk_count: number }>>(
-    "/materials"
+export async function listMaterials(projectId: string): Promise<MaterialDTO[]> {
+  return apiFetch<MaterialDTO[]>(
+    `/materials?project_id=${encodeURIComponent(projectId)}`
   );
+}
+
+export async function createMaterial(
+  projectId: string,
+  title: string,
+  contentText: string,
+  createdBy?: string
+): Promise<MaterialDTO> {
+  return apiFetch<MaterialDTO>("/materials", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      title,
+      content_text: contentText,
+      created_by: createdBy,
+    }),
+  });
+}
+
+export async function deleteMaterial(materialId: string): Promise<void> {
+  await apiFetch<void>(`/materials/${materialId}`, { method: "DELETE" });
 }
 
 export async function startContentSession(

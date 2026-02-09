@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models import Project as ProjectModel
+from app.models import Project as ProjectModel, AppUser as AppUserModel
 
 router = APIRouter()
 
@@ -17,10 +17,16 @@ def _serialize_project(project: ProjectModel) -> dict:
         "name": project.name,
         "description": project.description,
         "owner_id": project.owner_id,
+        "created_by": project.created_by,
         "visibility": project.visibility,
         "created_at": project.created_at.isoformat() if project.created_at else None,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
     }
+
+
+async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
+    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
+    return result.scalar_one_or_none()
 
 
 @router.get("/projects")
@@ -50,11 +56,21 @@ async def create_project(data: dict, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Project already exists")
 
     now = datetime.now()
+    owner_id = data.get("owner_id")
+    if not owner_id:
+        default_user = await _get_default_user(db)
+        if not default_user:
+            raise HTTPException(status_code=400, detail="No default user found")
+        owner_id = default_user.id
+    default_user = await _get_default_user(db)
+    created_by = data.get("created_by") or (default_user.username if default_user else owner_id)
+
     project = ProjectModel(
         id=project_id,
         name=data.get("name", "Untitled Project"),
         description=data.get("description", ""),
-        owner_id=data.get("owner_id", "user1"),
+        owner_id=owner_id,
+        created_by=created_by,
         visibility=data.get("visibility", "private"),
         created_at=now,
         updated_at=now,

@@ -13,7 +13,12 @@ from app.domain.material import Material, MaterialRegistry, MaterialType
 from app.services.topic_extraction import extract_topics_from_text
 from app.services.video_transcripts import fetch_youtube_transcript
 from app.db.session import get_db
-from app.models import Node as NodeModel, Edge as EdgeModel, Question as QuestionModel
+from app.models import (
+    Node as NodeModel,
+    Edge as EdgeModel,
+    Question as QuestionModel,
+    AppUser as AppUserModel,
+)
 
 router = APIRouter()
 
@@ -112,6 +117,7 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
             {
                 "id": node.id,
                 "project_id": node.project_id,
+                "created_by": node.created_by,
                 "topic_name": node.topic_name,
                 "proven_knowledge_rating": node.proven_knowledge_rating,
                 "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,
@@ -137,6 +143,11 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
             for edge in edges
         ],
     }
+
+
+async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
+    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
+    return result.scalar_one_or_none()
 
 
 def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) -> Material:
@@ -295,9 +306,12 @@ async def list_questions(
 async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get_db)):
     """Create a new knowledge node."""
     node_id = f"node_{int(datetime.now().timestamp() * 1000)}"
+    default_user = await _get_default_user(db)
+    created_by = default_user.username if default_user else ""
     node = NodeModel(
         id=node_id,
         project_id=request.project_id,
+        created_by=created_by,
         topic_name=request.topic_name,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -313,6 +327,7 @@ async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get
     return {
         "id": node.id,
         "project_id": node.project_id,
+        "created_by": node.created_by,
         "topic_name": node.topic_name,
         "proven_knowledge_rating": node.proven_knowledge_rating,
         "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,
@@ -368,6 +383,7 @@ async def update_node(
     return {
         "id": node.id,
         "project_id": node.project_id,
+        "created_by": node.created_by,
         "topic_name": node.topic_name,
         "proven_knowledge_rating": node.proven_knowledge_rating,
         "user_estimated_knowledge_rating": node.user_estimated_knowledge_rating,

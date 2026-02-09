@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import sys
+from pathlib import Path
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import select, text, update
@@ -23,7 +24,16 @@ from app.domain import (
     User, Community, Project, ProjectVisibility,
     QuestionBank, UserNodeState
 )
-from app.models import Base, Question as QuestionModel, Project as ProjectModel, Node as NodeModel, Edge as EdgeModel
+from app.models import (
+    Base,
+    Question as QuestionModel,
+    Project as ProjectModel,
+    Node as NodeModel,
+    Edge as EdgeModel,
+    AppUser as AppUserModel,
+    Community as CommunityModel,
+    Material as MaterialModel,
+)
 
 
 async def seed_database(reset_db: bool = False):
@@ -71,12 +81,26 @@ async def seed_database(reset_db: bool = False):
     # 1. Create user
     print("👤 Creating user...")
     user = User(
-        id="user1",
-        name="Alice Johnson",
-        email="alice@example.com",
+        id="admin",
+        name="admin",
+        email="admin@example.com",
         joined_community_ids=set()
     )
-    print(f"  ✓ {user.name} ({user.email})")
+    print(f"  ✓ {user.name} ({user.id})")
+
+    async with async_session() as session:
+        existing_admin_result = await session.execute(
+            select(AppUserModel).where(AppUserModel.username == "admin")
+        )
+        if not existing_admin_result.scalar_one_or_none():
+            admin_user = AppUserModel(
+                id="admin",
+                username="admin",
+                name="admin",
+                password_hash="admin",
+            )
+            session.add(admin_user)
+            await session.commit()
     
     # 2. Create projects
     print("\n📁 Creating projects...")
@@ -270,8 +294,44 @@ async def seed_database(reset_db: bool = False):
         },
     }
     
+    community_node_overrides = {
+        project_id: data["community_overrides"]
+        for project_id, data in project_data.items()
+        if data["community_overrides"]
+    }
+
+    seed_materials_dir = Path(__file__).parent / "seed_materials"
+    seed_materials_dir.mkdir(exist_ok=True)
+    seed_materials = {
+        "python_project": "Python focuses on readable syntax, variables, functions, and objects. Practice writing small scripts and refactoring them.",
+        "dsa_project": "Data structures organize data; algorithms transform it. Focus on arrays, stacks, trees, and sorting basics.",
+        "biology_project": "Cells, DNA, evolution, and ecosystems describe life at different scales. Review core definitions and relationships.",
+        "stoicism_project": "Stoicism emphasizes virtue, the dichotomy of control, and practicing calm judgment daily.",
+    }
+
     print("\n📚 Seeding project data...")
     async with async_session() as session:
+        existing_community_result = await session.execute(
+            select(CommunityModel).where(CommunityModel.id == community.id)
+        )
+        db_community = existing_community_result.scalar_one_or_none()
+        if not db_community:
+            db_community = CommunityModel(
+                id=community.id,
+                name=community.name,
+                description=community.description,
+                created_by=user.id,
+                project_ids=sorted(list(community.project_ids)),
+                member_ids=[user.id],
+                node_importance_overrides=community_node_overrides,
+                question_importance_overrides={},
+            )
+            session.add(db_community)
+        else:
+            db_community.project_ids = sorted(list(community.project_ids))
+            db_community.member_ids = list({*(db_community.member_ids or []), user.id})
+            db_community.node_importance_overrides = community_node_overrides
+
         existing_project_ids_result = await session.execute(select(ProjectModel.id))
         existing_project_ids = {row[0] for row in existing_project_ids_result.fetchall()}
         for project in projects:
@@ -282,6 +342,7 @@ async def seed_database(reset_db: bool = False):
                     name=project.name,
                     description=project.description,
                     owner_id=project.owner_id,
+                    created_by=user.id,
                     visibility=project.visibility.value,
                     created_at=project.created_at,
                     updated_at=project.updated_at,
@@ -331,6 +392,7 @@ async def seed_database(reset_db: bool = False):
                     db_node = NodeModel(
                         id=node_id,
                         project_id=project.id,
+                        created_by=user.id,
                         topic_name=topic_name,
                         proven_knowledge_rating=proven,
                         user_estimated_knowledge_rating=estimated,
@@ -382,6 +444,7 @@ async def seed_database(reset_db: bool = False):
                 db_question = QuestionModel(
                     id=qid,
                     project_id=project.id,
+                    created_by=user.id,
                     text=question_text,
                     answer=answer,
                     options=None,
@@ -392,7 +455,7 @@ async def seed_database(reset_db: bool = False):
                     difficulty=difficulty,
                     tags=["fundamentals", project.id],
                     question_metadata={
-                        "created_by": "system",
+                        "created_by": user.id,
                         "created_at": (now - timedelta(days=difficulty)).isoformat(),
                         "importance": difficulty * 0.2,
                         "hits": 0,
@@ -410,6 +473,24 @@ async def seed_database(reset_db: bool = False):
                 for node_id, importance in data["community_overrides"].items():
                     community.set_node_importance(project.id, node_id, importance)
                 print(f"    ✓ Set {len(data['community_overrides'])} community overrides")
+
+            material_text = seed_materials.get(project.id, "")
+            if material_text:
+                material_file = seed_materials_dir / f"{project.id}.txt"
+                material_file.write_text(material_text, encoding="utf-8")
+                material_id = f"{project.id}-material"
+                existing_material_result = await session.execute(
+                    select(MaterialModel.id).where(MaterialModel.id == material_id)
+                )
+                if not existing_material_result.scalar_one_or_none():
+                    db_material = MaterialModel(
+                        id=material_id,
+                        project_id=project.id,
+                        created_by=user.id,
+                        title=f"{project.name} Notes",
+                        content_text=material_text,
+                    )
+                    session.add(db_material)
         
         await session.commit()
     
@@ -428,19 +509,6 @@ async def seed_database(reset_db: bool = False):
     print(f"Frontend is ready at: http://localhost:3000")
 
 
-if __name__ == "__main__":
-    if sys.platform.startswith("win"):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    parser = argparse.ArgumentParser(description="Seed the database with example data.")
-    parser.add_argument(
-        "--reset",
-        action="store_true",
-        help="Drop and recreate all tables before seeding.",
-    )
-    args = parser.parse_args()
-
-    asyncio.run(seed_database(reset_db=args.reset))
 
 
 if __name__ == "__main__":
