@@ -10,11 +10,19 @@ interface ActivityData {
 interface ActivityHeatmapProps {
   data?: ActivityData[];
   className?: string;
+  accuracy?: number | null;
+  nodesCount?: number | null;
+  edgesCount?: number | null;
+  streak?: number | null;
 }
 
 export default function ActivityHeatmap({
   data = [],
   className = "",
+  accuracy = null,
+  nodesCount = null,
+  edgesCount = null,
+  streak = null,
 }: ActivityHeatmapProps) {
   const heatmapData = useMemo(() => {
     const today = new Date();
@@ -27,9 +35,7 @@ export default function ActivityHeatmap({
     while (currentDate <= today) {
       const dateStr = currentDate.toISOString().split("T")[0];
       const dayData = data.find((d) => d.date === dateStr);
-      const count =
-        dayData?.count ??
-        (Math.random() > 0.7 ? Math.floor(Math.random() * 4) : 0);
+      const count = dayData?.count ?? 0;
 
       days.push({
         date: dateStr,
@@ -59,16 +65,19 @@ export default function ActivityHeatmap({
   const daysOfWeek = ["Mon", "Wed", "Fri"];
 
   const currentStreak = useMemo(() => {
-    let streak = 0;
+    if (streak !== null && streak !== undefined) {
+      return streak;
+    }
+    let computed = 0;
     for (let i = heatmapData.length - 1; i >= 0; i--) {
       if (heatmapData[i].count > 0) {
-        streak++;
+        computed++;
       } else {
         break;
       }
     }
-    return streak;
-  }, [heatmapData]);
+    return computed;
+  }, [heatmapData, streak]);
 
   return (
     <div className={`rounded-lg border border-slate-700 bg-slate-900 p-4 ${className}`}>
@@ -145,7 +154,9 @@ export default function ActivityHeatmap({
         </div>
         <div className="text-right">
           <div className="text-slate-400">Accuracy</div>
-          <div className="text-2xl font-bold text-green-400">94%</div>
+          <div className="text-2xl font-bold text-green-400">
+            {accuracy === null || accuracy === undefined ? "—" : `${Math.round(accuracy * 100)}%`}
+          </div>
         </div>
       </div>
 
@@ -155,8 +166,15 @@ export default function ActivityHeatmap({
           <span className="font-medium text-blue-200">LIVE SYNC</span>
         </div>
         <div className="mt-1 text-xs text-blue-300">
-          Visualizing <span className="font-medium">1,240</span> nodes and{" "}
-          <span className="font-medium">3,502</span> connections.
+          Visualizing{" "}
+          <span className="font-medium">
+            {nodesCount === null || nodesCount === undefined ? "—" : nodesCount}
+          </span>{" "}
+          nodes and{" "}
+          <span className="font-medium">
+            {edgesCount === null || edgesCount === undefined ? "—" : edgesCount}
+          </span>{" "}
+          connections.
         </div>
       </div>
     </div>

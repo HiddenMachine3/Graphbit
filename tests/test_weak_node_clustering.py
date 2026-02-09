@@ -30,6 +30,7 @@ def create_node(node_id: str, topic_name: str = None) -> Node:
     """Helper to create Node."""
     return Node(
         id=node_id,
+        project_id="test_project_1",
         topic_name=topic_name or node_id.capitalize()
     )
 
@@ -39,6 +40,7 @@ def create_edge(from_id: str, to_id: str, edge_type=EdgeType.PREREQUISITE) -> Ed
     return Edge(
         from_node_id=from_id,
         to_node_id=to_id,
+        project_id="test_project_1",
         type=edge_type,
         weight=1.0
     )
@@ -54,6 +56,7 @@ def create_user_state(
     return UserNodeState(
         user_id="user1",
         node_id=node_id,
+        project_id="test_project_1",
         proven_knowledge_rating=pkr,
         stability=stability,
         last_reviewed_at=last_reviewed or datetime.now()
@@ -265,7 +268,7 @@ class TestWeakNodeClusterer:
     
     def test_create_clusterer(self):
         """Should create clusterer with graph and constraints."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         
         clusterer = WeakNodeClusterer(
             graph=graph,
@@ -279,7 +282,7 @@ class TestWeakNodeClusterer:
     
     def test_generate_cluster_from_two_connected_nodes(self):
         """Should create cluster from two connected weak nodes."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("python"))
         graph.add_node(create_node("variables"))
         graph.add_edge(create_edge("python", "variables"))
@@ -295,7 +298,7 @@ class TestWeakNodeClusterer:
     
     def test_no_clusters_from_single_weak_node(self):
         """Should not create cluster from single weak node."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("python"))
         
         clusterer = WeakNodeClusterer(graph, max_hops=2)
@@ -307,7 +310,7 @@ class TestWeakNodeClusterer:
     
     def test_no_clusters_from_disconnected_nodes(self):
         """Should not create clusters from disconnected weak nodes."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("python"))
         graph.add_node(create_node("java"))
         # No edge between them
@@ -321,7 +324,7 @@ class TestWeakNodeClusterer:
     
     def test_cluster_respects_max_hops(self):
         """Should only include nodes within max_hops."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_node(create_node("c"))
@@ -343,7 +346,7 @@ class TestWeakNodeClusterer:
     
     def test_cluster_respects_edge_types(self):
         """Should only traverse allowed edge types."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_node(create_node("c"))
@@ -374,7 +377,7 @@ class TestWeakNodeClusterer:
     
     def test_deduplicates_identical_clusters(self):
         """Should not create duplicate clusters with same nodes."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -391,7 +394,7 @@ class TestWeakNodeClusterer:
     
     def test_enforces_max_cluster_size(self):
         """Should limit cluster size to MAX_CLUSTER_SIZE."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         # Create chain: a -> b -> c -> d
         for node_id in ["a", "b", "c", "d"]:
             graph.add_node(create_node(node_id))
@@ -411,7 +414,7 @@ class TestWeakNodeClusterer:
     
     def test_empty_weak_nodes_returns_empty_clusters(self):
         """Should return empty list when no weak nodes provided."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         
         clusterer = WeakNodeClusterer(graph, max_hops=2)
@@ -422,7 +425,7 @@ class TestWeakNodeClusterer:
     
     def test_deterministic_cluster_generation(self):
         """Should generate same clusters given same input."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_node(create_node("c"))
@@ -454,7 +457,7 @@ class TestWeakNodeClusteringIntegration:
     def test_full_pipeline_simple_graph(self):
         """Should detect weak nodes and cluster them."""
         # Build graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("python"))
         graph.add_node(create_node("variables"))
         graph.add_node(create_node("functions"))
@@ -499,7 +502,7 @@ class TestWeakNodeClusteringIntegration:
     
     def test_mixed_weak_and_strong_nodes(self):
         """Should only cluster weak nodes, not strong ones."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("weak1"))
         graph.add_node(create_node("strong"))
         graph.add_node(create_node("weak2"))
@@ -534,7 +537,7 @@ class TestWeakNodeClusteringIntegration:
     
     def test_large_graph_multiple_clusters(self):
         """Should create multiple distinct clusters from larger graph."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         
         # Cluster 1: python basics
         graph.add_node(create_node("python"))
@@ -586,7 +589,7 @@ class TestEdgeCases:
     
     def test_cluster_with_nonexistent_node_rejected(self):
         """Should handle nonexistent nodes gracefully."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("exists"))
         
         clusterer = WeakNodeClusterer(graph, max_hops=2)
@@ -600,7 +603,7 @@ class TestEdgeCases:
     
     def test_self_loop_does_not_create_cluster(self):
         """Should not create cluster from node with self-loop."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         
         # Self loop (if allowed by Edge validation)

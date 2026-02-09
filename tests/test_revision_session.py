@@ -35,7 +35,7 @@ from backend.app.domain import (
 
 def create_node(node_id: str, importance: float = 1.0) -> Node:
     """Helper to create Node."""
-    return Node(id=node_id, topic_name=node_id.capitalize(), importance=importance)
+    return Node(id=node_id, project_id="test_project_1", topic_name=node_id.capitalize(), importance=importance)
 
 
 def create_edge(from_id: str, to_id: str) -> Edge:
@@ -43,6 +43,7 @@ def create_edge(from_id: str, to_id: str) -> Edge:
     return Edge(
         from_node_id=from_id,
         to_node_id=to_id,
+        project_id="test_project_1",
         type=EdgeType.PREREQUISITE,
         weight=1.0
     )
@@ -58,6 +59,7 @@ def create_user_state(
     return UserNodeState(
         user_id="user1",
         node_id=node_id,
+        project_id="test_project_1",
         proven_knowledge_rating=pkr,
         stability=stability,
         last_reviewed_at=last_reviewed or datetime.now()
@@ -80,6 +82,7 @@ def create_question(
     
     return Question(
         id=question_id,
+        project_id="test_project_1",
         text=f"Question {question_id}",
         answer="Answer",
         question_type=question_type,
@@ -154,7 +157,7 @@ class TestRevisionSessionInit:
     
     def test_create_session(self):
         """Should create session with all required inputs."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         
         bank = QuestionBank()
@@ -169,6 +172,7 @@ class TestRevisionSessionInit:
         
         session = RevisionSession(
             user_id="user1",
+            project_id="test_project_1",
             graph=graph,
             question_bank=bank,
             user_node_states=user_states,
@@ -191,7 +195,7 @@ class TestRevisionSessionLoop:
     def test_run_step_returns_question(self):
         """Should return a question when weak nodes exist."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("weak"))
         graph.add_node(create_node("weak2"))
         graph.add_edge(create_edge("weak", "weak2"))
@@ -211,7 +215,7 @@ class TestRevisionSessionLoop:
         
         # Create session
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Run step
         question = session.run_step(now)
@@ -223,7 +227,7 @@ class TestRevisionSessionLoop:
     def test_run_step_doesnt_repeat_questions(self):
         """Should not return the same question twice."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -244,7 +248,7 @@ class TestRevisionSessionLoop:
         }
         
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Get first question
         q_first = session.run_step(now)
@@ -262,7 +266,7 @@ class TestRevisionSessionLoop:
     def test_run_step_respects_max_questions(self):
         """Should return None when max_questions reached."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -278,7 +282,7 @@ class TestRevisionSessionLoop:
         }
 
         config = SessionConfig(max_questions=1)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
 
         # First step should work
         q1 = session.run_step(now)
@@ -294,7 +298,7 @@ class TestRevisionSessionLoop:
     def test_run_step_returns_none_when_no_weak_nodes(self):
         """Should return None when all nodes are strong."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("strong"))
         
         bank = QuestionBank()
@@ -307,7 +311,7 @@ class TestRevisionSessionLoop:
         }
         
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Should return None (no weak nodes)
         question = session.run_step(now)
@@ -316,7 +320,7 @@ class TestRevisionSessionLoop:
     def test_run_step_returns_none_when_no_questions_available(self):
         """Should return None when no questions cover weak clusters."""
         # Setup graph with weak nodes
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("weak"))
         
         # Empty question bank
@@ -328,7 +332,7 @@ class TestRevisionSessionLoop:
         }
         
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Should return None (no questions)
         question = session.run_step(now)
@@ -346,7 +350,7 @@ class TestFeedbackHandling:
     def test_submit_correct_answer(self):
         """Should update states when submitting correct answer."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -363,7 +367,7 @@ class TestFeedbackHandling:
         }
         
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Ask question
         question = session.run_step(now)
@@ -386,7 +390,7 @@ class TestFeedbackHandling:
     def test_submit_incorrect_answer(self):
         """Should update states when submitting incorrect answer."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -402,7 +406,7 @@ class TestFeedbackHandling:
         }
         
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Ask question
         question = session.run_step(now)
@@ -423,7 +427,7 @@ class TestFeedbackHandling:
     def test_submit_creates_new_user_state_if_missing(self):
         """Should create UserNodeState if doesn't exist."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_node(create_node("c"))
@@ -444,7 +448,7 @@ class TestFeedbackHandling:
         }
         
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Ask question and answer - this tests that state updates work
         question = session.run_step(now)
@@ -465,7 +469,7 @@ class TestFeedbackHandling:
     def test_submit_answer_raises_error_for_unasked_question(self):
         """Should raise error if question wasn't asked."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         
         bank = QuestionBank()
@@ -474,7 +478,7 @@ class TestFeedbackHandling:
         
         user_states = {}
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Try to submit without asking
         with pytest.raises(ValueError, match="was not asked"):
@@ -492,7 +496,7 @@ class TestSessionFilters:
     def test_question_type_filter(self):
         """Should only return questions matching type filter."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -516,7 +520,7 @@ class TestSessionFilters:
             max_questions=5,
             allowed_question_types={QuestionType.FLASHCARD}
         )
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Should only get flashcard
         question = session.run_step(now)
@@ -526,7 +530,7 @@ class TestSessionFilters:
     def test_node_id_filter(self):
         """Should only return questions covering allowed nodes."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("allowed"))
         graph.add_node(create_node("forbidden"))
         graph.add_node(create_node("helper"))
@@ -554,7 +558,7 @@ class TestSessionFilters:
             max_questions=5,
             allowed_node_ids={"allowed"}
         )
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Should only get allowed question
         question = session.run_step(now)
@@ -565,7 +569,7 @@ class TestSessionFilters:
     def test_combined_filters(self):
         """Should apply both type and node filters."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -591,7 +595,7 @@ class TestSessionFilters:
             allowed_question_types={QuestionType.FLASHCARD},
             allowed_node_ids={"a"}
         )
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Should only get q1
         question = session.run_step(now)
@@ -610,7 +614,7 @@ class TestRevisionSessionIntegration:
     def test_complete_session_workflow(self):
         """Should run complete session from start to finish."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         for node_id in ["python", "variables", "functions", "loops"]:
             graph.add_node(create_node(node_id))
         
@@ -639,7 +643,7 @@ class TestRevisionSessionIntegration:
         
         # Create session
         config = SessionConfig(max_questions=3)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Run full session
         questions_asked = []
@@ -668,7 +672,7 @@ class TestRevisionSessionIntegration:
     def test_session_adapts_to_feedback(self):
         """Should adapt question selection based on feedback."""
         # Setup simple graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("weak"))
         graph.add_node(create_node("improving"))
         graph.add_edge(create_edge("weak", "improving"))
@@ -688,7 +692,7 @@ class TestRevisionSessionIntegration:
         }
         
         config = SessionConfig(max_questions=10)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Get first few questions
         questions = []
@@ -726,7 +730,7 @@ class TestEdgeCases:
     
     def test_session_with_single_question(self):
         """Should handle session with only one available question."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -742,7 +746,7 @@ class TestEdgeCases:
         }
 
         config = SessionConfig(max_questions=5)
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # First step works
         q = session.run_step(now)
@@ -755,7 +759,7 @@ class TestEdgeCases:
     
     def test_filter_excludes_all_questions(self):
         """Should return None when filters exclude all questions."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         
         bank = QuestionBank()
@@ -772,7 +776,7 @@ class TestEdgeCases:
             max_questions=5,
             allowed_question_types={QuestionType.MCQ}  # But only FLASHCARD exists
         )
-        session = RevisionSession("user1", graph, bank, user_states, config)
+        session = RevisionSession("user1", "test_project_1", graph, bank, user_states, config)
         
         # Should return None (no matching questions)
         q = session.run_step(now)

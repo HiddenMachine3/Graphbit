@@ -33,6 +33,7 @@ from .question_bank import QuestionBank
 # User models
 from .user import User
 from .community import Community
+from .project import Project, ProjectVisibility
 
 # Knowledge tracking
 from .user_knowledge import (
@@ -114,6 +115,8 @@ __all__ = [
     # User models
     "User",
     "Community",
+    "Project",
+    "ProjectVisibility",
     # Knowledge tracking
     "UserNodeState",
     "SUCCESS_PKR_GAIN",

@@ -15,8 +15,6 @@ import ErrorState from "../ErrorState";
 import ConsumeProgressBar from "./ConsumeProgressBar";
 import InterjectionModal from "./InterjectionModal";
 
-const DEFAULT_REASON = "This question was asked to reinforce recent concepts.";
-
 type MaterialViewerProps = {
   materialId: string;
   userId: string;
@@ -30,7 +28,7 @@ export default function MaterialViewer({ materialId, userId, content }: Material
   const [session, setSession] = useState<ContentSessionDTO | null>(null);
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
   const [interjectionQuestion, setInterjectionQuestion] = useState<QuestionDTO | null>(null);
-  const [interjectionReason, setInterjectionReason] = useState(DEFAULT_REASON);
+  const [interjectionReason, setInterjectionReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,7 +76,7 @@ export default function MaterialViewer({ materialId, userId, content }: Material
 
       const decision = await shouldInterject(session.session_id);
       if (decision.should_interject) {
-        setInterjectionReason(decision.reason || DEFAULT_REASON);
+        setInterjectionReason(decision.reason || "");
         const question = await getInterjectionQuestion(session.session_id);
         if (question) {
           setInterjectionQuestion(question);

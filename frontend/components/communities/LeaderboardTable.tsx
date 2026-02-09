@@ -2,7 +2,7 @@ import type { LeaderboardEntryDTO } from "../../lib/types";
 
 type LeaderboardTableProps = {
   entries: LeaderboardEntryDTO[];
-  currentUserId: string;
+  currentUserId?: string | null;
 };
 
 export default function LeaderboardTable({
@@ -25,7 +25,7 @@ export default function LeaderboardTable({
             <tr
               key={entry.user_id}
               className={
-                entry.user_id === currentUserId
+                currentUserId && entry.user_id === currentUserId
                   ? "bg-slate-50 font-semibold"
                   : ""
               }

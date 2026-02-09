@@ -6,6 +6,14 @@ import type {
   RevisionFeedbackDTO,
 } from "../types";
 
+export async function listMaterials(): Promise<
+  Array<{ id: string; title: string; chunk_count: number }>
+> {
+  return apiFetch<Array<{ id: string; title: string; chunk_count: number }>>(
+    "/materials"
+  );
+}
+
 export async function startContentSession(
   materialId: string,
   userId: string

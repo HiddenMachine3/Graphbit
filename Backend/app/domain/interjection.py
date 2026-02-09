@@ -26,6 +26,7 @@ class ContentSession(BaseModel):
     """
 
     session_id: str = Field(..., min_length=1)
+    project_id: str = Field(..., min_length=1)
     material_id: str = Field(..., min_length=1)
     user_id: str = Field(..., min_length=1)
     started_at: datetime

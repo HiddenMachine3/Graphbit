@@ -24,6 +24,7 @@ class Material(BaseModel):
     """
     
     id: str = Field(..., min_length=1)
+    project_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
     material_type: MaterialType
     source: str = Field(..., min_length=1)  # URL or file path

@@ -76,6 +76,7 @@ class RevisionSession:
     def __init__(
         self,
         user_id: str,
+        project_id: str,
         graph: Graph,
         question_bank: QuestionBank,
         user_node_states: dict[str, UserNodeState],
@@ -86,12 +87,14 @@ class RevisionSession:
         
         Args:
             user_id: User ID
+            project_id: Project ID
             graph: Knowledge graph
             question_bank: Question bank
             user_node_states: Current user knowledge states (mutable, will be updated)
             session_config: Session configuration
         """
         self.user_id = user_id
+        self.project_id = project_id
         self.graph = graph
         self.question_bank = question_bank
         self.user_node_states = user_node_states
@@ -241,6 +244,7 @@ class RevisionSession:
                 self.user_node_states[node_id] = UserNodeState(
                     user_id=self.user_id,
                     node_id=node_id,
+                    project_id=self.project_id,
                     proven_knowledge_rating=0.5 if correct else 0.3,
                     stability=5.0,
                     last_reviewed_at=timestamp,

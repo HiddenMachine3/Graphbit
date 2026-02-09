@@ -1,6 +1,9 @@
 """
 Seed script to populate the database with example data.
 
+Creates projects as primary owners of knowledge graphs,
+with communities applying overrides on top.
+
 Run with: python seed_data.py
 """
 
@@ -17,8 +20,8 @@ from app.core.config import settings
 from app.domain import (
     Node, Edge, EdgeType, Graph,
     Question, QuestionMetadata, QuestionType, KnowledgeType,
-    User, Community,
-    QuestionBank
+    User, Community, Project, ProjectVisibility,
+    QuestionBank, UserNodeState
 )
 from app.models import Base, Question as QuestionModel
 
@@ -63,313 +66,259 @@ async def seed_database(reset_db: bool = False):
     
     print("🌱 Seeding database with example data...\n")
     
-    # 1. Create example knowledge graph
-    print("📚 Creating knowledge graph nodes...")
-    graph = Graph()
-    
-    nodes_data = [
-        ("python_basics", "Python Basics", 0.7, 0.75, 1.0),
-        ("variables", "Variables & Data Types", 0.65, 0.7, 0.9),
-        ("functions", "Functions & Scope", 0.5, 0.55, 0.8),
-        ("oop", "Object-Oriented Programming", 0.4, 0.45, 0.85),
-        ("classes", "Classes & Objects", 0.35, 0.4, 0.8),
-        ("inheritance", "Inheritance & Polymorphism", 0.2, 0.25, 0.75),
-        ("decorators", "Decorators & Metaprogramming", 0.15, 0.2, 0.7),
-        ("async", "Async & Concurrency", 0.1, 0.15, 0.65),
-    ]
-    
-    for node_id, topic_name, proven, estimated, importance in nodes_data:
-        node = Node(
-            id=node_id,
-            topic_name=topic_name,
-            proven_knowledge_rating=proven,
-            user_estimated_knowledge_rating=estimated,
-            importance=importance,
-            relevance=0.8,
-            view_frequency=max(1, int(proven * 10))
-        )
-        graph.add_node(node)
-        print(f"  ✓ {topic_name}")
-    
-    # 2. Create edges (prerequisites)
-    print("\n🔗 Creating prerequisite relationships...")
-    edges = [
-        ("python_basics", "variables", EdgeType.PREREQUISITE, 1.0),
-        ("variables", "functions", EdgeType.PREREQUISITE, 1.0),
-        ("functions", "oop", EdgeType.PREREQUISITE, 1.0),
-        ("oop", "classes", EdgeType.PREREQUISITE, 1.0),
-        ("classes", "inheritance", EdgeType.PREREQUISITE, 1.0),
-        ("classes", "decorators", EdgeType.APPLIED_WITH, 0.7),
-        ("functions", "async", EdgeType.APPLIED_WITH, 0.8),
-        ("python_basics", "functions", EdgeType.APPLIED_WITH, 0.6),
-        ("oop", "inheritance", EdgeType.PREREQUISITE, 0.9),
-        ("inheritance", "decorators", EdgeType.APPLIED_WITH, 0.7),
-        ("variables", "oop", EdgeType.DEPENDS_ON, 0.5),
-        ("functions", "classes", EdgeType.DEPENDS_ON, 0.8),
-    ]
-    
-    for from_id, to_id, edge_type, weight in edges:
-        edge = Edge(
-            from_node_id=from_id,
-            to_node_id=to_id,
-            type=edge_type,
-            weight=weight
-        )
-        graph.add_edge(edge)
-        print(f"  ✓ {from_id} → {to_id} ({edge_type.value})")
-    
-    # 3. Create questions in database
-    print("\n❓ Creating questions...")
-    questions_data = [
-        (
-            "q1",
-            "What is a variable in Python?",
-            "A variable is a named container that stores a value",
-            "variables",
-            QuestionType.OPEN,
-            1,
-            None,
-            None,
-        ),
-        (
-            "q2",
-            "What are the basic data types in Python?",
-            "int, float, str, bool, list, dict, tuple, set",
-            "variables",
-            QuestionType.MCQ,
-            2,
-            [
-                "int, float, str, bool, list, dict, tuple, set",
-                "int, float, string, boolean, array, object",
-                "integer, decimal, text, logical, collection, map",
-                "number, decimal, character, logic, array, hash",
-            ],
-            {
-                "int, float, str, bool, list, dict, tuple, set": "These are the standard core Python data types.",
-                "int, float, string, boolean, array, object": "Python uses str, bool, list, and dict instead of these terms.",
-                "integer, decimal, text, logical, collection, map": "These describe concepts but are not Python type names.",
-                "number, decimal, character, logic, array, hash": "Python does not define these as built-in type names.",
-            },
-        ),
-        (
-            "q3",
-            "What is the purpose of a function?",
-            "Functions encapsulate reusable code blocks",
-            "functions",
-            QuestionType.OPEN,
-            2,
-            None,
-            None,
-        ),
-        (
-            "q4",
-            "How do you define a function in Python?",
-            "Using the def keyword",
-            "functions",
-            QuestionType.MCQ,
-            1,
-            [
-                "Using the def keyword",
-                "Using the function keyword",
-                "Using the fn keyword",
-                "Using the func keyword",
-            ],
-            {
-                "Using the def keyword": "Python functions are defined with the def keyword.",
-                "Using the function keyword": "Python does not use a function keyword.",
-                "Using the fn keyword": "fn is not a Python keyword.",
-                "Using the func keyword": "func is not a Python keyword.",
-            },
-        ),
-            (
-                "q5",
-                "What is a class in Python?",
-                "A blueprint for creating objects",
-                "classes",
-                QuestionType.OPEN,
-                3,
-                None,
-                None,
-            ),
-            (
-                "q6",
-                "What is inheritance in OOP?",
-                "A mechanism to inherit properties and methods from parent classes",
-                "inheritance",
-                QuestionType.OPEN,
-                3,
-                None,
-                None,
-            ),
-            (
-                "q7",
-                "What is polymorphism?",
-                "The ability to have multiple forms or behaviors",
-                "inheritance",
-                QuestionType.MCQ,
-                4,
-                [
-                    "The ability to have multiple forms or behaviors",
-                    "The process of inheritance",
-                    "The ability to hide implementation details",
-                    "The reuse of code through inheritance",
-                ],
-                {
-                    "The ability to have multiple forms or behaviors": "Polymorphism means the same interface can have different implementations.",
-                    "The process of inheritance": "Inheritance is related but is not polymorphism itself.",
-                    "The ability to hide implementation details": "That describes encapsulation, not polymorphism.",
-                    "The reuse of code through inheritance": "That's a benefit of inheritance, not polymorphism.",
-                },
-            ),
-            (
-                "q8",
-                "What are decorators used for?",
-                "Decorators modify the behavior of functions or classes",
-                "decorators",
-                QuestionType.OPEN,
-                4,
-                None,
-                None,
-            ),
-            (
-                "q9",
-                "What is async programming?",
-                "Asynchronous programming allows concurrent execution",
-                "async",
-                QuestionType.OPEN,
-                5,
-                None,
-                None,
-            ),
-            (
-                "q10",
-                "What is OOP?",
-                "Object-Oriented Programming is a paradigm based on objects and classes",
-                "oop",
-                QuestionType.OPEN,
-                2,
-                None,
-                None,
-            ),
-        ]
-    
     now = datetime.now()
+    
+    # 1. Create user
+    print("👤 Creating user...")
+    user = User(
+        id="user1",
+        name="Alice Johnson",
+        email="alice@example.com",
+        joined_community_ids=set()
+    )
+    print(f"  ✓ {user.name} ({user.email})")
+    
+    # 2. Create projects
+    print("\n📁 Creating projects...")
+    projects = [
+        Project(
+            id="python_project",
+            name="Python Programming",
+            description="Learn Python from basics to advanced concepts",
+            owner_id=user.id,
+            visibility=ProjectVisibility.PUBLIC,
+            created_at=now - timedelta(days=30),
+            updated_at=now - timedelta(days=1),
+        ),
+        Project(
+            id="dsa_project",
+            name="Data Structures & Algorithms",
+            description="Master DSA concepts and problem solving",
+            owner_id=user.id,
+            visibility=ProjectVisibility.PUBLIC,
+            created_at=now - timedelta(days=25),
+            updated_at=now - timedelta(days=2),
+        ),
+        Project(
+            id="biology_project",
+            name="Biology Fundamentals",
+            description="Explore biology concepts from cells to ecosystems",
+            owner_id=user.id,
+            visibility=ProjectVisibility.SHARED,
+            created_at=now - timedelta(days=20),
+            updated_at=now - timedelta(days=3),
+        ),
+    ]
+    
+    for project in projects:
+        print(f"  ✓ {project.name}")
+    
+    # 3. Create community and attach all projects
+    print("\n👥 Creating community...")
+    community = Community(
+        id="learning_hub",
+        name="Learning Hub",
+        description="A community for collaborative learning across all projects",
+        project_ids={p.id for p in projects},
+        node_importance_overrides={},
+        question_importance_overrides={}
+    )
+    user.join_community(community.id)
+    print(f"  ✓ {community.name}")
+    print(f"  ✓ Attached {len(projects)} projects to community")
+    
+    # 4. Seed data for each project
+    project_data = {
+        "python_project": {
+            "nodes": [
+                ("py_basics", "Python Basics", 0.7, 0.75, 1.0),
+                ("py_variables", "Variables & Data Types", 0.65, 0.7, 0.9),
+                ("py_functions", "Functions & Scope", 0.5, 0.55, 0.8),
+                ("py_oop", "Object-Oriented Programming", 0.4, 0.45, 0.85),
+                ("py_classes", "Classes & Objects", 0.35, 0.4, 0.8),
+            ],
+            "edges": [
+                ("py_basics", "py_variables", EdgeType.PREREQUISITE, 1.0),
+                ("py_variables", "py_functions", EdgeType.PREREQUISITE, 1.0),
+                ("py_functions", "py_oop", EdgeType.PREREQUISITE, 1.0),
+                ("py_oop", "py_classes", EdgeType.PREREQUISITE, 1.0),
+            ],
+            "questions": [
+                ("py_q1", "What is a variable in Python?", "A variable is a named container that stores a value", "py_variables", 1),
+                ("py_q2", "How do you define a function in Python?", "Using the def keyword", "py_functions", 2),
+                ("py_q3", "What is a class in Python?", "A blueprint for creating objects", "py_classes", 3),
+            ],
+            "community_overrides": {
+                "py_basics": 1.2,
+                "py_variables": 1.1,
+            }
+        },
+        "dsa_project": {
+            "nodes": [
+                ("dsa_arrays", "Arrays & Lists", 0.6, 0.65, 0.9),
+                ("dsa_stacks", "Stacks & Queues", 0.4, 0.45, 0.85),
+                ("dsa_trees", "Trees & Graphs", 0.3, 0.35, 0.95),
+                ("dsa_sorting", "Sorting Algorithms", 0.5, 0.55, 0.8),
+            ],
+            "edges": [
+                ("dsa_arrays", "dsa_stacks", EdgeType.PREREQUISITE, 1.0),
+                ("dsa_arrays", "dsa_sorting", EdgeType.PREREQUISITE, 0.8),
+                ("dsa_stacks", "dsa_trees", EdgeType.PREREQUISITE, 0.9),
+            ],
+            "questions": [
+                ("dsa_q1", "What is an array?", "A contiguous data structure for storing elements", "dsa_arrays", 1),
+                ("dsa_q2", "What is a stack?", "A LIFO (Last In First Out) data structure", "dsa_stacks", 2),
+                ("dsa_q3", "What is a binary tree?", "A tree where each node has at most two children", "dsa_trees", 3),
+            ],
+            "community_overrides": {
+                "dsa_trees": 1.5,
+                "dsa_sorting": 1.3,
+            }
+        },
+        "biology_project": {
+            "nodes": [
+                ("bio_cells", "Cell Structure", 0.5, 0.55, 0.9),
+                ("bio_dna", "DNA & Genetics", 0.4, 0.45, 0.95),
+                ("bio_evolution", "Evolution", 0.3, 0.35, 0.85),
+                ("bio_ecology", "Ecology & Ecosystems", 0.35, 0.4, 0.8),
+            ],
+            "edges": [
+                ("bio_cells", "bio_dna", EdgeType.PREREQUISITE, 1.0),
+                ("bio_dna", "bio_evolution", EdgeType.PREREQUISITE, 0.9),
+                ("bio_cells", "bio_ecology", EdgeType.APPLIED_WITH, 0.7),
+            ],
+            "questions": [
+                ("bio_q1", "What is the basic unit of life?", "The cell", "bio_cells", 1),
+                ("bio_q2", "What does DNA stand for?", "Deoxyribonucleic Acid", "bio_dna", 2),
+                ("bio_q3", "What is natural selection?", "The process where organisms better adapted to their environment survive", "bio_evolution", 3),
+            ],
+            "community_overrides": {
+                "bio_dna": 1.4,
+            }
+        },
+    }
+    
+    print("\n📚 Seeding project data...")
     async with async_session() as session:
-        existing_ids_result = await session.execute(select(QuestionModel.id))
-        existing_ids = {row[0] for row in existing_ids_result.fetchall()}
-
-        for (
-            qid,
-            question_text,
-            answer,
-            node_id,
-            qtype,
-            difficulty,
-            options,
-            option_explanations,
-        ) in questions_data:
-            if qid in existing_ids:
-                if options:
-                    await session.execute(
-                        update(QuestionModel)
-                        .where(QuestionModel.id == qid)
-                        .values(options=options, option_explanations=option_explanations)
-                    )
-                    print(f"  ↻ {qid} exists, updated options")
-                else:
-                    print(f"  ↷ {qid} already exists, skipping")
-                continue
-            # Create domain Question for validation
-            question_domain = Question(
-                id=qid,
-                text=question_text,
-                answer=answer,
-                question_type=qtype,
-                knowledge_type=KnowledgeType.CONCEPT,
-                covered_node_ids=[node_id],
-                metadata=QuestionMetadata(
-                    created_by="system",
-                    created_at=now - timedelta(days=difficulty),
-                    importance=difficulty * 0.2
-                ),
-                difficulty=difficulty,
-                tags={"fundamentals", "python"},
-                last_attempted_at=now - timedelta(days=1) if qid != "q1" else None
-            )
+        for project in projects:
+            print(f"\n  Project: {project.name}")
+            data = project_data[project.id]
             
-            # Create database Question model
-            db_question = QuestionModel(
-                id=qid,
-                text=question_text,
-                answer=answer,
-                    options=options,
-                option_explanations=option_explanations,
-                question_type=qtype.value,
-                knowledge_type=KnowledgeType.CONCEPT.value,
-                covered_node_ids=[node_id],
-                difficulty=difficulty,
-                tags=list({"fundamentals", "python"}),
-                question_metadata={
-                    "created_by": "system",
-                    "created_at": (now - timedelta(days=difficulty)).isoformat(),
-                    "importance": difficulty * 0.2,
-                    "hits": 0,
-                    "misses": 0,
-                },
-                last_attempted_at=now - timedelta(days=1) if qid != "q1" else None,
-                source_material_ids=[]
-            )
+            # Create graph for project
+            graph = Graph(project_id=project.id)
             
-            session.add(db_question)
-            print(f"  ✓ {qid}: {question_text[:50]}...")
+            # Create nodes
+            print(f"    Creating {len(data['nodes'])} nodes...")
+            for node_id, topic_name, proven, estimated, importance in data["nodes"]:
+                node = Node(
+                    id=node_id,
+                    project_id=project.id,
+                    topic_name=topic_name,
+                    proven_knowledge_rating=proven,
+                    user_estimated_knowledge_rating=estimated,
+                    importance=importance,
+                    relevance=0.8,
+                    view_frequency=max(1, int(proven * 10))
+                )
+                graph.add_node(node)
+                
+                # Create user node state for this user
+                user_state = UserNodeState(
+                    user_id=user.id,
+                    project_id=project.id,
+                    node_id=node_id,
+                    proven_knowledge_rating=proven,
+                    review_count=int(proven * 10),
+                    last_reviewed_at=now - timedelta(days=int((1 - proven) * 10)),
+                    stability=1.0 + proven
+                )
+                print(f"      ✓ {topic_name}")
+            
+            # Create edges
+            print(f"    Creating {len(data['edges'])} edges...")
+            for from_id, to_id, edge_type, weight in data["edges"]:
+                edge = Edge(
+                    project_id=project.id,
+                    from_node_id=from_id,
+                    to_node_id=to_id,
+                    type=edge_type,
+                    weight=weight
+                )
+                graph.add_edge(edge)
+                print(f"      ✓ {from_id} → {to_id}")
+            
+            # Create questions
+            print(f"    Creating {len(data['questions'])} questions...")
+            existing_ids_result = await session.execute(select(QuestionModel.id))
+            existing_ids = {row[0] for row in existing_ids_result.fetchall()}
+            
+            for qid, question_text, answer, node_id, difficulty in data["questions"]:
+                if qid in existing_ids:
+                    print(f"      ↷ {qid} already exists, skipping")
+                    continue
+                
+                # Create database Question model
+                db_question = QuestionModel(
+                    id=qid,
+                    text=question_text,
+                    answer=answer,
+                    options=None,
+                    option_explanations=None,
+                    question_type=QuestionType.OPEN.value,
+                    knowledge_type=KnowledgeType.CONCEPT.value,
+                    covered_node_ids=[node_id],
+                    difficulty=difficulty,
+                    tags=["fundamentals", project.id],
+                    question_metadata={
+                        "created_by": "system",
+                        "created_at": (now - timedelta(days=difficulty)).isoformat(),
+                        "importance": difficulty * 0.2,
+                        "hits": 0,
+                        "misses": 0,
+                    },
+                    last_attempted_at=now - timedelta(days=1) if difficulty > 1 else None,
+                    source_material_ids=[]
+                )
+                
+                session.add(db_question)
+                print(f"      ✓ {qid}: {question_text[:40]}...")
+            
+            # Set community overrides for this project
+            if data["community_overrides"]:
+                for node_id, importance in data["community_overrides"].items():
+                    community.set_node_importance(project.id, node_id, importance)
+                print(f"    ✓ Set {len(data['community_overrides'])} community overrides")
         
         await session.commit()
-    
-    # 4. Create communities
-    print("\n👥 Creating communities...")
-    communities = [
-        ("python_fundamentals", "Python Fundamentals", "Learn the basics of Python programming", {"python_basics": 1.0, "variables": 1.0, "functions": 0.8}),
-        ("advanced_python", "Advanced Python", "Master advanced concepts like OOP and decorators", {"oop": 1.5, "classes": 1.5, "decorators": 1.2, "inheritance": 1.0}),
-        ("async_programming", "Async Programming", "Learn concurrent and asynchronous programming", {"async": 2.0, "functions": 1.0}),
-    ]
-    
-    for comm_id, name, desc, importance_overrides in communities:
-        community = Community(
-            id=comm_id,
-            name=name,
-            description=desc,
-            node_importance_overrides=importance_overrides
-        )
-        print(f"  ✓ {name}")
-    
-    # 5. Create users
-    print("\n👤 Creating users...")
-    users = [
-        ("user1", "Alice Johnson", "alice@example.com", {"python_fundamentals"}),
-        ("user2", "Bob Smith", "bob@example.com", {"advanced_python", "async_programming"}),
-        ("user3", "Charlie Brown", "charlie@example.com", {"python_fundamentals", "advanced_python"}),
-    ]
-    
-    for user_id, name, email, communities_joined in users:
-        user = User(
-            id=user_id,
-            name=name,
-            email=email,
-            joined_community_ids=communities_joined
-        )
-        print(f"  ✓ {name} ({email})")
     
     print("\n" + "="*60)
     print("✅ Database seeding complete!")
     print("="*60)
     print(f"\nCreated:")
-    print(f"  • {len(nodes_data)} knowledge nodes")
-    print(f"  • {len(edges)} edges (relationships)")
-    print(f"  • {len(questions_data)} questions")
-    print(f"  • {len(communities)} communities")
-    print(f"  • {len(users)} users")
+    print(f"  • 1 user: {user.name}")
+    print(f"  • {len(projects)} projects:")
+    for p in projects:
+        data = project_data[p.id]
+        print(f"    - {p.name}: {len(data['nodes'])} nodes, {len(data['questions'])} questions")
+    print(f"  • 1 community: {community.name}")
+    print(f"    - Attached to {len(community.project_ids)} projects")
     print(f"\nYour API is ready at: http://localhost:8000/api/v1")
     print(f"Frontend is ready at: http://localhost:3000")
+
+
+if __name__ == "__main__":
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    parser = argparse.ArgumentParser(description="Seed the database with example data.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Drop and recreate all tables before seeding.",
+    )
+    args = parser.parse_args()
+
+    asyncio.run(seed_database(reset_db=args.reset))
 
 
 if __name__ == "__main__":

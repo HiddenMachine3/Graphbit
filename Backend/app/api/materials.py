@@ -35,6 +35,19 @@ _content_sessions = {}
 _session_counter = 0
 
 
+@router.get("/materials")
+async def list_materials():
+    """List available materials."""
+    return [
+        {
+            "id": material["id"],
+            "title": material["title"],
+            "chunk_count": len(material["chunks"]),
+        }
+        for material in _materials.values()
+    ]
+
+
 @router.get("/materials/{material_id}")
 async def get_material(material_id: str):
     """Get material content by ID."""

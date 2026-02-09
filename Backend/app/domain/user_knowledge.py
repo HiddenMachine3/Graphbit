@@ -25,6 +25,7 @@ class UserNodeState(BaseModel):
     """
     
     user_id: str = Field(..., min_length=1)
+    project_id: str = Field(..., min_length=1)
     node_id: str = Field(..., min_length=1)
     proven_knowledge_rating: float = Field(default=0.0, ge=0.0, le=1.0)
     review_count: int = Field(default=0, ge=0)

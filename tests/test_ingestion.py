@@ -43,6 +43,7 @@ def create_test_material(
     """Helper to create a test material."""
     return Material(
         id=material_id,
+        project_id="test_project_1",
         title=title,
         material_type=material_type,
         source="https://example.com/test",
@@ -64,6 +65,7 @@ class TestMaterialModel:
         now = datetime.now()
         material = Material(
             id="mat1",
+            project_id="test_project_1",
             title="Python Tutorial",
             material_type=MaterialType.VIDEO,
             source="https://youtube.com/watch?v=abc",
@@ -83,6 +85,7 @@ class TestMaterialModel:
         """Should allow empty metadata dict."""
         material = Material(
             id="mat1",
+            project_id="test_project_1",
             title="Test",
             material_type=MaterialType.PDF,
             source="/path/to/file.pdf",
@@ -96,6 +99,7 @@ class TestMaterialModel:
         with pytest.raises(ValueError):
             Material(
                 id="",
+                project_id="test_project_1",
                 title="Test",
                 material_type=MaterialType.TEXT,
                 source="test.txt",
@@ -107,6 +111,7 @@ class TestMaterialModel:
         with pytest.raises(ValueError):
             Material(
                 id="mat1",
+                project_id="test_project_1",
                 title="",
                 material_type=MaterialType.TEXT,
                 source="test.txt",
@@ -118,6 +123,7 @@ class TestMaterialModel:
         with pytest.raises(ValueError):
             Material(
                 id="mat1",
+                project_id="test_project_1",
                 title="Test",
                 material_type=MaterialType.TEXT,
                 source="",
@@ -132,6 +138,7 @@ class TestMaterialModel:
         for mat_type in types:
             material = Material(
                 id=f"mat_{mat_type.value}",
+                project_id="test_project_1",
                 title="Test",
                 material_type=mat_type,
                 source="test",
@@ -241,7 +248,7 @@ class TestNodeProvenance:
     
     def test_node_with_empty_source_materials(self):
         """Should create node with empty source_material_ids by default."""
-        node = Node(id="n1", topic_name="Test")
+        node = Node(id="n1", project_id="test_project_1", topic_name="Test")
         
         assert node.source_material_ids == set()
     
@@ -249,6 +256,7 @@ class TestNodeProvenance:
         """Should create node with source material IDs."""
         node = Node(
             id="n1",
+            project_id="test_project_1",
             topic_name="Test",
             source_material_ids={"mat1", "mat2"}
         )
@@ -257,7 +265,7 @@ class TestNodeProvenance:
     
     def test_node_source_materials_mutable(self):
         """Should allow adding source materials after creation."""
-        node = Node(id="n1", topic_name="Test")
+        node = Node(id="n1", project_id="test_project_1", topic_name="Test")
         
         node.source_material_ids.add("mat1")
         node.source_material_ids.add("mat2")
@@ -285,6 +293,7 @@ class TestQuestionProvenance:
         
         question = Question(
             id="q1",
+            project_id="test_project_1",
             text="What is X?",
             answer="X is Y",
             question_type=QuestionType.FLASHCARD,
@@ -306,6 +315,7 @@ class TestQuestionProvenance:
         
         question = Question(
             id="q1",
+            project_id="test_project_1",
             text="What is X?",
             answer="X is Y",
             question_type=QuestionType.FLASHCARD,
@@ -334,6 +344,7 @@ class TestCreateNodeFromMaterial:
         
         node = create_node_from_material(
             node_id="n1",
+            project_id="test_project_1",
             topic_name="Python Basics",
             material_id="mat1",
             material_registry=registry,
@@ -355,6 +366,7 @@ class TestCreateNodeFromMaterial:
         
         node = create_node_from_material(
             node_id="n1",
+            project_id="test_project_1",
             topic_name="Test",
             material_id="mat1",
             material_registry=registry
@@ -370,6 +382,7 @@ class TestCreateNodeFromMaterial:
         with pytest.raises(KeyError, match="not found"):
             create_node_from_material(
                 node_id="n1",
+                project_id="test_project_1",
                 topic_name="Test",
                 material_id="nonexistent",
                 material_registry=registry
@@ -387,6 +400,7 @@ class TestCreateQuestionFromMaterial:
         
         question = create_question_from_material(
             question_id="q1",
+            project_id="test_project_1",
             text="What is Python?",
             answer="A programming language",
             covered_node_ids=["n1", "n2"],
@@ -418,6 +432,7 @@ class TestCreateQuestionFromMaterial:
         
         question = create_question_from_material(
             question_id="q1",
+            project_id="test_project_1",
             text="Test question?",
             answer="Test answer",
             covered_node_ids=["n1"],
@@ -439,6 +454,7 @@ class TestCreateQuestionFromMaterial:
         with pytest.raises(KeyError, match="not found"):
             create_question_from_material(
                 question_id="q1",
+                project_id="test_project_1",
                 text="Test?",
                 answer="Answer",
                 covered_node_ids=["n1"],
@@ -461,6 +477,7 @@ class TestCSVQuestionImporter:
         registry = MaterialRegistry()
         material = Material(
             id="csv1",
+            project_id="test_project_1",
             title="Test CSV",
             material_type=MaterialType.CSV,
             source="test.csv",
@@ -468,12 +485,12 @@ class TestCSVQuestionImporter:
         )
         registry.add_material(material)
         
-        graph = Graph()
-        graph.add_node(Node(id="python", topic_name="Python"))
-        graph.add_node(Node(id="variables", topic_name="Variables"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="python", project_id="test_project_1", topic_name="Python"))
+        graph.add_node(Node(id="variables", project_id="test_project_1", topic_name="Variables"))
         
         bank = QuestionBank()
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         # Create temp CSV
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as f:
@@ -511,11 +528,11 @@ class TestCSVQuestionImporter:
         material = create_test_material("csv1", material_type=MaterialType.CSV)
         registry.add_material(material)
         
-        graph = Graph()
-        graph.add_node(Node(id="n1", topic_name="Test"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="n1", project_id="test_project_1", topic_name="Test"))
         
         bank = QuestionBank()
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as f:
             f.write("question_text,answer,covered_node_ids,difficulty,question_type,knowledge_type\n")
@@ -537,11 +554,11 @@ class TestCSVQuestionImporter:
         material = create_test_material("csv1", material_type=MaterialType.CSV)
         registry.add_material(material)
         
-        graph = Graph()
-        graph.add_node(Node(id="n1", topic_name="Test"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="n1", project_id="test_project_1", topic_name="Test"))
         
         bank = QuestionBank()
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as f:
             f.write("question_text,answer,covered_node_ids,difficulty\n")
@@ -573,12 +590,12 @@ class TestCSVQuestionImporter:
         material = create_test_material("csv1", material_type=MaterialType.CSV)
         registry.add_material(material)
         
-        graph = Graph()
-        graph.add_node(Node(id="n1", topic_name="Test"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="n1", project_id="test_project_1", topic_name="Test"))
         # n2 doesn't exist, so coverage validation will fail
         
         bank = QuestionBank()
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as f:
             f.write("question_text,answer,covered_node_ids,difficulty\n")
@@ -596,9 +613,9 @@ class TestCSVQuestionImporter:
     def test_import_with_nonexistent_material_raises_error(self):
         """Should raise KeyError if material doesn't exist."""
         registry = MaterialRegistry()
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         bank = QuestionBank()
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         with pytest.raises(KeyError, match="not found"):
             importer.import_from_csv("test.csv", "nonexistent")
@@ -609,9 +626,9 @@ class TestCSVQuestionImporter:
         material = create_test_material()
         registry.add_material(material)
         
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         bank = QuestionBank()
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         with pytest.raises(FileNotFoundError):
             importer.import_from_csv("/nonexistent/file.csv", "mat1")
@@ -633,6 +650,7 @@ class TestIngestionIntegration:
         # 2. Add materials
         video_material = Material(
             id="vid1",
+            project_id="test_project_1",
             title="Python Tutorial Video",
             material_type=MaterialType.VIDEO,
             source="https://youtube.com/watch?v=abc",
@@ -643,6 +661,7 @@ class TestIngestionIntegration:
         
         csv_material = Material(
             id="csv1",
+            project_id="test_project_1",
             title="Practice Questions CSV",
             material_type=MaterialType.CSV,
             source="/data/questions.csv",
@@ -651,10 +670,11 @@ class TestIngestionIntegration:
         registry.add_material(csv_material)
         
         # 3. Create graph with nodes from materials
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         
         node1 = create_node_from_material(
             node_id="python",
+            project_id="test_project_1",
             topic_name="Python Basics",
             material_id="vid1",
             material_registry=registry,
@@ -664,6 +684,7 @@ class TestIngestionIntegration:
         
         node2 = create_node_from_material(
             node_id="variables",
+            project_id="test_project_1",
             topic_name="Variables",
             material_id="vid1",
             material_registry=registry,
@@ -674,6 +695,7 @@ class TestIngestionIntegration:
         graph.add_edge(Edge(
             from_node_id="python",
             to_node_id="variables",
+            project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0
         ))
@@ -683,6 +705,7 @@ class TestIngestionIntegration:
         
         question1 = create_question_from_material(
             question_id="q1",
+            project_id="test_project_1",
             text="What is Python used for?",
             answer="General-purpose programming",
             covered_node_ids=["python"],
@@ -693,7 +716,7 @@ class TestIngestionIntegration:
         bank.add_question(question1, graph)
         
         # 5. Import questions from CSV
-        importer = CSVQuestionImporter(registry, bank, graph)
+        importer = CSVQuestionImporter(project_id="test_project_1", material_registry=registry, question_bank=bank, graph=graph)
         
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv', newline='') as f:
             f.write("question_text,answer,covered_node_ids,difficulty,tags\n")

@@ -11,19 +11,19 @@ _communities = {
         id="python_fundamentals",
         name="Python Fundamentals",
         description="Learn the basics of Python programming",
-        node_importance_overrides={"python_basics": 1.0, "variables": 1.0, "functions": 0.8}
+        node_importance_overrides={"default": {"python_basics": 1.0, "variables": 1.0, "functions": 0.8}}
     ),
     "advanced_python": Community(
         id="advanced_python",
         name="Advanced Python",
         description="Master advanced concepts like OOP and decorators",
-        node_importance_overrides={"oop": 1.5, "classes": 1.5, "decorators": 1.2, "inheritance": 1.0}
+        node_importance_overrides={"default": {"oop": 1.5, "classes": 1.5, "decorators": 1.2, "inheritance": 1.0}}
     ),
     "async_programming": Community(
         id="async_programming",
         name="Async Programming",
         description="Learn concurrent and asynchronous programming",
-        node_importance_overrides={"async": 2.0, "functions": 1.0}
+        node_importance_overrides={"default": {"async": 2.0, "functions": 1.0}}
     ),
 }
 

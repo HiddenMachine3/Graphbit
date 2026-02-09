@@ -28,7 +28,7 @@ from backend.app.domain import (
 
 
 def create_node(node_id: str, material_id: str | None = None, importance: float = 1.0) -> Node:
-    node = Node(id=node_id, topic_name=node_id.capitalize(), importance=importance)
+    node = Node(id=node_id, project_id="test_project_1", topic_name=node_id.capitalize(), importance=importance)
     if material_id:
         node.source_material_ids.add(material_id)
     return node
@@ -42,6 +42,7 @@ def create_question(question_id: str, covered: list[str]) -> Question:
     )
     return Question(
         id=question_id,
+        project_id="test_project_1",
         text=f"Question {question_id}",
         answer="Answer",
         question_type=QuestionType.FLASHCARD,
@@ -55,6 +56,7 @@ def create_state(node_id: str, pkr: float, last_reviewed: datetime) -> UserNodeS
     return UserNodeState(
         user_id="user1",
         node_id=node_id,
+        project_id="test_project_1",
         proven_knowledge_rating=pkr,
         stability=5.0,
         last_reviewed_at=last_reviewed,
@@ -73,6 +75,7 @@ class TestContentSession:
             session_id="sess1",
             material_id="mat1",
             user_id="user1",
+            project_id="test_project_1",
             started_at=now,
             last_interjection_at=None,
             consumed_chunks=0,
@@ -86,10 +89,7 @@ class TestContentSession:
 
     def test_consumed_chunks_increments_correctly(self):
         now = datetime.now()
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=0,
         )
@@ -99,10 +99,7 @@ class TestContentSession:
 
     def test_last_interjection_at_updates_correctly(self):
         now = datetime.now()
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=0,
         )
@@ -118,7 +115,9 @@ class TestInterjectionPolicy:
             session_id="sess1",
             material_id="mat1",
             user_id="user1",
+            project_id="test_project_1",
             started_at=now,
+            last_interjection_at=None,
             consumed_chunks=5,
         )
         policy = InterjectionPolicy(min_chunks_between_interjections=3, max_time_without_interjection=timedelta(minutes=10))
@@ -131,6 +130,7 @@ class TestInterjectionPolicy:
             session_id="sess1",
             material_id="mat1",
             user_id="user1",
+            project_id="test_project_1",
             started_at=start,
             last_interjection_at=None,
             consumed_chunks=0,
@@ -145,6 +145,7 @@ class TestInterjectionPolicy:
             session_id="sess1",
             material_id="mat1",
             user_id="user1",
+            project_id="test_project_1",
             started_at=start,
             last_interjection_at=None,
             consumed_chunks=1,
@@ -159,6 +160,7 @@ class TestInterjectionPolicy:
             session_id="sess1",
             material_id="mat1",
             user_id="user1",
+            project_id="test_project_1",
             started_at=start,
             consumed_chunks=0,
         )
@@ -174,10 +176,10 @@ class TestInterjectionPolicy:
 
 class TestInterjectionEngine:
     def test_returns_question_for_material_nodes(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a", material_id="mat1"))
         graph.add_node(create_node("b", material_id="mat1"))
-        graph.add_edge(Edge(from_node_id="a", to_node_id="b", type=EdgeType.PREREQUISITE, weight=1.0))
+        graph.add_edge(Edge(from_node_id="a", to_node_id="b", project_id="test_project_1", type=EdgeType.PREREQUISITE, weight=1.0))
 
         bank = QuestionBank()
         q1 = create_question("q1", ["a"])
@@ -190,10 +192,7 @@ class TestInterjectionEngine:
             "b": create_state("b", pkr=0.2, last_reviewed=old),
         }
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=3,
         )
@@ -213,16 +212,13 @@ class TestInterjectionEngine:
         assert question.id == "q1"
 
     def test_returns_none_when_no_material_nodes(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a", material_id=None))
 
         bank = QuestionBank()
         now = datetime.now()
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=3,
         )
@@ -239,7 +235,7 @@ class TestInterjectionEngine:
         assert question is None
 
     def test_returns_none_when_no_interjection_needed(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a", material_id="mat1"))
 
         bank = QuestionBank()
@@ -251,10 +247,7 @@ class TestInterjectionEngine:
             "a": create_state("a", pkr=0.95, last_reviewed=now),
         }
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=0,
         )
@@ -273,10 +266,10 @@ class TestInterjectionEngine:
         assert question is None
 
     def test_reuses_ranking_engine_correctly(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a", material_id="mat1"))
         graph.add_node(create_node("b", material_id="mat1"))
-        graph.add_edge(Edge(from_node_id="a", to_node_id="b", type=EdgeType.PREREQUISITE, weight=1.0))
+        graph.add_edge(Edge(from_node_id="a", to_node_id="b", project_id="test_project_1", type=EdgeType.PREREQUISITE, weight=1.0))
 
         bank = QuestionBank()
         q1 = create_question("q1", ["a"])
@@ -310,10 +303,7 @@ class TestInterjectionEngine:
             now=now,
         )
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=3,
         )
@@ -332,7 +322,7 @@ class TestInterjectionEngine:
         assert direct.id == via_engine.id
 
     def test_returns_none_when_no_weak_nodes(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a", material_id="mat1"))
 
         bank = QuestionBank()
@@ -344,10 +334,7 @@ class TestInterjectionEngine:
             "a": create_state("a", pkr=0.95, last_reviewed=now),
         }
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=3,
         )
@@ -434,10 +421,10 @@ class TestRevisionPlanner:
 
 class TestInterjectionIntegration:
     def test_full_flow_interjection(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("x", material_id="mat1"))
         graph.add_node(create_node("y", material_id="mat1"))
-        graph.add_edge(Edge(from_node_id="x", to_node_id="y", type=EdgeType.PREREQUISITE, weight=1.0))
+        graph.add_edge(Edge(from_node_id="x", to_node_id="y", project_id="test_project_1", type=EdgeType.PREREQUISITE, weight=1.0))
 
         bank = QuestionBank()
         q1 = create_question("q1", ["x"])
@@ -452,10 +439,7 @@ class TestInterjectionIntegration:
             "y": create_state("y", pkr=0.2, last_reviewed=old),
         }
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=5,
         )
@@ -491,10 +475,10 @@ class TestInterjectionIntegration:
         assert isinstance(plan, list)
 
     def test_multiple_users_same_material(self):
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("x", material_id="mat1"))
         graph.add_node(create_node("y", material_id="mat1"))
-        graph.add_edge(Edge(from_node_id="x", to_node_id="y", type=EdgeType.PREREQUISITE, weight=1.0))
+        graph.add_edge(Edge(from_node_id="x", to_node_id="y", project_id="test_project_1", type=EdgeType.PREREQUISITE, weight=1.0))
 
         bank = QuestionBank()
         q1 = create_question("q1", ["x"])
@@ -512,10 +496,7 @@ class TestInterjectionIntegration:
             "y": create_state("y", pkr=0.9, last_reviewed=now),
         }
 
-        session = ContentSession(
-            session_id="sess1",
-            material_id="mat1",
-            user_id="user1",
+        session = ContentSession(session_id="sess1", material_id="mat1", user_id="user1", project_id="test_project_1",
             started_at=now,
             consumed_chunks=5,
         )

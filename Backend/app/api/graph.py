@@ -22,6 +22,9 @@ from app.services.video_transcripts import fetch_youtube_transcript
 
 router = APIRouter()
 
+# Default project ID for demo/development
+DEFAULT_PROJECT_ID = "demo_project"
+
 
 class CreateNodeRequest(BaseModel):
     topic_name: str
@@ -53,7 +56,7 @@ class VideoIngestRequest(BaseModel):
 
 
 # In-memory storage for demo (replace with database queries)
-_graph = Graph()
+_graph = Graph(project_id=DEFAULT_PROJECT_ID)
 _questions = {}
 _node_counter = 0
 _material_counter = 0
@@ -83,6 +86,7 @@ def _init_sample_data():
     for node_id, topic_name, proven, estimated, importance in nodes_data:
         node = Node(
             id=node_id,
+            project_id=DEFAULT_PROJECT_ID,
             topic_name=topic_name,
             proven_knowledge_rating=proven,
             user_estimated_knowledge_rating=estimated,
@@ -112,6 +116,7 @@ def _init_sample_data():
             edge = Edge(
                 from_node_id=from_id,
                 to_node_id=to_id,
+                project_id=DEFAULT_PROJECT_ID,
                 type=edge_type,
                 weight=weight
             )
@@ -135,6 +140,7 @@ def _init_sample_data():
     for qid, text, answer, node_id, qtype, difficulty in questions_data:
         question = Question(
             id=qid,
+            project_id=DEFAULT_PROJECT_ID,
             text=text,
             answer=answer,
             question_type=qtype,
@@ -240,6 +246,7 @@ def _get_or_create_chapter_node(
     chapter_id = f"chapter_{len(_chapter_index_by_source) + 1}"
     chapter_node = Node(
         id=chapter_id,
+        project_id=DEFAULT_PROJECT_ID,
         topic_name=title,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -269,6 +276,7 @@ def _get_or_create_topic_node(topic_name: str, material_id: str) -> str:
 
     node = Node(
         id=node_id,
+        project_id=DEFAULT_PROJECT_ID,
         topic_name=topic_name.strip(),
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -330,6 +338,7 @@ async def create_node(request: CreateNodeRequest):
     node_id = f"node_{_node_counter}"
     node = Node(
         id=node_id,
+        project_id=DEFAULT_PROJECT_ID,
         topic_name=request.topic_name,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -417,6 +426,7 @@ async def create_edge(request: CreateEdgeRequest):
     edge = Edge(
         from_node_id=request.from_node_id,
         to_node_id=request.to_node_id,
+        project_id=DEFAULT_PROJECT_ID,
         type=edge_type,
         weight=request.weight
     )
@@ -466,6 +476,7 @@ async def ingest_video(request: VideoIngestRequest):
             edge = Edge(
                 from_node_id=chapter_node_id,
                 to_node_id=topic_node_id,
+                project_id=DEFAULT_PROJECT_ID,
                 type=EdgeType.SUBCONCEPT_OF,
                 weight=0.9,
             )
@@ -480,6 +491,7 @@ async def ingest_video(request: VideoIngestRequest):
                 edge = Edge(
                     from_node_id=other_chapter_id,
                     to_node_id=chapter_node_id,
+                    project_id=DEFAULT_PROJECT_ID,
                     type=EdgeType.APPLIED_WITH,
                     weight=0.4,
                 )

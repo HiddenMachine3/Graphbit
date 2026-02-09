@@ -51,7 +51,10 @@ export default function HomePage() {
       </div>
 
       <div className="h-64">
-        <ActivityHeatmap />
+        <ActivityHeatmap
+          nodesCount={graphData.nodes.length}
+          edgesCount={graphData.edges.length}
+        />
       </div>
     </div>
   );
