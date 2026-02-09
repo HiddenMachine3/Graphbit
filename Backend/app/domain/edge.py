@@ -13,6 +13,7 @@ class Edge(BaseModel):
     with a weight indicating the strength of the relationship.
     """
     
+    project_id: str = Field(..., min_length=1)
     from_node_id: str = Field(..., min_length=1)
     to_node_id: str = Field(..., min_length=1)
     weight: float = Field(..., ge=0.0, le=1.0)

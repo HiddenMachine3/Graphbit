@@ -19,19 +19,39 @@ import ErrorState from "../../components/ErrorState";
 import CommunitySwitcher from "../../components/communities/CommunitySwitcher";
 import CommunityProgress from "../../components/communities/CommunityProgress";
 import LeaderboardTable from "../../components/communities/LeaderboardTable";
-
-const CURRENT_USER_ID = "demo-user";
+import { getCurrentSession, startSession } from "../../lib/api/session";
 
 export default function CommunitiesPage() {
   const [communities, setCommunities] = useState<CommunityDTO[]>([]);
   const [progress, setProgress] = useState<CommunityProgressDTO | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntryDTO[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const currentCommunityId = useAppStore((state) => state.currentCommunityId);
   const setCurrentCommunityId = useAppStore((state) => state.setCurrentCommunityId);
   const setCurrentCommunityName = useAppStore((state) => state.setCurrentCommunityName);
+
+  useEffect(() => {
+    let mounted = true;
+    getCurrentSession()
+      .then((session) => session ?? startSession())
+      .then((session) => {
+        if (mounted) {
+          setCurrentUserId(session.user_id);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setCurrentUserId(null);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -129,7 +149,7 @@ export default function CommunitiesPage() {
         />
         <div className="flex flex-col gap-4">
           <CommunityProgress progress={progress} />
-          <LeaderboardTable entries={leaderboard} currentUserId={CURRENT_USER_ID} />
+          <LeaderboardTable entries={leaderboard} currentUserId={currentUserId} />
         </div>
       </div>
     </section>

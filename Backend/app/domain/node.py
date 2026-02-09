@@ -12,6 +12,7 @@ class Node(BaseModel):
     """
     
     id: str = Field(..., min_length=1)
+    project_id: str = Field(..., min_length=1)
     topic_name: str = Field(..., min_length=1)
     proven_knowledge_rating: float = Field(default=0.0, ge=0.0, le=1.0)
     user_estimated_knowledge_rating: float = Field(default=0.0, ge=0.0, le=1.0)

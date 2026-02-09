@@ -39,7 +39,7 @@ from backend.app.domain import (
 
 def create_node(node_id: str) -> Node:
     """Helper to create Node."""
-    return Node(id=node_id, topic_name=node_id.capitalize())
+    return Node(id=node_id, project_id="test_project_1", topic_name=node_id.capitalize())
 
 
 def create_edge(from_id: str, to_id: str) -> Edge:
@@ -47,6 +47,7 @@ def create_edge(from_id: str, to_id: str) -> Edge:
     return Edge(
         from_node_id=from_id,
         to_node_id=to_id,
+        project_id="test_project_1",
         type=EdgeType.PREREQUISITE,
         weight=1.0
     )
@@ -62,6 +63,7 @@ def create_user_state(
     return UserNodeState(
         user_id="user1",
         node_id=node_id,
+        project_id="test_project_1",
         proven_knowledge_rating=pkr,
         stability=stability,
         last_reviewed_at=last_reviewed or datetime.now()
@@ -83,6 +85,7 @@ def create_question(
     
     return Question(
         id=question_id,
+        project_id="test_project_1",
         text=f"Question {question_id}",
         answer="Answer",
         question_type=QuestionType.FLASHCARD,
@@ -297,7 +300,7 @@ class TestQuestionRankingEngine:
     def test_select_question_from_single_cluster(self):
         """Should select question from single cluster."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("python"))
         graph.add_node(create_node("variables"))
         graph.add_edge(create_edge("python", "variables"))
@@ -333,7 +336,7 @@ class TestQuestionRankingEngine:
     def test_select_highest_scoring_question(self):
         """Should select question with highest score."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("a"))
         graph.add_node(create_node("b"))
         graph.add_edge(create_edge("a", "b"))
@@ -371,7 +374,7 @@ class TestQuestionRankingEngine:
     def test_avoids_recently_attempted_questions(self):
         """Should prefer fresh questions over recently attempted ones."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("node"))
         
         # Setup cluster
@@ -440,7 +443,7 @@ class TestQuestionRankingEngine:
     def test_deterministic_tie_breaking(self):
         """Should break ties deterministically by question ID."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("node"))
         
         # Setup cluster
@@ -489,7 +492,7 @@ class TestQuestionRankingEngine:
     def test_selects_from_multiple_clusters(self):
         """Should consider questions from all clusters."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_node("weak"))
         graph.add_node(create_node("weak2"))
         graph.add_node(create_node("strong"))
@@ -550,7 +553,7 @@ class TestRankingIntegration:
     def test_full_pipeline(self):
         """Should select best question through full pipeline."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         for node_id in ["python", "variables", "functions", "classes"]:
             graph.add_node(create_node(node_id))
         

@@ -1,5 +1,18 @@
+export type ProjectVisibility = "private" | "shared" | "public";
+
+export interface ProjectDTO {
+  id: string;
+  name: string;
+  description: string;
+  owner_id: string;
+  visibility: ProjectVisibility;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface NodeDTO {
   id: string;
+  project_id: string;
   topic_name: string;
   proven_knowledge_rating: number;
   user_estimated_knowledge_rating: number;
@@ -17,6 +30,7 @@ export interface GraphNodeDTO extends NodeDTO {
 
 export interface GraphEdgeDTO {
   id: string;
+  project_id: string;
   source: string;
   target: string;
   type: string;
@@ -40,6 +54,7 @@ export type QuestionType = "FLASHCARD" | "CLOZE" | "MCQ" | "OPEN";
 
 export interface QuestionDTO {
   id: string;
+  project_id: string;
   text: string;
   answer: string;
   question_type: QuestionType;

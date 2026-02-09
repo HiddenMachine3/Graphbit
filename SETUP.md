@@ -79,7 +79,6 @@ The backend will be available at: `http://localhost:8000`
 **Swagger API Documentation:** `http://localhost:8000/docs`
 
 ### Terminal 2: Start the Frontend
-
 ```powershell
 cd "S:\files\files\Projects\Projects\Graphbit\frontend"
 cmd /c npm run dev

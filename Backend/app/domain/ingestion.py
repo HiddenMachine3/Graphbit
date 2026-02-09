@@ -15,6 +15,7 @@ from .enums import QuestionType, KnowledgeType
 
 def create_node_from_material(
     node_id: str,
+    project_id: str,
     topic_name: str,
     material_id: str,
     material_registry: MaterialRegistry,
@@ -26,6 +27,7 @@ def create_node_from_material(
     
     Args:
         node_id: Unique identifier for the node
+        project_id: Project this node belongs to
         topic_name: Name of the knowledge topic
         material_id: ID of the source material
         material_registry: Registry to validate material existence
@@ -45,6 +47,7 @@ def create_node_from_material(
     # Create node with material provenance
     node = Node(
         id=node_id,
+        project_id=project_id,
         topic_name=topic_name,
         importance=importance,
         relevance=relevance,
@@ -56,6 +59,7 @@ def create_node_from_material(
 
 def create_question_from_material(
     question_id: str,
+    project_id: str,
     text: str,
     answer: str,
     covered_node_ids: list[str],
@@ -73,6 +77,7 @@ def create_question_from_material(
     
     Args:
         question_id: Unique identifier for the question
+        project_id: Project this question belongs to
         text: Question text
         answer: Answer text
         covered_node_ids: List of node IDs this question covers
@@ -105,6 +110,7 @@ def create_question_from_material(
     # Create question with material provenance
     question = Question(
         id=question_id,
+        project_id=project_id,
         text=text,
         answer=answer,
         question_type=question_type,
@@ -135,6 +141,7 @@ class CSVQuestionImporter:
     
     def __init__(
         self,
+        project_id: str,
         material_registry: MaterialRegistry,
         question_bank: QuestionBank,
         graph: Graph,
@@ -143,10 +150,12 @@ class CSVQuestionImporter:
         Initialize the CSV importer.
         
         Args:
+            project_id: Project ID for imported questions
             material_registry: Registry for material validation
             question_bank: Question bank to add questions to
             graph: Graph for coverage validation
         """
+        self.project_id = project_id
         self.material_registry = material_registry
         self.question_bank = question_bank
         self.graph = graph
@@ -247,6 +256,7 @@ class CSVQuestionImporter:
                     # Create question using ingestion API
                     question = create_question_from_material(
                         question_id=question_id,
+                        project_id=self.project_id,
                         text=question_text,
                         answer=answer,
                         covered_node_ids=covered_node_ids,

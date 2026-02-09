@@ -27,6 +27,7 @@ class Question(BaseModel):
     """
     
     id: str = Field(..., min_length=1)
+    project_id: str = Field(..., min_length=1)
     text: str = Field(..., min_length=1)
     answer: str = Field(..., min_length=1)
     question_type: QuestionType

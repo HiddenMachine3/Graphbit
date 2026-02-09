@@ -18,6 +18,7 @@ class Graph(BaseModel):
     Provides reasoning operations for path finding and coverage validation.
     """
     
+    project_id: str = Field(..., min_length=1)
     nodes: dict[str, Node] = Field(default_factory=dict)
     edges: list[Edge] = Field(default_factory=list)
     

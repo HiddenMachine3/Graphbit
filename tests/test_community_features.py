@@ -45,6 +45,7 @@ def create_test_node(node_id: str, importance: float = 1.0) -> Node:
     """Helper to create a test node."""
     return Node(
         id=node_id,
+        project_id="test_project_1",
         topic_name=node_id.capitalize(),
         importance=importance,
     )
@@ -64,6 +65,7 @@ def create_test_question(
     
     return Question(
         id=question_id,
+        project_id="test_project_1",
         text=f"Question {question_id}",
         answer="Answer",
         question_type=QuestionType.FLASHCARD,
@@ -83,6 +85,7 @@ def create_test_user_state(
     return UserNodeState(
         user_id=user_id,
         node_id=node_id,
+        project_id="test_project_1",
         proven_knowledge_rating=pkr,
         stability=5.0,
         last_reviewed_at=last_reviewed or datetime.now(),
@@ -188,35 +191,36 @@ class TestCommunityContext:
         community = Community(
             id="comm1",
             name="Test Community",
-            node_importance_overrides={"node1": 10.0}
+            project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 10.0}}
         )
         
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         bank = QuestionBank()
         
         context = CommunityContext(community, bank, graph)
         
         # Should use override
-        effective = context.get_effective_importance("node1", base_importance=1.0)
+        effective = context.get_effective_importance("test_project_1", "node1", base_importance=1.0)
         assert effective == 10.0
     
     def test_get_effective_importance_without_override(self):
         """Should use base importance when no override."""
         # Setup
-        community = Community(id="comm1", name="Test")
-        graph = Graph()
+        community = Community(id="comm1", name="Test", project_ids={"test_project_1"})
+        graph = Graph(project_id="test_project_1")
         bank = QuestionBank()
         
         context = CommunityContext(community, bank, graph)
         
         # Should use base
-        effective = context.get_effective_importance("node1", base_importance=5.0)
+        effective = context.get_effective_importance("test_project_1", "node1", base_importance=5.0)
         assert effective == 5.0
     
     def test_filter_questions_returns_relevant(self):
         """Should return questions covering community nodes."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_test_node("python"))
         graph.add_node(create_test_node("java"))
         graph.add_node(create_test_node("cpp"))
@@ -225,6 +229,7 @@ class TestCommunityContext:
         graph.add_edge(Edge(
             from_node_id="python",
             to_node_id="java",
+            project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0,
         ))
@@ -233,9 +238,12 @@ class TestCommunityContext:
         community = Community(
             id="comm1",
             name="Python & Java",
+            project_ids={"test_project_1"},
             node_importance_overrides={
-                "python": 5.0,
-                "java": 5.0,
+                "test_project_1": {
+                    "python": 5.0,
+                    "java": 5.0,
+                }
             }
         )
         
@@ -253,7 +261,7 @@ class TestCommunityContext:
         
         # Filter
         context = CommunityContext(community, bank, graph)
-        relevant = context.filter_questions()
+        relevant = context.filter_questions("test_project_1")
         
         # Should include q1, q2, q4 (covering python/java)
         # Should exclude q3 (only cpp)
@@ -265,8 +273,8 @@ class TestCommunityContext:
     
     def test_filter_questions_empty_overrides(self):
         """Should return empty list when community has no overrides."""
-        community = Community(id="comm1", name="Empty")
-        graph = Graph()
+        community = Community(id="comm1", name="Empty", project_ids={"test_project_1"})
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_test_node("node1"))
         
         bank = QuestionBank()
@@ -274,7 +282,7 @@ class TestCommunityContext:
         bank.add_question(q1, graph)
         
         context = CommunityContext(community, bank, graph)
-        relevant = context.filter_questions()
+        relevant = context.filter_questions("test_project_1")
         
         assert len(relevant) == 0
 
@@ -290,12 +298,13 @@ class TestCommunityAwareRanking:
     def test_select_question_for_community(self):
         """Should select question using community context."""
         # Setup graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_test_node("python", importance=1.0))
         graph.add_node(create_test_node("variables", importance=1.0))
         graph.add_edge(Edge(
             from_node_id="python",
             to_node_id="variables",
+            project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0,
         ))
@@ -304,9 +313,12 @@ class TestCommunityAwareRanking:
         community = Community(
             id="comm1",
             name="Python Community",
+            project_ids={"test_project_1"},
             node_importance_overrides={
-                "python": 10.0,  # High community importance
-                "variables": 8.0,
+                "test_project_1": {
+                    "python": 10.0,  # High community importance
+                    "variables": 8.0,
+                }
             }
         )
         
@@ -343,6 +355,7 @@ class TestCommunityAwareRanking:
         # Select question with community context
         question = select_next_question_for_community(
             community=community,
+            project_id="test_project_1",
             ranking_engine=engine,
             clusters=clusters,
             question_bank=bank,
@@ -357,12 +370,13 @@ class TestCommunityAwareRanking:
 
     def test_ranking_respects_importance_overrides(self):
         """Should favor questions tied to higher community importance."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_test_node("high", importance=1.0))
         graph.add_node(create_test_node("low", importance=1.0))
         graph.add_edge(Edge(
             from_node_id="high",
             to_node_id="low",
+            project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0,
         ))
@@ -370,9 +384,12 @@ class TestCommunityAwareRanking:
         community = Community(
             id="comm1",
             name="Importance Test",
+            project_ids={"test_project_1"},
             node_importance_overrides={
-                "high": 10.0,
-                "low": 1.0,
+                "test_project_1": {
+                    "high": 10.0,
+                    "low": 1.0,
+                }
             }
         )
         
@@ -403,6 +420,7 @@ class TestCommunityAwareRanking:
         engine = QuestionRankingEngine
         question = select_next_question_for_community(
             community=community,
+            project_id="test_project_1",
             ranking_engine=engine,
             clusters=clusters,
             question_bank=bank,
@@ -416,20 +434,16 @@ class TestCommunityAwareRanking:
 
     def test_ranking_is_deterministic(self):
         """Should return the same question for identical inputs."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_test_node("node1", importance=1.0))
         graph.add_node(create_test_node("node2", importance=1.0))
-        graph.add_edge(Edge(
-            from_node_id="node1",
-            to_node_id="node2",
+        graph.add_edge(Edge(from_node_id="node1", to_node_id="node2", project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0,
         ))
         
-        community = Community(
-            id="comm1",
-            name="Determinism",
-            node_importance_overrides={"node1": 5.0, "node2": 5.0}
+        community = Community(id="comm1", name="Determinism", project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0, "node2": 5.0}}
         )
         
         bank = QuestionBank()
@@ -459,6 +473,7 @@ class TestCommunityAwareRanking:
         engine = QuestionRankingEngine
         q_first = select_next_question_for_community(
             community=community,
+            project_id="test_project_1",
             ranking_engine=engine,
             clusters=clusters,
             question_bank=bank,
@@ -468,6 +483,7 @@ class TestCommunityAwareRanking:
         )
         q_second = select_next_question_for_community(
             community=community,
+            project_id="test_project_1",
             ranking_engine=engine,
             clusters=clusters,
             question_bank=bank,
@@ -483,14 +499,12 @@ class TestCommunityAwareRanking:
     def test_select_returns_none_when_no_relevant_questions(self):
         """Should return None when no community-relevant questions."""
         # Setup
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         graph.add_node(create_test_node("node1"))
         
         # Community interested in different node
-        community = Community(
-            id="comm1",
-            name="Test",
-            node_importance_overrides={"other_node": 5.0}
+        community = Community(id="comm1", name="Test", project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"other_node": 5.0}}
         )
         
         # Question doesn't cover community nodes
@@ -518,6 +532,7 @@ class TestCommunityAwareRanking:
         
         question = select_next_question_for_community(
             community=community,
+            project_id="test_project_1",
             ranking_engine=engine,
             clusters=clusters,
             question_bank=bank,
@@ -541,13 +556,13 @@ class TestUserProgress:
     def test_compute_progress_with_studied_nodes(self):
         """Should compute average PKR of community nodes."""
         # Setup community
-        community = Community(
-            id="comm1",
-            name="Python",
+        community = Community(id="comm1", name="Python", project_ids={"test_project_1"},
             node_importance_overrides={
-                "python": 5.0,
-                "variables": 5.0,
-                "functions": 5.0,
+                "test_project_1": {
+                    "python": 5.0,
+                    "variables": 5.0,
+                    "functions": 5.0,
+                }
             }
         )
         
@@ -558,19 +573,19 @@ class TestUserProgress:
             "functions": create_test_user_state("functions", pkr=0.7),
         }
         
-        progress = compute_user_progress_in_community(user_states, community)
+        progress = compute_user_progress_in_community(user_states, community, "test_project_1")
         
         # Average: (0.8 + 0.6 + 0.7) / 3 = 0.7
         assert progress == pytest.approx(0.7, abs=0.001)
     
     def test_compute_progress_with_unstudied_nodes(self):
         """Should treat unstudied nodes as 0.0 PKR."""
-        community = Community(
-            id="comm1",
-            name="Test",
+        community = Community(id="comm1", name="Test", project_ids={"test_project_1"},
             node_importance_overrides={
-                "node1": 5.0,
-                "node2": 5.0,
+                "test_project_1": {
+                    "node1": 5.0,
+                    "node2": 5.0,
+                }
             }
         )
         
@@ -579,31 +594,29 @@ class TestUserProgress:
             "node1": create_test_user_state("node1", pkr=0.8),
         }
         
-        progress = compute_user_progress_in_community(user_states, community)
+        progress = compute_user_progress_in_community(user_states, community, "test_project_1")
         
         # Average: (0.8 + 0.0) / 2 = 0.4
         assert progress == pytest.approx(0.4, abs=0.001)
     
     def test_compute_progress_empty_community(self):
         """Should return 0.0 for community with no overrides."""
-        community = Community(id="comm1", name="Empty")
+        community = Community(id="comm1", name="Empty", project_ids={"test_project_1"})
         user_states = {
             "node1": create_test_user_state("node1", pkr=0.8),
         }
         
-        progress = compute_user_progress_in_community(user_states, community)
+        progress = compute_user_progress_in_community(user_states, community, "test_project_1")
         
         assert progress == 0.0
     
     def test_compute_progress_no_user_states(self):
         """Should return 0.0 when user has no states."""
-        community = Community(
-            id="comm1",
-            name="Test",
-            node_importance_overrides={"node1": 5.0}
+        community = Community(id="comm1", name="Test", project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0}}
         )
         
-        progress = compute_user_progress_in_community({}, community)
+        progress = compute_user_progress_in_community({}, community, "test_project_1")
         
         assert progress == 0.0
 
@@ -613,12 +626,12 @@ class TestLeaderboard:
     
     def test_compute_leaderboard_sorts_descending(self):
         """Should sort users by progress descending."""
-        community = Community(
-            id="comm1",
-            name="Python",
+        community = Community(id="comm1", name="Python", project_ids={"test_project_1"},
             node_importance_overrides={
-                "python": 5.0,
-                "variables": 5.0,
+                "test_project_1": {
+                    "python": 5.0,
+                    "variables": 5.0,
+                }
             }
         )
         
@@ -638,7 +651,7 @@ class TestLeaderboard:
             },
         }
         
-        leaderboard = compute_leaderboard(users_states, community)
+        leaderboard = compute_leaderboard(users_states, community, "test_project_1")
         
         # Should be sorted: user1 (0.85), user3 (0.7), user2 (0.55)
         assert len(leaderboard) == 3
@@ -651,10 +664,8 @@ class TestLeaderboard:
     
     def test_leaderboard_with_tied_scores(self):
         """Should use user_id for deterministic tie-breaking."""
-        community = Community(
-            id="comm1",
-            name="Test",
-            node_importance_overrides={"node1": 5.0}
+        community = Community(id="comm1", name="Test", project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0}}
         )
         
         # Two users with same score
@@ -667,7 +678,7 @@ class TestLeaderboard:
             },
         }
         
-        leaderboard = compute_leaderboard(users_states, community)
+        leaderboard = compute_leaderboard(users_states, community, "test_project_1")
         
         # Both have 0.5, should be sorted by user_id
         assert leaderboard[0][0] == "userA"
@@ -675,13 +686,11 @@ class TestLeaderboard:
     
     def test_leaderboard_empty_users(self):
         """Should return empty list for no users."""
-        community = Community(
-            id="comm1",
-            name="Test",
-            node_importance_overrides={"node1": 5.0}
+        community = Community(id="comm1", name="Test", project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0}}
         )
         
-        leaderboard = compute_leaderboard({}, community)
+        leaderboard = compute_leaderboard({}, community, "test_project_1")
         
         assert leaderboard == []
 
@@ -697,32 +706,28 @@ class TestCommunityIntegration:
     def test_full_community_workflow(self):
         """Should handle complete community workflow."""
         # 1. Create graph
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         for node_id in ["python", "variables", "functions", "loops"]:
             graph.add_node(create_test_node(node_id, importance=1.0))
         
-        graph.add_edge(Edge(
-            from_node_id="python",
-            to_node_id="variables",
+        graph.add_edge(Edge(from_node_id="python", to_node_id="variables", project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0,
         ))
-        graph.add_edge(Edge(
-            from_node_id="variables",
-            to_node_id="functions",
+        graph.add_edge(Edge(from_node_id="variables", to_node_id="functions", project_id="test_project_1",
             type=EdgeType.PREREQUISITE,
             weight=1.0,
         ))
         
         # 2. Create Python-focused community
-        community = Community(
-            id="python_community",
-            name="Python Learners",
+        community = Community(id="python_community", name="Python Learners", project_ids={"test_project_1"},
             description="Focus on Python fundamentals",
             node_importance_overrides={
-                "python": 10.0,
-                "variables": 8.0,
-                "functions": 7.0,
+                "test_project_1": {
+                    "python": 10.0,
+                    "variables": 8.0,
+                    "functions": 7.0,
+                }
             }
         )
         
@@ -742,7 +747,7 @@ class TestCommunityIntegration:
         context = CommunityContext(community, bank, graph)
         
         # Verify filtering
-        relevant = context.filter_questions()
+        relevant = context.filter_questions("test_project_1")
         relevant_ids = {q.id for q in relevant}
         assert "q1" in relevant_ids
         assert "q2" in relevant_ids
@@ -766,8 +771,8 @@ class TestCommunityIntegration:
         }
         
         # 6. Compute progress
-        user1_progress = compute_user_progress_in_community(user1_states, community)
-        user2_progress = compute_user_progress_in_community(user2_states, community)
+        user1_progress = compute_user_progress_in_community(user1_states, community, "test_project_1")
+        user2_progress = compute_user_progress_in_community(user2_states, community, "test_project_1")
         
         assert user1_progress > user2_progress
         
@@ -775,6 +780,7 @@ class TestCommunityIntegration:
         leaderboard = compute_leaderboard(
             {"user1": user1_states, "user2": user2_states},
             community,
+            "test_project_1",
         )
         
         assert leaderboard[0][0] == "user1"
@@ -796,6 +802,7 @@ class TestCommunityIntegration:
         
         question = select_next_question_for_community(
             community=community,
+            project_id="test_project_1",
             ranking_engine=engine,
             clusters=clusters,
             question_bank=bank,
@@ -822,10 +829,8 @@ class TestCommunityIntegration:
 
     def test_multiple_users_same_community(self):
         """Should handle multiple users in the same community."""
-        community = Community(
-            id="comm1",
-            name="Shared",
-            node_importance_overrides={"node1": 5.0}
+        community = Community(id="comm1", name="Shared", project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0}}
         )
         
         user1_states = {"node1": create_test_user_state("node1", "user1", pkr=0.9)}
@@ -834,6 +839,7 @@ class TestCommunityIntegration:
         leaderboard = compute_leaderboard(
             {"user1": user1_states, "user2": user2_states},
             community,
+            "test_project_1",
         )
         
         assert leaderboard[0][0] == "user1"

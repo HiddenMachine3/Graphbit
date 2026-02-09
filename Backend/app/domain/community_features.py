@@ -94,42 +94,54 @@ class CommunityContext:
     
     def get_effective_importance(
         self,
+        project_id: str,
         node_id: str,
         base_importance: float,
     ) -> float:
         """
-        Get effective importance for a node in this community.
+        Get effective importance for a node in this community within a project.
         
         Uses community override if present, otherwise falls back
         to base importance.
         
         Args:
+            project_id: ID of the project
             node_id: ID of the node
             base_importance: Default importance value
             
         Returns:
-            Effective importance for this community
+            Effective importance for this community in this project
         """
-        if node_id in self.community.node_importance_overrides:
-            return self.community.node_importance_overrides[node_id]
+        project_overrides = self.community.node_importance_overrides.get(project_id, {})
+        if node_id in project_overrides:
+            return project_overrides[node_id]
         return base_importance
     
-    def filter_questions(self) -> list[Question]:
+    def filter_questions(self, project_id: str) -> list[Question]:
         """
-        Return only questions relevant to this community.
+        Return only questions relevant to this community in a specific project.
         
-        A question is relevant if at least one of its covered nodes
-        has a community importance override (indicating community interest).
+        A question is relevant if:
+        1. It belongs to the specified project
+        2. At least one of its covered nodes has a community importance override
+        
+        Args:
+            project_id: ID of the project to filter by
         
         Returns:
-            List of community-relevant questions
+            List of community-relevant questions in the project
         """
         relevant_questions = []
+        project_overrides = self.community.node_importance_overrides.get(project_id, {})
         
         for question in self.question_bank.questions.values():
+            # Check if question belongs to this project
+            if question.project_id != project_id:
+                continue
+            
             # Check if any covered node has community override
             for node_id in question.covered_node_ids:
-                if node_id in self.community.node_importance_overrides:
+                if node_id in project_overrides:
                     relevant_questions.append(question)
                     break  # Only add once per question
         
@@ -143,6 +155,7 @@ class CommunityContext:
 
 def select_next_question_for_community(
     community: Community,
+    project_id: str,
     ranking_engine: QuestionRankingEngine,
     clusters: list[Cluster],
     question_bank: QuestionBank,
@@ -151,13 +164,14 @@ def select_next_question_for_community(
     now: datetime,
 ) -> Optional[Question]:
     """
-    Select next question for a user in a community context.
+    Select next question for a user in a community context within a project.
     
     Applies community importance overrides and filters questions
-    to community scope, then delegates ranking to Phase 6 engine.
+    to community scope within the project, then delegates ranking to Phase 6 engine.
     
     Args:
         community: The community providing context
+        project_id: The project context
         ranking_engine: Phase 6 ranking engine
         clusters: Weak node clusters
         question_bank: Available questions
@@ -168,7 +182,7 @@ def select_next_question_for_community(
     Returns:
         Selected question, or None if no suitable question found
     """
-    # Build importance lookup with community overrides
+    # Build importance lookup with community overrides for this project
     importance_lookup: dict[str, float] = {}
     graph = getattr(ranking_engine, "graph", None)
     if graph is not None:
@@ -178,16 +192,18 @@ def select_next_question_for_community(
         for node_id in user_node_states.keys():
             importance_lookup[node_id] = 1.0
     
-    for node_id, override in community.node_importance_overrides.items():
+    # Apply community overrides for this project
+    project_overrides = community.node_importance_overrides.get(project_id, {})
+    for node_id, override in project_overrides.items():
         importance_lookup[node_id] = override
     
-    # Filter questions to community scope (intersection with overrides)
-    if not community.node_importance_overrides:
+    # Filter questions to community scope within project
+    if not project_overrides:
         return None
     
     relevant_questions = [
         q for q in question_bank.questions.values()
-        if any(node_id in community.node_importance_overrides for node_id in q.covered_node_ids)
+        if q.project_id == project_id and any(node_id in project_overrides for node_id in q.covered_node_ids)
     ]
     
     # If no relevant questions, return None
@@ -219,21 +235,24 @@ def select_next_question_for_community(
 def compute_user_progress_in_community(
     user_node_states: dict[str, UserNodeState],
     community: Community,
+    project_id: str,
 ) -> float:
     """
-    Compute user's learning progress in community context.
+    Compute user's learning progress in community context within a project.
     
     Progress is the average PKR of all nodes with community
-    importance overrides (community-relevant nodes).
+    importance overrides (community-relevant nodes) in the project.
     
     Args:
         user_node_states: User's knowledge states
         community: Community defining scope
+        project_id: Project context
         
     Returns:
         Average PKR (0.0 to 1.0), or 0.0 if no relevant nodes
     """
-    relevant_node_ids = set(community.node_importance_overrides.keys())
+    project_overrides = community.node_importance_overrides.get(project_id, {})
+    relevant_node_ids = set(project_overrides.keys())
     
     if not relevant_node_ids:
         return 0.0
@@ -256,24 +275,26 @@ def compute_user_progress_in_community(
 def compute_leaderboard(
     users_node_states: dict[str, dict[str, UserNodeState]],
     community: Community,
+    project_id: str,
 ) -> list[tuple[str, float]]:
     """
-    Compute community leaderboard.
+    Compute community leaderboard for a specific project.
     
-    Ranks users by their progress in community-relevant content.
+    Ranks users by their progress in community-relevant content within the project.
     
     Args:
         users_node_states: Mapping of user_id to their node states
         community: Community defining scope
+        project_id: Project context
         
     Returns:
         List of (user_id, score) tuples, sorted descending by score.
-        Score is average PKR of community-relevant nodes.
+        Score is average PKR of community-relevant nodes in the project.
     """
     leaderboard: list[tuple[str, float]] = []
     
     for user_id, node_states in users_node_states.items():
-        score = compute_user_progress_in_community(node_states, community)
+        score = compute_user_progress_in_community(node_states, community, project_id)
         leaderboard.append((user_id, score))
     
     # Sort descending by score, then by user_id for determinism

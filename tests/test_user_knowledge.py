@@ -32,6 +32,7 @@ class TestUserNodeStateCreation:
         state = UserNodeState(
             user_id="user1",
             node_id="node1",
+            project_id="test_project_1",
             proven_knowledge_rating=0.5,
             review_count=3,
             last_reviewed_at=datetime.now(),
@@ -47,7 +48,7 @@ class TestUserNodeStateCreation:
     
     def test_create_with_defaults(self):
         """Should create state with default values."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         
         assert state.proven_knowledge_rating == 0.0
         assert state.review_count == 0
@@ -57,33 +58,33 @@ class TestUserNodeStateCreation:
     def test_user_id_cannot_be_empty(self):
         """Should reject empty user_id."""
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="", node_id="node1")
+            UserNodeState(user_id="", node_id="node1", project_id="test_project_1")
     
     def test_node_id_cannot_be_empty(self):
         """Should reject empty node_id."""
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="user1", node_id="")
+            UserNodeState(user_id="user1", node_id="", project_id="test_project_1")
     
     def test_pkr_must_be_in_range(self):
         """Should reject PKR outside [0, 1]."""
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=1.5)
+            UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=1.5)
         
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=-0.1)
+            UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=-0.1)
     
     def test_review_count_cannot_be_negative(self):
         """Should reject negative review_count."""
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="user1", node_id="node1", review_count=-1)
+            UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", review_count=-1)
     
     def test_stability_must_be_positive(self):
         """Should reject non-positive stability."""
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="user1", node_id="node1", stability=0)
+            UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", stability=0)
         
         with pytest.raises(ValidationError):
-            UserNodeState(user_id="user1", node_id="node1", stability=-1.5)
+            UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", stability=-1.5)
 
 
 # ============================================================
@@ -96,7 +97,7 @@ class TestReviewUpdates:
     
     def test_record_success_increases_pkr(self):
         """Should increase PKR on success."""
-        state = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.5)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.5)
         original_pkr = state.proven_knowledge_rating
         
         state.record_success(datetime.now())
@@ -106,7 +107,7 @@ class TestReviewUpdates:
     
     def test_record_success_increases_stability(self):
         """Should increase stability on success."""
-        state = UserNodeState(user_id="user1", node_id="node1", stability=2.0)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", stability=2.0)
         original_stability = state.stability
         
         state.record_success(datetime.now())
@@ -116,7 +117,7 @@ class TestReviewUpdates:
     
     def test_record_success_increments_review_count(self):
         """Should increment review count on success."""
-        state = UserNodeState(user_id="user1", node_id="node1", review_count=5)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", review_count=5)
         
         state.record_success(datetime.now())
         
@@ -124,7 +125,7 @@ class TestReviewUpdates:
     
     def test_record_success_updates_timestamp(self):
         """Should update last_reviewed_at on success."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         timestamp = datetime.now()
         
         state.record_success(timestamp)
@@ -133,7 +134,7 @@ class TestReviewUpdates:
     
     def test_record_success_respects_pkr_ceiling(self):
         """Should not exceed PKR of 1.0."""
-        state = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.99)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.99)
         
         state.record_success(datetime.now())
         
@@ -141,8 +142,8 @@ class TestReviewUpdates:
     
     def test_record_success_diminishing_returns(self):
         """Should have diminishing returns on PKR as it approaches 1.0."""
-        state1 = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.2)
-        state2 = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.8)
+        state1 = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.2)
+        state2 = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.8)
         
         pkr1_before = state1.proven_knowledge_rating
         pkr2_before = state2.proven_knowledge_rating
@@ -158,7 +159,7 @@ class TestReviewUpdates:
     
     def test_record_success_respects_stability_ceiling(self):
         """Should not exceed max stability."""
-        state = UserNodeState(user_id="user1", node_id="node1", stability=MAX_STABILITY - 0.1)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", stability=MAX_STABILITY - 0.1)
         
         state.record_success(datetime.now())
         
@@ -166,7 +167,7 @@ class TestReviewUpdates:
     
     def test_record_failure_decreases_pkr(self):
         """Should decrease PKR on failure."""
-        state = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.5)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.5)
         original_pkr = state.proven_knowledge_rating
         
         state.record_failure(datetime.now())
@@ -176,7 +177,7 @@ class TestReviewUpdates:
     
     def test_record_failure_decreases_stability(self):
         """Should decrease stability on failure."""
-        state = UserNodeState(user_id="user1", node_id="node1", stability=2.0)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", stability=2.0)
         original_stability = state.stability
         
         state.record_failure(datetime.now())
@@ -186,7 +187,7 @@ class TestReviewUpdates:
     
     def test_record_failure_increments_review_count(self):
         """Should increment review count on failure."""
-        state = UserNodeState(user_id="user1", node_id="node1", review_count=5)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", review_count=5)
         
         state.record_failure(datetime.now())
         
@@ -194,7 +195,7 @@ class TestReviewUpdates:
     
     def test_record_failure_updates_timestamp(self):
         """Should update last_reviewed_at on failure."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         timestamp = datetime.now()
         
         state.record_failure(timestamp)
@@ -203,7 +204,7 @@ class TestReviewUpdates:
     
     def test_record_failure_respects_pkr_floor(self):
         """Should not go below PKR of 0.0."""
-        state = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.01)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.01)
         
         state.record_failure(datetime.now())
         
@@ -211,7 +212,7 @@ class TestReviewUpdates:
     
     def test_record_failure_respects_stability_floor(self):
         """Should not go below min stability."""
-        state = UserNodeState(user_id="user1", node_id="node1", stability=MIN_STABILITY + 0.01)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", stability=MIN_STABILITY + 0.01)
         
         state.record_failure(datetime.now())
         
@@ -219,7 +220,7 @@ class TestReviewUpdates:
     
     def test_multiple_successes(self):
         """Should handle multiple consecutive successes."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         
         for i in range(5):
             state.record_success(datetime.now() + timedelta(days=i))
@@ -230,7 +231,7 @@ class TestReviewUpdates:
     
     def test_multiple_failures(self):
         """Should handle multiple consecutive failures."""
-        state = UserNodeState(user_id="user1", node_id="node1", proven_knowledge_rating=0.8)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", proven_knowledge_rating=0.8)
         
         for i in range(5):
             state.record_failure(datetime.now() + timedelta(days=i))
@@ -240,7 +241,7 @@ class TestReviewUpdates:
     
     def test_mixed_reviews(self):
         """Should handle mixed successes and failures."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         
         state.record_success(datetime.now())
         state.record_success(datetime.now() + timedelta(days=1))
@@ -262,7 +263,7 @@ class TestForgettingScore:
     
     def test_never_reviewed_maximum_forgetting(self):
         """Should return 1.0 if never reviewed."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         
         score = state.forgetting_score(datetime.now())
         
@@ -271,7 +272,7 @@ class TestForgettingScore:
     def test_just_reviewed_minimal_forgetting(self):
         """Should return ~0.0 if just reviewed."""
         now = datetime.now()
-        state = UserNodeState(user_id="user1", node_id="node1", last_reviewed_at=now)
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", last_reviewed_at=now)
         
         score = state.forgetting_score(now)
         
@@ -280,7 +281,7 @@ class TestForgettingScore:
     def test_forgetting_increases_over_time(self):
         """Should increase as time passes."""
         now = datetime.now()
-        state = UserNodeState(user_id="user1", node_id="node1", last_reviewed_at=now - timedelta(days=1))
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1", last_reviewed_at=now - timedelta(days=1))
         
         score_1_day = state.forgetting_score(now)
         
@@ -297,16 +298,12 @@ class TestForgettingScore:
         now = datetime.now()
         review_time = now - timedelta(days=7)
         
-        state_low = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state_low = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             stability=1.0,
             last_reviewed_at=review_time
         )
         
-        state_high = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state_high = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             stability=5.0,
             last_reviewed_at=review_time
         )
@@ -320,9 +317,7 @@ class TestForgettingScore:
     def test_forgetting_bounded_by_one(self):
         """Should never exceed 1.0."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             stability=0.5,
             last_reviewed_at=now - timedelta(days=365)
         )
@@ -334,9 +329,7 @@ class TestForgettingScore:
     def test_forgetting_bounded_by_zero(self):
         """Should never be negative."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             last_reviewed_at=now
         )
         
@@ -347,9 +340,7 @@ class TestForgettingScore:
     def test_forgetting_deterministic(self):
         """Should return same result for same inputs."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             stability=2.0,
             last_reviewed_at=now - timedelta(days=5)
         )
@@ -371,16 +362,12 @@ class TestWeaknessScore:
     def test_low_pkr_high_weakness(self):
         """Should have high weakness when PKR is low."""
         now = datetime.now()
-        state_low = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state_low = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.1,
             last_reviewed_at=now
         )
         
-        state_high = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state_high = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.9,
             last_reviewed_at=now
         )
@@ -394,16 +381,12 @@ class TestWeaknessScore:
         """Should have high weakness when forgetting is high."""
         now = datetime.now()
         
-        state_recent = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state_recent = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.5,
             last_reviewed_at=now - timedelta(days=1)
         )
         
-        state_old = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state_old = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.5,
             last_reviewed_at=now - timedelta(days=30)
         )
@@ -416,9 +399,7 @@ class TestWeaknessScore:
     def test_importance_amplifies_weakness(self):
         """Should have higher weakness with higher importance."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.5,
             last_reviewed_at=now - timedelta(days=7)
         )
@@ -431,7 +412,7 @@ class TestWeaknessScore:
     def test_never_reviewed_high_weakness(self):
         """Should have high weakness when never reviewed."""
         now = datetime.now()
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         
         weakness = state.weakness_score(now, importance=5.0)
         
@@ -441,9 +422,7 @@ class TestWeaknessScore:
     def test_well_learned_recently_low_weakness(self):
         """Should have low weakness when well-learned and recent."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.9,
             last_reviewed_at=now - timedelta(hours=1)
         )
@@ -456,9 +435,7 @@ class TestWeaknessScore:
     def test_weakness_deterministic(self):
         """Should return same result for same inputs."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.6,
             stability=2.0,
             last_reviewed_at=now - timedelta(days=5)
@@ -472,9 +449,7 @@ class TestWeaknessScore:
     def test_weakness_with_zero_importance(self):
         """Should handle zero importance."""
         now = datetime.now()
-        state = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.5,
             last_reviewed_at=now - timedelta(days=7)
         )
@@ -487,7 +462,7 @@ class TestWeaknessScore:
     def test_weakness_negative_importance_error(self):
         """Should raise error for negative importance."""
         now = datetime.now()
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         
         with pytest.raises(ValueError, match="must be >= 0"):
             state.weakness_score(now, importance=-1.0)
@@ -497,17 +472,13 @@ class TestWeaknessScore:
         now = datetime.now()
         
         # Scenario 1: Low PKR, recent review, high importance
-        state1 = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state1 = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.2,
             last_reviewed_at=now - timedelta(days=1)
         )
         
         # Scenario 2: High PKR, old review, low importance
-        state2 = UserNodeState(
-            user_id="user1",
-            node_id="node1",
+        state2 = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1",
             proven_knowledge_rating=0.8,
             last_reviewed_at=now - timedelta(days=30)
         )
@@ -530,7 +501,7 @@ class TestIntegration:
     
     def test_learning_progression(self):
         """Should model realistic learning progression."""
-        state = UserNodeState(user_id="user1", node_id="python_basics")
+        state = UserNodeState(user_id="user1", node_id="python_basics", project_id="test_project_1")
         now = datetime.now()
         
         # Initial state: never reviewed
@@ -552,7 +523,7 @@ class TestIntegration:
     
     def test_forgetting_and_relearning(self):
         """Should model forgetting and relearning cycle."""
-        state = UserNodeState(user_id="user1", node_id="node1")
+        state = UserNodeState(user_id="user1", node_id="node1", project_id="test_project_1")
         now = datetime.now()
         
         # Learn initially
@@ -579,8 +550,8 @@ class TestIntegration:
         node_id = "algorithms"
         now = datetime.now()
         
-        user1_state = UserNodeState(user_id="user1", node_id=node_id)
-        user2_state = UserNodeState(user_id="user2", node_id=node_id)
+        user1_state = UserNodeState(user_id="user1", node_id=node_id, project_id="test_project_1")
+        user2_state = UserNodeState(user_id="user2", node_id=node_id, project_id="test_project_1")
         
         # User 1 learns well
         for _ in range(5):

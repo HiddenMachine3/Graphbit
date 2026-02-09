@@ -43,6 +43,7 @@ def create_question(question_id="q1", **kwargs):
     
     defaults = {
         "id": question_id,
+        "project_id": "test_project_1",
         "text": "Test question",
         "answer": "Test answer",
         "question_type": QuestionType.FLASHCARD,
@@ -58,6 +59,7 @@ def create_edge(from_id, to_id, edge_type=EdgeType.PREREQUISITE, weight=1.0):
     return Edge(
         from_node_id=from_id,
         to_node_id=to_id,
+        project_id="test_project_1",
         type=edge_type,
         weight=weight,
     )
@@ -226,8 +228,8 @@ class TestCoverageValidation:
     
     def test_add_question_with_valid_single_node(self):
         """Should accept question covering single existing node."""
-        graph = Graph()
-        graph.add_node(Node(id="python", topic_name="Python"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="python", project_id="test_project_1", topic_name="Python"))
         
         bank = QuestionBank()
         q = create_question(covered_node_ids=["python"])
@@ -237,8 +239,8 @@ class TestCoverageValidation:
     
     def test_add_question_with_nonexistent_node_raises_error(self):
         """Should reject question covering nonexistent node."""
-        graph = Graph()
-        graph.add_node(Node(id="python", topic_name="Python"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="python", project_id="test_project_1", topic_name="Python"))
         
         bank = QuestionBank()
         q = create_question(covered_node_ids=["java"])
@@ -248,9 +250,9 @@ class TestCoverageValidation:
     
     def test_add_question_with_valid_coverage(self):
         """Should accept question with valid multi-node coverage."""
-        graph = Graph()
-        graph.add_node(Node(id="python", topic_name="Python"))
-        graph.add_node(Node(id="variables", topic_name="Variables"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="python", project_id="test_project_1", topic_name="Python"))
+        graph.add_node(Node(id="variables", project_id="test_project_1", topic_name="Variables"))
         graph.add_edge(create_edge("python", "variables"))
         
         bank = QuestionBank()
@@ -261,9 +263,9 @@ class TestCoverageValidation:
     
     def test_add_question_with_invalid_coverage_raises_error(self):
         """Should reject question with disconnected coverage."""
-        graph = Graph()
-        graph.add_node(Node(id="python", topic_name="Python"))
-        graph.add_node(Node(id="java", topic_name="Java"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="python", project_id="test_project_1", topic_name="Python"))
+        graph.add_node(Node(id="java", project_id="test_project_1", topic_name="Java"))
         # No edge between them
         
         bank = QuestionBank()
@@ -445,11 +447,11 @@ class TestQuestionBankIntegration:
     def test_build_python_learning_question_bank(self):
         """Should build complete question bank for Python learning."""
         # Build graph
-        graph = Graph()
-        graph.add_node(Node(id="python", topic_name="Python Basics"))
-        graph.add_node(Node(id="variables", topic_name="Variables"))
-        graph.add_node(Node(id="functions", topic_name="Functions"))
-        graph.add_node(Node(id="classes", topic_name="Classes"))
+        graph = Graph(project_id="test_project_1")
+        graph.add_node(Node(id="python", project_id="test_project_1", topic_name="Python Basics"))
+        graph.add_node(Node(id="variables", project_id="test_project_1", topic_name="Variables"))
+        graph.add_node(Node(id="functions", project_id="test_project_1", topic_name="Functions"))
+        graph.add_node(Node(id="classes", project_id="test_project_1", topic_name="Classes"))
         
         graph.add_edge(create_edge("python", "variables"))
         graph.add_edge(create_edge("variables", "functions"))

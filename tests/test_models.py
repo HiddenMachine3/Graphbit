@@ -34,6 +34,7 @@ class TestNode:
         """Test creating a node with valid data."""
         node = Node(
             id="node1",
+            project_id="test_project_1",
             topic_name="Python Basics",
             proven_knowledge_rating=0.7,
             user_estimated_knowledge_rating=0.8,
@@ -52,7 +53,7 @@ class TestNode:
     
     def test_node_with_defaults(self):
         """Test node creation with default values."""
-        node = Node(id="node1", topic_name="Topic")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic")
         
         assert node.proven_knowledge_rating == 0.0
         assert node.user_estimated_knowledge_rating == 0.0
@@ -63,53 +64,53 @@ class TestNode:
     def test_node_id_cannot_be_empty(self):
         """Test that node ID must be non-empty."""
         with pytest.raises(ValidationError):
-            Node(id="", topic_name="Topic")
+            Node(id="", project_id="test_project_1", topic_name="Topic")
     
     def test_node_topic_name_cannot_be_empty(self):
         """Test that topic name must be non-empty."""
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="")
+            Node(id="node1", project_id="test_project_1", topic_name="")
     
     def test_proven_rating_must_be_in_range(self):
         """Test proven rating must be between 0 and 1."""
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", proven_knowledge_rating=1.5)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", proven_knowledge_rating=1.5)
         
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", proven_knowledge_rating=-0.1)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", proven_knowledge_rating=-0.1)
     
     def test_user_estimated_rating_must_be_in_range(self):
         """Test user estimated rating must be between 0 and 1."""
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", user_estimated_knowledge_rating=1.5)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", user_estimated_knowledge_rating=1.5)
         
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", user_estimated_knowledge_rating=-0.1)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", user_estimated_knowledge_rating=-0.1)
     
     def test_importance_cannot_be_negative(self):
         """Test importance must be non-negative."""
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", importance=-1.0)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", importance=-1.0)
     
     def test_relevance_cannot_be_negative(self):
         """Test relevance must be non-negative."""
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", relevance=-1.0)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", relevance=-1.0)
     
     def test_view_frequency_cannot_be_negative(self):
         """Test view frequency must be non-negative."""
         with pytest.raises(ValidationError):
-            Node(id="node1", topic_name="Topic", view_frequency=-1)
+            Node(id="node1", project_id="test_project_1", topic_name="Topic", view_frequency=-1)
     
     def test_update_proven_rating_valid(self):
         """Test safely updating proven rating."""
-        node = Node(id="node1", topic_name="Topic")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic")
         node.update_proven_rating(0.9)
         assert node.proven_knowledge_rating == 0.9
     
     def test_update_proven_rating_invalid(self):
         """Test updating proven rating with invalid value."""
-        node = Node(id="node1", topic_name="Topic")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic")
         
         with pytest.raises(ValueError):
             node.update_proven_rating(1.5)
@@ -119,13 +120,13 @@ class TestNode:
     
     def test_update_user_estimated_rating_valid(self):
         """Test safely updating user estimated rating."""
-        node = Node(id="node1", topic_name="Topic")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic")
         node.update_user_estimated_rating(0.6)
         assert node.user_estimated_knowledge_rating == 0.6
     
     def test_update_user_estimated_rating_invalid(self):
         """Test updating user estimated rating with invalid value."""
-        node = Node(id="node1", topic_name="Topic")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic")
         
         with pytest.raises(ValueError):
             node.update_user_estimated_rating(2.0)
@@ -135,7 +136,7 @@ class TestNode:
     
     def test_increment_view_frequency(self):
         """Test incrementing view frequency."""
-        node = Node(id="node1", topic_name="Topic", view_frequency=5)
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic", view_frequency=5)
         node.increment_view_frequency()
         assert node.view_frequency == 6
         
@@ -156,6 +157,7 @@ class TestEdge:
         edge = Edge(
             from_node_id="node1",
             to_node_id="node2",
+            project_id="test_project_1",
             weight=0.8,
             type=EdgeType.PREREQUISITE,
         )
@@ -171,6 +173,7 @@ class TestEdge:
             edge = Edge(
                 from_node_id="node1",
                 to_node_id="node2",
+                project_id="test_project_1",
                 weight=0.5,
                 type=edge_type,
             )
@@ -182,6 +185,7 @@ class TestEdge:
             Edge(
                 from_node_id="node1",
                 to_node_id="node2",
+                project_id="test_project_1",
                 weight=1.5,
                 type=EdgeType.DEPENDS_ON,
             )
@@ -190,6 +194,7 @@ class TestEdge:
             Edge(
                 from_node_id="node1",
                 to_node_id="node2",
+                project_id="test_project_1",
                 weight=-0.1,
                 type=EdgeType.DEPENDS_ON,
             )
@@ -200,6 +205,7 @@ class TestEdge:
             Edge(
                 from_node_id="node1",
                 to_node_id="node1",
+                project_id="test_project_1",
                 weight=0.5,
                 type=EdgeType.APPLIED_WITH,
             )
@@ -215,14 +221,14 @@ class TestGraph:
     
     def test_create_empty_graph(self):
         """Test creating an empty graph."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         assert len(graph.nodes) == 0
         assert len(graph.edges) == 0
     
     def test_add_node(self):
         """Test adding a node to the graph."""
-        graph = Graph()
-        node = Node(id="node1", topic_name="Topic 1")
+        graph = Graph(project_id="test_project_1")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
         
         graph.add_node(node)
         assert "node1" in graph.nodes
@@ -230,9 +236,9 @@ class TestGraph:
     
     def test_add_duplicate_node(self):
         """Test that adding duplicate node raises error."""
-        graph = Graph()
-        node1 = Node(id="node1", topic_name="Topic 1")
-        node2 = Node(id="node1", topic_name="Topic 2")
+        graph = Graph(project_id="test_project_1")
+        node1 = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
+        node2 = Node(id="node1", project_id="test_project_1", topic_name="Topic 2")
         
         graph.add_node(node1)
         with pytest.raises(ValueError, match="already exists"):
@@ -240,8 +246,8 @@ class TestGraph:
     
     def test_remove_node(self):
         """Test removing a node from the graph."""
-        graph = Graph()
-        node = Node(id="node1", topic_name="Topic 1")
+        graph = Graph(project_id="test_project_1")
+        node = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
         graph.add_node(node)
         
         graph.remove_node("node1")
@@ -249,21 +255,22 @@ class TestGraph:
     
     def test_remove_nonexistent_node(self):
         """Test removing a node that doesn't exist."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         with pytest.raises(KeyError, match="not found"):
             graph.remove_node("nonexistent")
     
     def test_add_edge(self):
         """Test adding an edge to the graph."""
-        graph = Graph()
-        node1 = Node(id="node1", topic_name="Topic 1")
-        node2 = Node(id="node2", topic_name="Topic 2")
+        graph = Graph(project_id="test_project_1")
+        node1 = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
+        node2 = Node(id="node2", project_id="test_project_1", topic_name="Topic 2")
         graph.add_node(node1)
         graph.add_node(node2)
         
         edge = Edge(
             from_node_id="node1",
             to_node_id="node2",
+            project_id="test_project_1",
             weight=0.7,
             type=EdgeType.PREREQUISITE,
         )
@@ -274,13 +281,14 @@ class TestGraph:
     
     def test_add_edge_with_nonexistent_from_node(self):
         """Test adding edge with non-existent from_node."""
-        graph = Graph()
-        node2 = Node(id="node2", topic_name="Topic 2")
+        graph = Graph(project_id="test_project_1")
+        node2 = Node(id="node2", project_id="test_project_1", topic_name="Topic 2")
         graph.add_node(node2)
         
         edge = Edge(
             from_node_id="nonexistent",
             to_node_id="node2",
+            project_id="test_project_1",
             weight=0.7,
             type=EdgeType.PREREQUISITE,
         )
@@ -290,13 +298,14 @@ class TestGraph:
     
     def test_add_edge_with_nonexistent_to_node(self):
         """Test adding edge with non-existent to_node."""
-        graph = Graph()
-        node1 = Node(id="node1", topic_name="Topic 1")
+        graph = Graph(project_id="test_project_1")
+        node1 = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
         graph.add_node(node1)
         
         edge = Edge(
             from_node_id="node1",
             to_node_id="nonexistent",
+            project_id="test_project_1",
             weight=0.7,
             type=EdgeType.PREREQUISITE,
         )
@@ -306,15 +315,16 @@ class TestGraph:
     
     def test_remove_edge(self):
         """Test removing an edge from the graph."""
-        graph = Graph()
-        node1 = Node(id="node1", topic_name="Topic 1")
-        node2 = Node(id="node2", topic_name="Topic 2")
+        graph = Graph(project_id="test_project_1")
+        node1 = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
+        node2 = Node(id="node2", project_id="test_project_1", topic_name="Topic 2")
         graph.add_node(node1)
         graph.add_node(node2)
         
         edge = Edge(
             from_node_id="node1",
             to_node_id="node2",
+            project_id="test_project_1",
             weight=0.7,
             type=EdgeType.PREREQUISITE,
         )
@@ -325,16 +335,16 @@ class TestGraph:
     
     def test_remove_nonexistent_edge(self):
         """Test removing an edge that doesn't exist."""
-        graph = Graph()
+        graph = Graph(project_id="test_project_1")
         with pytest.raises(ValueError, match="No edge found"):
             graph.remove_edge("node1", "node2")
     
     def test_remove_node_removes_connected_edges(self):
         """Test that removing a node also removes its edges."""
-        graph = Graph()
-        node1 = Node(id="node1", topic_name="Topic 1")
-        node2 = Node(id="node2", topic_name="Topic 2")
-        node3 = Node(id="node3", topic_name="Topic 3")
+        graph = Graph(project_id="test_project_1")
+        node1 = Node(id="node1", project_id="test_project_1", topic_name="Topic 1")
+        node2 = Node(id="node2", project_id="test_project_1", topic_name="Topic 2")
+        node3 = Node(id="node3", project_id="test_project_1", topic_name="Topic 3")
         graph.add_node(node1)
         graph.add_node(node2)
         graph.add_node(node3)
@@ -342,18 +352,21 @@ class TestGraph:
         edge1 = Edge(
             from_node_id="node1",
             to_node_id="node2",
+            project_id="test_project_1",
             weight=0.7,
             type=EdgeType.PREREQUISITE,
         )
         edge2 = Edge(
             from_node_id="node2",
             to_node_id="node3",
+            project_id="test_project_1",
             weight=0.5,
             type=EdgeType.DEPENDS_ON,
         )
         edge3 = Edge(
             from_node_id="node1",
             to_node_id="node3",
+            project_id="test_project_1",
             weight=0.3,
             type=EdgeType.APPLIED_WITH,
         )
@@ -389,6 +402,7 @@ class TestQuestion:
         
         question = Question(
             id="q1",
+            project_id="test_project_1",
             text="What is Python?",
             answer="A programming language",
             question_type=QuestionType.FLASHCARD,
@@ -416,6 +430,7 @@ class TestQuestion:
         with pytest.raises(ValidationError):
             Question(
                 id="q1",
+                project_id="test_project_1",
                 text="What is Python?",
                 answer="A programming language",
                 question_type=QuestionType.FLASHCARD,
@@ -460,8 +475,7 @@ class TestQuestion:
             misses=2,
         )
         
-        question = Question(
-            id="q1",
+        question = Question(id="q1", project_id="test_project_1",
             text="What is Python?",
             answer="A programming language",
             question_type=QuestionType.FLASHCARD,
@@ -483,8 +497,7 @@ class TestQuestion:
             misses=2,
         )
         
-        question = Question(
-            id="q1",
+        question = Question(id="q1", project_id="test_project_1",
             text="What is Python?",
             answer="A programming language",
             question_type=QuestionType.FLASHCARD,
@@ -506,8 +519,7 @@ class TestQuestion:
             misses=2,
         )
         
-        question = Question(
-            id="q1",
+        question = Question(id="q1", project_id="test_project_1",
             text="What is Python?",
             answer="A programming language",
             question_type=QuestionType.FLASHCARD,
@@ -527,8 +539,7 @@ class TestQuestion:
             misses=0,
         )
         
-        question = Question(
-            id="q1",
+        question = Question(id="q1", project_id="test_project_1",
             text="What is Python?",
             answer="A programming language",
             question_type=QuestionType.FLASHCARD,
@@ -549,6 +560,7 @@ class TestQuestion:
         for question_type in QuestionType:
             question = Question(
                 id=f"q_{question_type}",
+                project_id="test_project_1",
                 text="Test question",
                 answer="Test answer",
                 question_type=question_type,
@@ -568,6 +580,7 @@ class TestQuestion:
         for knowledge_type in KnowledgeType:
             question = Question(
                 id=f"q_{knowledge_type}",
+                project_id="test_project_1",
                 text="Test question",
                 answer="Test answer",
                 question_type=QuestionType.FLASHCARD,
@@ -681,19 +694,20 @@ class TestCommunity:
         community = Community(
             id="comm1",
             name="Python Learners",
+            project_ids={"test_project_1"},
             description="A community for Python enthusiasts",
-            node_importance_overrides={"node1": 10.0, "node2": 5.0},
+            node_importance_overrides={"test_project_1": {"node1": 10.0, "node2": 5.0}},
         )
         
         assert community.id == "comm1"
         assert community.name == "Python Learners"
         assert community.description == "A community for Python enthusiasts"
-        assert community.node_importance_overrides["node1"] == 10.0
-        assert community.node_importance_overrides["node2"] == 5.0
+        assert community.node_importance_overrides["test_project_1"]["node1"] == 10.0
+        assert community.node_importance_overrides["test_project_1"]["node2"] == 5.0
     
     def test_community_with_defaults(self):
         """Test community creation with default values."""
-        community = Community(id="comm1", name="Python Learners")
+        community = Community(id="comm1", name="Python Learners", project_ids={"test_project_1"})
         
         assert community.description == ""
         assert len(community.node_importance_overrides) == 0
@@ -704,56 +718,59 @@ class TestCommunity:
             Community(
                 id="comm1",
                 name="Python Learners",
-                node_importance_overrides={"node1": -5.0},
+                project_ids={"test_project_1"},
+                node_importance_overrides={"test_project_1": {"node1": -5.0}},
             )
     
     def test_set_node_importance(self):
         """Test setting node importance override."""
-        community = Community(id="comm1", name="Python Learners")
-        community.set_node_importance("node1", 8.0)
+        community = Community(id="comm1", name="Python Learners", project_ids={"test_project_1"})
+        community.set_node_importance("test_project_1", "node1", 8.0)
         
-        assert community.node_importance_overrides["node1"] == 8.0
+        assert community.node_importance_overrides["test_project_1"]["node1"] == 8.0
     
     def test_set_node_importance_negative(self):
         """Test setting negative importance raises error."""
-        community = Community(id="comm1", name="Python Learners")
+        community = Community(id="comm1", name="Python Learners", project_ids={"test_project_1"})
         
         with pytest.raises(ValueError, match="must be >= 0"):
-            community.set_node_importance("node1", -3.0)
+            community.set_node_importance("test_project_1", "node1", -3.0)
     
     def test_set_node_importance_empty_id(self):
         """Test setting importance with empty node ID raises error."""
-        community = Community(id="comm1", name="Python Learners")
+        community = Community(id="comm1", name="Python Learners", project_ids={"test_project_1"})
         
         with pytest.raises(ValueError, match="cannot be empty"):
-            community.set_node_importance("", 5.0)
+            community.set_node_importance("test_project_1", "", 5.0)
     
     def test_update_existing_node_importance(self):
         """Test updating an existing node importance override."""
         community = Community(
             id="comm1",
             name="Python Learners",
-            node_importance_overrides={"node1": 5.0},
+            project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0}},
         )
         
-        community.set_node_importance("node1", 10.0)
-        assert community.node_importance_overrides["node1"] == 10.0
+        community.set_node_importance("test_project_1", "node1", 10.0)
+        assert community.node_importance_overrides["test_project_1"]["node1"] == 10.0
     
     def test_remove_node_importance_override(self):
         """Test removing node importance override."""
         community = Community(
             id="comm1",
             name="Python Learners",
-            node_importance_overrides={"node1": 5.0, "node2": 8.0},
+            project_ids={"test_project_1"},
+            node_importance_overrides={"test_project_1": {"node1": 5.0, "node2": 8.0}},
         )
         
-        community.remove_node_importance_override("node1")
-        assert "node1" not in community.node_importance_overrides
-        assert "node2" in community.node_importance_overrides
+        community.remove_node_importance_override("test_project_1", "node1")
+        assert "node1" not in community.node_importance_overrides["test_project_1"]
+        assert "node2" in community.node_importance_overrides["test_project_1"]
     
     def test_remove_nonexistent_importance_override(self):
         """Test removing non-existent importance override raises error."""
-        community = Community(id="comm1", name="Python Learners")
+        community = Community(id="comm1", name="Python Learners", project_ids={"test_project_1"})
         
-        with pytest.raises(KeyError, match="No importance override found"):
-            community.remove_node_importance_override("node1")
+        with pytest.raises(KeyError, match="No overrides found for project"):
+            community.remove_node_importance_override("test_project_1", "node1")
