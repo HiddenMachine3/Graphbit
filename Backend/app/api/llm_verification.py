@@ -1,6 +1,7 @@
 """LLM-based answer verification using a Hugging Face reward model."""
 
 from typing import Optional
+import logging
 import os
 import asyncio
 
@@ -9,6 +10,8 @@ try:
     import httpx
 except Exception:
     httpx = None  # we'll handle fallback
+
+logger = logging.getLogger(__name__)
 
 async def verify_answer_with_llm(
     user_answer: str,
@@ -42,8 +45,11 @@ async def verify_answer_with_llm(
     """
 
     hf_token = os.getenv(hf_token_env) or os.getenv("HF_API_TOKEN")
-    if not hf_token or httpx is None:
-        # No HF token or no httpx installed: fallback to keyword matching
+    if not hf_token:
+        logger.warning("Reward model disabled: missing HF token env (%s or HF_API_TOKEN).", hf_token_env)
+        return _keyword_matching(user_answer, correct_answer)
+    if httpx is None:
+        logger.warning("Reward model disabled: httpx not installed.")
         return _keyword_matching(user_answer, correct_answer)
 
     # Build the combined input the reward model expects
@@ -57,6 +63,7 @@ async def verify_answer_with_llm(
     headers = {"Authorization": f"Bearer {hf_token}"}
 
     try:
+        logger.info("Calling HF reward model: %s", hf_model)
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(api_url, headers=headers, json={"inputs": payload_text})
             resp.raise_for_status()
@@ -92,6 +99,7 @@ async def verify_answer_with_llm(
 
         # If still None, fallback to keyword matching
         if score is None:
+            logger.warning("Reward model response had no score. Falling back to keyword matching.")
             return _keyword_matching(user_answer, correct_answer)
 
         is_correct = score >= threshold
@@ -106,20 +114,20 @@ async def verify_answer_with_llm(
             gen_id = gen_model or os.getenv("HF_GEN_MODEL")
             if gen_id:
                 try:
+                    logger.info("Calling HF generative model for explanation: %s", gen_id)
                     gen_expl = await _generate_explanation(
                         question_text, correct_answer, user_answer, gen_id, hf_token
                     )
                     # prefer the generative explanation but keep the score summary
                     explanation = f"{explanation}\n\nExplanation:\n{gen_expl.strip()}"
-                except Exception:
-                    # ignore generation errors and keep the simple explanation
+                except Exception as exc:
+                    logger.warning("HF generative explanation failed: %s", exc)
                     pass
 
         return {"correct": bool(is_correct), "score": float(score), "explanation": explanation}
 
     except Exception as e:
-        # On any failure, log (print) and fallback to keyword matching
-        print(f"Reward model verification failed: {e}; falling back to keyword matching.")
+        logger.warning("Reward model verification failed: %s; falling back to keyword matching.", e)
         return _keyword_matching(user_answer, correct_answer)
 
 
