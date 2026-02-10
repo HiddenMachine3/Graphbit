@@ -28,9 +28,11 @@ This guide will walk you through setting up the Graphbit development environment
 
 ### 1. Install Python Dependencies
 
-Navigate to the Backend directory and install the requirements:
+Install both the root and backend requirements files:
 
 ```powershell
+Set-Location 'S:\files\files\Projects\Projects\Graphbit'
+pip install -r requirements.txt
 Set-Location 'S:\files\files\Projects\Projects\Graphbit\Backend'
 pip install -r requirements.txt
 ```
