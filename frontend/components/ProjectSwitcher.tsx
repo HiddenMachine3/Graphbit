@@ -51,14 +51,14 @@ export function ProjectSwitcher() {
 
 	return (
 		<div className="flex items-center gap-2">
-			<label htmlFor="project-select" className="text-sm font-medium text-gray-700">
+			<label htmlFor="project-select" className="text-sm font-medium text-slate-300">
 				Project:
 			</label>
 			<select
 				id="project-select"
 				value={currentProjectId || ""}
 				onChange={handleProjectChange}
-				className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+				className="w-32 max-w-full truncate rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-40"
 			>
 				{projects.length === 0 ? (
 					<option value="">No projects available</option>

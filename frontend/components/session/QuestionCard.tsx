@@ -18,11 +18,11 @@ export default function QuestionCard({
   const isMCQ = question.question_type === "MCQ";
 
   return (
-    <div className="rounded border border-slate-200 bg-white p-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6">
       <div className="text-xs uppercase tracking-wide text-slate-400">
         {question.question_type}
       </div>
-      <h2 className="mt-2 text-lg font-semibold text-slate-900">
+      <h2 className="mt-2 text-lg font-semibold text-white">
         {question.text}
       </h2>
 
@@ -33,10 +33,10 @@ export default function QuestionCard({
               key={index}
               onClick={() => onOptionSelect?.(option)}
               disabled={disabled}
-              className={`w-full rounded border px-4 py-3 text-left text-sm font-medium transition-colors ${
+              className={`w-full rounded-lg border px-4 py-3 text-left text-sm font-medium transition-colors ${
                 selectedOption === option
-                  ? "border-slate-900 bg-slate-100 text-slate-900 ring-2 ring-slate-400"
-                  : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                  ? "border-blue-500/60 bg-blue-500/15 text-white ring-2 ring-blue-400/40"
+                  : "border-slate-700 bg-slate-950/35 text-slate-200 hover:border-slate-500 hover:bg-slate-900/55"
               } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <div>{option}</div>

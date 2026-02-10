@@ -62,7 +62,7 @@ export default function ActivityHeatmap({
   };
 
   const weeks = Array.from({ length: 53 }, (_, i) => i);
-  const daysOfWeek = ["Mon", "Wed", "Fri"];
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const currentStreak = useMemo(() => {
     if (streak !== null && streak !== undefined) {
@@ -80,7 +80,7 @@ export default function ActivityHeatmap({
   }, [heatmapData, streak]);
 
   return (
-    <div className={`rounded-lg border border-slate-700 bg-slate-900 p-4 ${className}`}>
+    <div className={`rounded-lg border border-slate-700 bg-slate-900 p-3 ${className}`}>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center space-x-2 text-sm font-medium text-white">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -107,14 +107,10 @@ export default function ActivityHeatmap({
         </div>
       </div>
 
-      <div className="relative mb-4">
-        <div className="absolute -left-8 top-0 flex flex-col space-y-1 text-xs text-slate-500">
-          {daysOfWeek.map((day, i) => (
-            <div
-              key={day}
-              className="flex h-3 items-center"
-              style={{ marginTop: `${i * 14}px` }}
-            >
+      <div className="mb-4 grid grid-cols-[28px_1fr] gap-2">
+        <div className="flex flex-col space-y-1 text-xs text-slate-500">
+          {daysOfWeek.map((day) => (
+            <div key={day} className="flex h-3 items-center leading-3">
               {day}
             </div>
           ))}

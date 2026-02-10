@@ -82,7 +82,7 @@ export default function GraphPage() {
 
   if (!summary) {
     return (
-      <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-500">
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-300">
         No graph data available.
       </div>
     );
@@ -92,7 +92,7 @@ export default function GraphPage() {
     <section className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Knowledge Graph</h1>
-        <p className="text-sm text-slate-500">Visualized from backend graph data</p>
+        <p className="text-sm text-slate-400">Visualized from backend graph data</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -145,12 +145,12 @@ export default function GraphPage() {
             selectedNodesForEdge={selectedNodesForEdge}
             onNodesChange={setSelectedNodesForEdge}
           />
-          <div className="rounded border border-slate-200 bg-white p-4">
-            <h3 className="font-semibold text-slate-900">Node Brightness</h3>
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+            <h3 className="font-semibold text-white">Node Brightness</h3>
             <select
               value={brightnessAttribute}
               onChange={(e) => setBrightnessAttribute(e.target.value as keyof GraphNodeDTO)}
-              className="mt-2 w-full rounded border border-slate-300 px-2 py-1 text-xs"
+              className="mt-2 w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200"
             >
               <option value="proven_knowledge_rating">Proven Knowledge</option>
               <option value="user_estimated_knowledge_rating">User Estimated Knowledge</option>

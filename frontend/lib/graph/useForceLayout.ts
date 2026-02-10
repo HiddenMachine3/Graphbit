@@ -92,26 +92,26 @@ export default function useForceLayout(nodes: Node[], edges: Edge[], setNodes: (
       .alphaDecay(0.04)
       .randomSource(mulberry32(seed));
 
-    simulation.on("tick", () => {
-      setNodes((current) =>
-        current.map((node) => {
-          const simNode = simulationNodes.find((item) => item.id === node.id);
-          if (!simNode) {
-            return node;
-          }
-          return {
-            ...node,
-            position: {
-              x: simNode.x ?? 0,
-              y: simNode.y ?? 0,
-            },
-          };
-        })
-      );
-    });
+    // Run the layout to completion immediately to avoid a visible "settling" delay.
+    simulation.tick(180);
+    simulation.stop();
 
-    return () => {
-      simulation.stop();
-    };
+    setNodes((current) =>
+      current.map((node) => {
+        const simNode = simulationNodes.find((item) => item.id === node.id);
+        if (!simNode) {
+          return node;
+        }
+        return {
+          ...node,
+          position: {
+            x: simNode.x ?? 0,
+            y: simNode.y ?? 0,
+          },
+        };
+      })
+    );
+
+    return undefined;
   }, [nodes, edges, setNodes]);
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import ReactFlow, {
   addEdge,
   Controls,
@@ -9,6 +9,7 @@ import ReactFlow, {
   type Connection,
   type Edge,
   type Node,
+  useReactFlow,
   useEdgesState,
   useNodesState,
 } from "reactflow";
@@ -137,23 +138,95 @@ export default function KnowledgeGraphView({
   );
 
   return (
-    <div className="h-full w-full rounded-lg border border-slate-700 bg-[#0f0f14] overflow-hidden">
+    <div className="h-full w-full rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
       <ReactFlowProvider>
-        <ReactFlow
+        <GraphFlowCanvas
           nodes={flowNodes}
           edges={flowEdges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
           onNodesChange={onFlowNodesChange}
           onEdgesChange={onFlowEdgesChange}
           onConnect={onConnect}
-          onNodeClick={(_, node) => onSelectNode(node.id)}
-          fitView
-        >
-          <MiniMap />
-          <Controls />
-        </ReactFlow>
+          onSelectNode={onSelectNode}
+        />
       </ReactFlowProvider>
     </div>
+  );
+}
+
+type GraphFlowCanvasProps = {
+  nodes: Node[];
+  edges: Edge[];
+  onNodesChange: Parameters<typeof useNodesState>[2];
+  onEdgesChange: Parameters<typeof useEdgesState>[2];
+  onConnect: (connection: Connection) => void;
+  onSelectNode: (nodeId: string) => void;
+};
+
+function GraphFlowCanvas({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  onSelectNode,
+}: GraphFlowCanvasProps) {
+  const { fitView } = useReactFlow();
+  const fitTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (nodes.length > 0) {
+      const handleFit = () => {
+        fitView({ padding: 0.2, duration: 200 });
+      };
+
+      const frameA = requestAnimationFrame(() => {
+        handleFit();
+        requestAnimationFrame(handleFit);
+      });
+
+      window.addEventListener("resize", handleFit);
+      return () => {
+        window.removeEventListener("resize", handleFit);
+        cancelAnimationFrame(frameA);
+      };
+    }
+    return;
+  }, [nodes.length, fitView]);
+
+  useEffect(() => {
+    if (nodes.length === 0) {
+      return;
+    }
+
+    if (fitTimeoutRef.current) {
+      window.clearTimeout(fitTimeoutRef.current);
+    }
+
+    fitTimeoutRef.current = window.setTimeout(() => {
+      fitView({ padding: 0.2, duration: 200 });
+    }, 250);
+
+    return () => {
+      if (fitTimeoutRef.current) {
+        window.clearTimeout(fitTimeoutRef.current);
+      }
+    };
+  }, [nodes, fitView]);
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onConnect={onConnect}
+      onNodeClick={(_, node) => onSelectNode(node.id)}
+      fitView
+    >
+      <MiniMap />
+      <Controls />
+    </ReactFlow>
   );
 }

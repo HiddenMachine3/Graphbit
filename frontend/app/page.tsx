@@ -49,7 +49,7 @@ export default function HomePage() {
 
   return (
     <div className="flex h-full flex-col p-6">
-      <div className="mb-6 flex-1">
+      <div className="mb-4 flex-1">
         <KnowledgeGraphView
           nodes={graphData.nodes}
           edges={graphData.edges}
@@ -58,7 +58,7 @@ export default function HomePage() {
         />
       </div>
 
-      <div className="h-64">
+      <div className="h-48">
         <ActivityHeatmap
           nodesCount={graphData.nodes.length}
           edgesCount={graphData.edges.length}

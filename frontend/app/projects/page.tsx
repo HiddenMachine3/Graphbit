@@ -49,7 +49,7 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-[#0f0f14]/90 p-5 shadow-[0_0_30px_rgba(15,23,42,0.35)]">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-[0_0_30px_rgba(107,24,44,0.35)]">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-white">{title}</h3>
         {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
@@ -591,7 +591,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.15),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(14,116,144,0.18),transparent_40%)] p-6 text-slate-200">
+    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,rgba(178,38,76,0.18),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(120,24,46,0.2),transparent_40%)] p-6 text-slate-200">
       <div className="mb-6 flex flex-col gap-2">
         <h2 className="text-2xl font-semibold text-white">Projects</h2>
         <p className="text-sm text-slate-400">
@@ -619,7 +619,7 @@ export default function ProjectsPage() {
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <SectionCard title="Projects" subtitle="Create, switch, and prune projects">
           <div className="grid gap-4">
-            <div className="grid gap-3 rounded-xl border border-slate-800 bg-[#0b0b12] p-4">
+            <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <input
                   value={projectName}
@@ -661,7 +661,7 @@ export default function ProjectsPage() {
                   className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm transition ${
                     project.id === currentProjectId
                       ? "border-blue-500/60 bg-blue-500/10"
-                      : "border-slate-800 bg-[#0b0b12]"
+                      : "border-slate-800 bg-slate-950"
                   }`}
                 >
                   <div>
@@ -706,7 +706,7 @@ export default function ProjectsPage() {
           )}
           {currentProjectId && (
             <div className="grid gap-4">
-              <div className="grid gap-3 rounded-xl border border-slate-800 bg-[#0b0b12] p-4">
+              <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <input
                   value={nodeTopic}
                   onChange={(event) => setNodeTopic(event.target.value)}
@@ -745,7 +745,7 @@ export default function ProjectsPage() {
                 {nodes.map((node) => (
                   <div
                     key={node.id}
-                    className="rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2 text-xs text-slate-200"
+                    className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200"
                   >
                     <div className="font-semibold text-sm text-white">{node.topic_name}</div>
                     <div className="text-slate-400">Importance: {node.importance.toFixed(2)}</div>
@@ -769,7 +769,7 @@ export default function ProjectsPage() {
           )}
           {currentProjectId && (
             <div className="grid gap-4">
-              <div className="grid gap-3 rounded-xl border border-slate-800 bg-[#0b0b12] p-4">
+              <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <textarea
                   value={questionText}
                   onChange={(event) => setQuestionText(event.target.value)}
@@ -829,7 +829,7 @@ export default function ProjectsPage() {
                   return (
                     <div
                       key={question.id}
-                      className="rounded-lg border border-slate-800 bg-[#0b0b12] p-3"
+                      className="rounded-lg border border-slate-800 bg-slate-950 p-3"
                     >
                       {isEditing ? (
                         <div className="grid gap-2">
@@ -933,7 +933,7 @@ export default function ProjectsPage() {
           )}
           {currentProjectId && (
             <div className="grid gap-4">
-              <div className="grid gap-3 rounded-xl border border-slate-800 bg-[#0b0b12] p-4">
+              <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <input
                   value={materialTitle}
                   onChange={(event) => setMaterialTitle(event.target.value)}
@@ -955,7 +955,7 @@ export default function ProjectsPage() {
                 </button>
               </div>
 
-              <div className="grid gap-3 rounded-xl border border-dashed border-slate-700 bg-[#0b0b12]/60 p-4">
+              <div className="grid gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 p-4">
                 <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
                   Upload .txt files
                 </div>
@@ -981,7 +981,7 @@ export default function ProjectsPage() {
                   return (
                     <div
                       key={material.id}
-                      className="rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2"
+                      className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2"
                     >
                       {isEditing ? (
                         <div className="grid gap-2">
@@ -1053,7 +1053,7 @@ export default function ProjectsPage() {
 
         <SectionCard title="Communities" subtitle="Group projects into shared spaces">
           <div className="grid gap-4">
-            <div className="grid gap-3 rounded-xl border border-slate-800 bg-[#0b0b12] p-4">
+            <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
               <input
                 value={communityName}
                 onChange={(event) => setCommunityName(event.target.value)}
@@ -1087,7 +1087,7 @@ export default function ProjectsPage() {
                 return (
                   <div
                     key={community.id}
-                    className="rounded-lg border border-slate-800 bg-[#0b0b12] px-3 py-2"
+                    className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2"
                   >
                     {isEditing ? (
                       <div className="grid gap-2">

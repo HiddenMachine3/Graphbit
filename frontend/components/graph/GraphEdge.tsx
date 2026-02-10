@@ -1,9 +1,9 @@
-import { BaseEdge, EdgeLabelRenderer, getBezierPath } from "reactflow";
+import { BaseEdge, EdgeLabelRenderer, getStraightPath } from "reactflow";
 
 import type { EdgeProps } from "reactflow";
 
 export default function GraphEdge({ id, sourceX, sourceY, targetX, targetY }: EdgeProps) {
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getStraightPath({
     sourceX,
     sourceY,
     targetX,
@@ -15,7 +15,7 @@ export default function GraphEdge({ id, sourceX, sourceY, targetX, targetY }: Ed
       <BaseEdge
         id={id}
         path={edgePath}
-        style={{ stroke: "#64748b", strokeWidth: 1, opacity: 0.35 }}
+        style={{ stroke: "#8a1b3c", strokeWidth: 1, opacity: 0.35 }}
       />
       <EdgeLabelRenderer />
     </>

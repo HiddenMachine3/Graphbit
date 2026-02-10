@@ -84,13 +84,13 @@ export default function NodeManagementPanel({
   };
 
   return (
-    <div className='rounded border border-slate-200 bg-white p-4'>
-      <h3 className='font-semibold text-slate-900'>
+    <div className='rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-slate-200'>
+      <h3 className='font-semibold text-white'>
         {selectedNode ? 'Edit Node' : 'Add Node'}
       </h3>
 
       {error && (
-        <div className='mt-2 rounded bg-red-50 p-2 text-xs text-red-700'>
+        <div className='mt-2 rounded border border-red-900/60 bg-red-950/40 p-2 text-xs text-red-200'>
           {error}
         </div>
       )}
@@ -98,7 +98,7 @@ export default function NodeManagementPanel({
       {!showCreateForm && !showEditForm && (
         <div className='mt-3 space-y-2'>
           <button
-            className='w-full rounded bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700 disabled:opacity-60'
+            className='w-full rounded bg-rose-600 px-3 py-2 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
             onClick={() => setShowCreateForm(true)}
             disabled={loading || !projectId}
           >
@@ -106,7 +106,7 @@ export default function NodeManagementPanel({
           </button>
           {selectedNode && (
             <button
-              className='w-full rounded bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700 disabled:opacity-60'
+              className='w-full rounded bg-slate-700 px-3 py-2 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
               onClick={openEditForm}
               disabled={loading}
             >
@@ -123,11 +123,11 @@ export default function NodeManagementPanel({
             placeholder='Topic name'
             value={newTopicName}
             onChange={(e) => setNewTopicName(e.target.value)}
-            className='w-full rounded border border-slate-300 px-2 py-1 text-xs'
+            className='w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500'
             disabled={loading}
           />
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-600'>
+            <label className='block text-xs text-slate-400'>
               Importance: {newImportance.toFixed(2)}
             </label>
             <input
@@ -142,7 +142,7 @@ export default function NodeManagementPanel({
             />
           </div>
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-600'>
+            <label className='block text-xs text-slate-400'>
               Relevance: {newRelevance.toFixed(2)}
             </label>
             <input
@@ -158,14 +158,14 @@ export default function NodeManagementPanel({
           </div>
           <div className='flex gap-2'>
             <button
-              className='flex-1 rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-60'
+              className='flex-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
               onClick={handleCreateNode}
               disabled={loading}
             >
               Create
             </button>
             <button
-              className='flex-1 rounded bg-slate-400 px-2 py-1 text-xs text-white hover:bg-slate-500 disabled:opacity-60'
+              className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
               onClick={() => setShowCreateForm(false)}
               disabled={loading}
             >
@@ -182,11 +182,11 @@ export default function NodeManagementPanel({
             placeholder='Topic name'
             value={editedTopic}
             onChange={(e) => setEditedTopic(e.target.value)}
-            className='w-full rounded border border-slate-300 px-2 py-1 text-xs'
+            className='w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500'
             disabled={loading}
           />
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-600'>
+            <label className='block text-xs text-slate-400'>
               Importance: {editedImportance.toFixed(2)}
             </label>
             <input
@@ -201,7 +201,7 @@ export default function NodeManagementPanel({
             />
           </div>
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-600'>
+            <label className='block text-xs text-slate-400'>
               Relevance: {editedRelevance.toFixed(2)}
             </label>
             <input
@@ -217,14 +217,14 @@ export default function NodeManagementPanel({
           </div>
           <div className='flex gap-2'>
             <button
-              className='flex-1 rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-60'
+              className='flex-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
               onClick={handleUpdateNode}
               disabled={loading}
             >
               Update
             </button>
             <button
-              className='flex-1 rounded bg-slate-400 px-2 py-1 text-xs text-white hover:bg-slate-500 disabled:opacity-60'
+              className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
               onClick={() => setShowEditForm(false)}
               disabled={loading}
             >

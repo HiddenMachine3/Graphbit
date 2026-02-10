@@ -12,7 +12,7 @@ export default function FeedbackPanel({
   disabled = false,
 }: FeedbackPanelProps) {
   return (
-    <div className="rounded border border-slate-200 bg-white p-6">
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6">
       <div
         className={`text-sm font-semibold ${
           feedback.correct ? "text-emerald-600" : "text-rose-600"
@@ -21,17 +21,17 @@ export default function FeedbackPanel({
         {feedback.correct ? "Correct" : "Incorrect"}
       </div>
       {feedback.correct_answer && !feedback.correct && (
-        <div className="mt-2 text-sm text-slate-600">
+        <div className="mt-2 text-sm text-slate-300">
           Correct answer: {feedback.correct_answer}
         </div>
       )}
       {!feedback.correct && feedback.explanation && (
-        <div className="mt-2 text-sm text-slate-600">
+        <div className="mt-2 text-sm text-slate-300">
           {feedback.explanation}
         </div>
       )}
       <button
-        className="mt-4 rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+        className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
         onClick={onNext}
         disabled={disabled}
       >
