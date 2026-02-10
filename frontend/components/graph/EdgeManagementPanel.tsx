@@ -120,11 +120,11 @@ export default function EdgeManagementPanel({
   };
 
   return (
-    <div className='rounded border border-slate-200 bg-white p-4'>
-      <h3 className='font-semibold text-slate-900'>Add Connection</h3>
+    <div className='rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-slate-200'>
+      <h3 className='font-semibold text-white'>Add Connection</h3>
 
       {error && (
-        <div className='mt-2 rounded bg-red-50 p-2 text-xs text-red-700'>
+        <div className='mt-2 rounded border border-red-900/60 bg-red-950/40 p-2 text-xs text-red-200'>
           {error}
         </div>
       )}
@@ -132,14 +132,14 @@ export default function EdgeManagementPanel({
       {!showForm && !clickModeActive && (
         <div className='mt-3 space-y-2'>
           <button
-            className='w-full rounded bg-green-600 px-3 py-2 text-xs text-white hover:bg-green-700 disabled:opacity-60'
+            className='w-full rounded bg-rose-600 px-3 py-2 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
             onClick={startClickMode}
             disabled={loading}
           >
             Click nodes to connect
           </button>
           <button
-            className='w-full rounded bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700 disabled:opacity-60'
+            className='w-full rounded bg-slate-700 px-3 py-2 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
             onClick={() => { setShowForm(true); }}
             disabled={loading}
           >
@@ -150,8 +150,8 @@ export default function EdgeManagementPanel({
 
       {clickModeActive && (
         <div className='mt-3'>
-          <div className='rounded bg-blue-50 p-3 text-xs text-blue-700'>
-            <p className='font-medium'>Click mode: Select 2 nodes</p>
+          <div className='rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200'>
+            <p className='font-medium text-rose-200'>Click mode: Select 2 nodes</p>
             <p className='mt-1'>
               {selectedNodesForEdge.length === 0 && 'Click first node...'}
               {selectedNodesForEdge.length === 1 && 'Click second node...'}
@@ -163,7 +163,7 @@ export default function EdgeManagementPanel({
                   {i + 1}. {nodes.find(n => n.id === id)?.topic_name || id}
                   <button
                     onClick={() => handleNodeClick(id)}
-                    className='ml-2 text-blue-600 hover:text-blue-800'
+                    className='ml-2 text-rose-300 hover:text-rose-200'
                   >
                     ✕
                   </button>
@@ -175,13 +175,13 @@ export default function EdgeManagementPanel({
           {selectedNodesForEdge.length === 2 && (
             <div className='mt-3 space-y-2'>
               <div>
-                <label className='block text-xs font-medium text-slate-700'>
+                <label className='block text-xs font-medium text-slate-300'>
                   Relationship Type
                 </label>
                 <select
                   value={edgeType}
                   onChange={(e) => setEdgeType(e.target.value)}
-                  className='mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs'
+                  className='mt-1 w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200'
                   disabled={loading}
                 >
                   <option value='PREREQUISITE'>Prerequisite</option>
@@ -192,7 +192,7 @@ export default function EdgeManagementPanel({
               </div>
 
               <div className='space-y-1'>
-                <label className='block text-xs text-slate-600'>
+                <label className='block text-xs text-slate-400'>
                   Strength: {weight.toFixed(2)}
                 </label>
                 <input
@@ -209,14 +209,14 @@ export default function EdgeManagementPanel({
 
               <div className='flex gap-2'>
                 <button
-                  className='flex-1 rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-60'
+                  className='flex-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
                   onClick={handleCreateEdge}
                   disabled={loading}
                 >
                   Create
                 </button>
                 <button
-                  className='flex-1 rounded bg-slate-400 px-2 py-1 text-xs text-white hover:bg-slate-500 disabled:opacity-60'
+                  className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
                   onClick={cancelClickMode}
                   disabled={loading}
                 >
@@ -229,7 +229,7 @@ export default function EdgeManagementPanel({
           {selectedNodesForEdge.length < 2 && (
             <div className='mt-3 flex gap-2'>
               <button
-                className='flex-1 rounded bg-slate-400 px-2 py-1 text-xs text-white hover:bg-slate-500 disabled:opacity-60'
+                className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
                 onClick={cancelClickMode}
                 disabled={loading}
               >
@@ -243,13 +243,13 @@ export default function EdgeManagementPanel({
       {showForm && (
         <div className='mt-3 space-y-2'>
           <div>
-            <label className='block text-xs font-medium text-slate-700'>
+            <label className='block text-xs font-medium text-slate-300'>
               From Node
             </label>
             <select
               value={fromNodeId}
               onChange={(e) => setFromNodeId(e.target.value)}
-              className='mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs'
+              className='mt-1 w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200'
               disabled={loading}
             >
               <option value=''>Select node...</option>
@@ -262,13 +262,13 @@ export default function EdgeManagementPanel({
           </div>
 
           <div>
-            <label className='block text-xs font-medium text-slate-700'>
+            <label className='block text-xs font-medium text-slate-300'>
               To Node
             </label>
             <select
               value={toNodeId}
               onChange={(e) => setToNodeId(e.target.value)}
-              className='mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs'
+              className='mt-1 w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200'
               disabled={loading}
             >
               <option value=''>Select node...</option>
@@ -281,13 +281,13 @@ export default function EdgeManagementPanel({
           </div>
 
           <div>
-            <label className='block text-xs font-medium text-slate-700'>
+            <label className='block text-xs font-medium text-slate-300'>
               Relationship Type
             </label>
             <select
               value={edgeType}
               onChange={(e) => setEdgeType(e.target.value)}
-              className='mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs'
+              className='mt-1 w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200'
               disabled={loading}
             >
               <option value='PREREQUISITE'>Prerequisite</option>
@@ -298,7 +298,7 @@ export default function EdgeManagementPanel({
           </div>
 
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-600'>
+            <label className='block text-xs text-slate-400'>
               Strength: {weight.toFixed(2)}
             </label>
             <input
@@ -315,14 +315,14 @@ export default function EdgeManagementPanel({
 
           <div className='flex gap-2'>
             <button
-              className='flex-1 rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-60'
+              className='flex-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
               onClick={handleCreateEdge}
               disabled={loading || !fromNodeId || !toNodeId}
             >
               Create
             </button>
             <button
-              className='flex-1 rounded bg-slate-400 px-2 py-1 text-xs text-white hover:bg-slate-500 disabled:opacity-60'
+              className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
               onClick={() => setShowForm(false)}
               disabled={loading}
             >

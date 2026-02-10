@@ -31,8 +31,12 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
   const maxSize = 110;
   const size = minSize + (maxSize - minSize) * importance;
 
-  const backgroundColor = `rgba(59, 130, 246, ${0.15 + brightness * 0.65})`;
-  const borderColor = `rgba(239, 68, 68, ${0.2 + borderIntensity * 0.75})`;
+  const boostedBrightness = clamp(brightness * 1.6);
+  const backgroundColor = `rgba(178, 38, 76, ${0.1 + boostedBrightness * 0.85})`;
+  const borderColor = `rgba(120, 24, 46, ${0.2 + borderIntensity * 0.7})`;
+  const glowStrength = 8 + boostedBrightness * 28;
+  const glowOpacity = 0.15 + boostedBrightness * 0.45;
+  const glowColor = `rgba(178, 38, 76, ${glowOpacity})`;
 
   return (
     <div
@@ -42,12 +46,26 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
       className={`flex flex-col items-center justify-center rounded-full border-2 text-center text-[11px] shadow-sm transition ${
         selected ? "ring-2 ring-slate-900" : ""
       }`}
-      style={{ backgroundColor, borderColor, width: size, height: size }}
+      style={{
+        backgroundColor,
+        borderColor,
+        width: size,
+        height: size,
+        boxShadow: `0 0 ${glowStrength}px ${glowColor}, 0 0 ${glowStrength * 1.8}px ${glowColor}`,
+      }}
     >
-      <div className="px-2 font-semibold text-slate-900">{data.topic_name}</div>
-      <div className="mt-1 text-[10px] text-slate-700">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
+      <div className="px-2 font-semibold text-white">{data.topic_name}</div>
+      <div className="mt-1 text-[10px] text-slate-200/80">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
+      <Handle
+        type="target"
+        position={Position.Left}
+        style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)", opacity: 0 }}
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)", opacity: 0 }}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import Link from "next/link";
 export default function Sidebar() {
   return (
     <>
-      <aside className="w-64 border-r border-slate-800 bg-[#0f0f14] p-4">
+      <aside className="w-64 border-r border-slate-800 bg-slate-900 p-4">
         {/* Daily Recall Section */}
         <div className="mb-6">
           <div className="mb-3 flex items-center justify-between">

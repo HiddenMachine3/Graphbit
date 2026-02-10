@@ -6,7 +6,7 @@ import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 
 export const metadata: Metadata = {
-  title: "RecallGraph",
+  title: "Graphbit",
   description: "Graph-based active recall system",
 };
 
@@ -17,11 +17,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#0a0a0f] overflow-hidden">
-        <div className="flex h-screen">
-          <Sidebar />
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <Topbar />
+      <body className="min-h-screen bg-transparent overflow-hidden">
+        <div className="flex h-screen flex-col">
+          <Topbar />
+          <div className="flex flex-1 overflow-hidden">
+            <Sidebar />
             <main className="flex-1 overflow-auto">{children}</main>
           </div>
         </div>
