@@ -169,17 +169,35 @@ async def seed_database(reset_db: bool = False):
                 ("py_functions", "Functions & Scope", 0.5, 0.55, 0.8),
                 ("py_oop", "Object-Oriented Programming", 0.4, 0.45, 0.85),
                 ("py_classes", "Classes & Objects", 0.35, 0.4, 0.8),
+                ("py_debugging", "Debugging Basics", 0.1, 0.2, 0.7),
             ],
             "edges": [
                 ("py_basics", "py_variables", EdgeType.PREREQUISITE, 1.0),
                 ("py_variables", "py_functions", EdgeType.PREREQUISITE, 1.0),
                 ("py_functions", "py_oop", EdgeType.PREREQUISITE, 1.0),
                 ("py_oop", "py_classes", EdgeType.PREREQUISITE, 1.0),
+                ("py_basics", "py_debugging", EdgeType.APPLIED_WITH, 0.7),
             ],
             "questions": [
                 ("py_q1", "What is a variable in Python?", "A variable is a named container that stores a value", "py_variables", 1),
                 ("py_q2", "How do you define a function in Python?", "Using the def keyword", "py_functions", 2),
                 ("py_q3", "What is a class in Python?", "A blueprint for creating objects", "py_classes", 3),
+            ],
+            "mcq_questions": [
+                (
+                    "py_mcq1",
+                    "Which keyword defines a function in Python?",
+                    "def",
+                    "py_functions",
+                    1,
+                    ["def", "func", "lambda", "define"],
+                    {
+                        "def": "Correct. This is the function keyword.",
+                        "func": "Not a Python keyword.",
+                        "lambda": "Creates an anonymous function, not a definition.",
+                        "define": "Not a Python keyword.",
+                    },
+                ),
             ],
             "community_overrides": {
                 "py_basics": 1.2,
@@ -192,16 +210,34 @@ async def seed_database(reset_db: bool = False):
                 ("dsa_stacks", "Stacks & Queues", 0.4, 0.45, 0.85),
                 ("dsa_trees", "Trees & Graphs", 0.3, 0.35, 0.95),
                 ("dsa_sorting", "Sorting Algorithms", 0.5, 0.55, 0.8),
+                ("dsa_complexity", "Time Complexity", 0.1, 0.2, 0.9),
             ],
             "edges": [
                 ("dsa_arrays", "dsa_stacks", EdgeType.PREREQUISITE, 1.0),
                 ("dsa_arrays", "dsa_sorting", EdgeType.PREREQUISITE, 0.8),
                 ("dsa_stacks", "dsa_trees", EdgeType.PREREQUISITE, 0.9),
+                ("dsa_arrays", "dsa_complexity", EdgeType.APPLIED_WITH, 0.75),
             ],
             "questions": [
                 ("dsa_q1", "What is an array?", "A contiguous data structure for storing elements", "dsa_arrays", 1),
                 ("dsa_q2", "What is a stack?", "A LIFO (Last In First Out) data structure", "dsa_stacks", 2),
                 ("dsa_q3", "What is a binary tree?", "A tree where each node has at most two children", "dsa_trees", 3),
+            ],
+            "mcq_questions": [
+                (
+                    "dsa_mcq1",
+                    "Which data structure follows LIFO order?",
+                    "Stack",
+                    "dsa_stacks",
+                    2,
+                    ["Queue", "Stack", "Array", "Graph"],
+                    {
+                        "Queue": "Queues are FIFO, not LIFO.",
+                        "Stack": "Correct. Stacks are last-in, first-out.",
+                        "Array": "Arrays do not define a LIFO access pattern.",
+                        "Graph": "Graphs are not a LIFO structure.",
+                    },
+                ),
             ],
             "community_overrides": {
                 "dsa_trees": 1.5,
@@ -214,16 +250,39 @@ async def seed_database(reset_db: bool = False):
                 ("bio_dna", "DNA & Genetics", 0.4, 0.45, 0.95),
                 ("bio_evolution", "Evolution", 0.3, 0.35, 0.85),
                 ("bio_ecology", "Ecology & Ecosystems", 0.35, 0.4, 0.8),
+                ("bio_homeostasis", "Homeostasis", 0.1, 0.2, 0.8),
             ],
             "edges": [
                 ("bio_cells", "bio_dna", EdgeType.PREREQUISITE, 1.0),
                 ("bio_dna", "bio_evolution", EdgeType.PREREQUISITE, 0.9),
                 ("bio_cells", "bio_ecology", EdgeType.APPLIED_WITH, 0.7),
+                ("bio_cells", "bio_homeostasis", EdgeType.APPLIED_WITH, 0.75),
             ],
             "questions": [
                 ("bio_q1", "What is the basic unit of life?", "The cell", "bio_cells", 1),
                 ("bio_q2", "What does DNA stand for?", "Deoxyribonucleic Acid", "bio_dna", 2),
                 ("bio_q3", "What is natural selection?", "The process where organisms better adapted to their environment survive", "bio_evolution", 3),
+            ],
+            "mcq_questions": [
+                (
+                    "bio_mcq1",
+                    "DNA stands for which phrase?",
+                    "Deoxyribonucleic Acid",
+                    "bio_dna",
+                    2,
+                    [
+                        "Deoxyribonucleic Acid",
+                        "Dioxygen Nucleic Acid",
+                        "Deoxyribose Nucleic Atom",
+                        "Dynamic Nucleic Assembly",
+                    ],
+                    {
+                        "Deoxyribonucleic Acid": "Correct. That is the full name of DNA.",
+                        "Dioxygen Nucleic Acid": "Incorrect. That phrase is not used.",
+                        "Deoxyribose Nucleic Atom": "Incorrect. DNA is not an atom.",
+                        "Dynamic Nucleic Assembly": "Incorrect. Not the correct expansion.",
+                    },
+                ),
             ],
             "community_overrides": {
                 "bio_dna": 1.4,
@@ -239,6 +298,7 @@ async def seed_database(reset_db: bool = False):
                 ("stoic_practice", "Daily Stoic Practice", 0.5, 0.55, 0.9),
                 ("stoic_negative_vis", "Negative Visualization", 0.35, 0.4, 0.75),
                 ("stoic_role_ethics", "Role Ethics", 0.3, 0.35, 0.7),
+                ("stoic_memento_mori", "Memento Mori", 0.1, 0.2, 0.8),
             ],
             "edges": [
                 ("stoic_foundations", "stoic_virtue", EdgeType.PREREQUISITE, 1.0),
@@ -248,6 +308,7 @@ async def seed_database(reset_db: bool = False):
                 ("stoic_virtue", "stoic_role_ethics", EdgeType.APPLIED_WITH, 0.8),
                 ("stoic_dichotomy", "stoic_practice", EdgeType.APPLIED_WITH, 0.85),
                 ("stoic_negative_vis", "stoic_practice", EdgeType.APPLIED_WITH, 0.75),
+                ("stoic_foundations", "stoic_memento_mori", EdgeType.APPLIED_WITH, 0.7),
             ],
             "questions": [
                 (
@@ -284,6 +345,22 @@ async def seed_database(reset_db: bool = False):
                     "Fulfilling duties appropriate to one's roles with virtue",
                     "stoic_role_ethics",
                     3,
+                ),
+            ],
+            "mcq_questions": [
+                (
+                    "stoic_mcq1",
+                    "Which of the following is a cardinal virtue in Stoicism?",
+                    "Wisdom",
+                    "stoic_virtue",
+                    2,
+                    ["Wisdom", "Wealth", "Fame", "Pleasure"],
+                    {
+                        "Wisdom": "Correct. Wisdom is one of the four virtues.",
+                        "Wealth": "Wealth is considered an indifferent.",
+                        "Fame": "Fame is not a Stoic virtue.",
+                        "Pleasure": "Pleasure is not a Stoic virtue.",
+                    },
                 ),
             ],
             "community_overrides": {
@@ -465,6 +542,49 @@ async def seed_database(reset_db: bool = False):
                     source_material_ids=[]
                 )
                 
+                session.add(db_question)
+                print(f"      ✓ {qid}: {question_text[:40]}...")
+
+            mcq_questions = data.get("mcq_questions", [])
+            if mcq_questions:
+                print(f"    Creating {len(mcq_questions)} MCQ questions...")
+            for (
+                qid,
+                question_text,
+                answer,
+                node_id,
+                difficulty,
+                options,
+                option_explanations,
+            ) in mcq_questions:
+                if qid in existing_ids:
+                    print(f"      ↷ {qid} already exists, skipping")
+                    continue
+
+                db_question = QuestionModel(
+                    id=qid,
+                    project_id=project.id,
+                    created_by=user.id,
+                    text=question_text,
+                    answer=answer,
+                    options=options,
+                    option_explanations=option_explanations,
+                    question_type=QuestionType.MCQ.value,
+                    knowledge_type=KnowledgeType.CONCEPT.value,
+                    covered_node_ids=[node_id],
+                    difficulty=difficulty,
+                    tags=["mcq", "fundamentals", project.id],
+                    question_metadata={
+                        "created_by": user.id,
+                        "created_at": (now - timedelta(days=difficulty)).isoformat(),
+                        "importance": difficulty * 0.25,
+                        "hits": 0,
+                        "misses": 0,
+                    },
+                    last_attempted_at=now - timedelta(days=1) if difficulty > 1 else None,
+                    source_material_ids=[],
+                )
+
                 session.add(db_question)
                 print(f"      ✓ {qid}: {question_text[:40]}...")
             
