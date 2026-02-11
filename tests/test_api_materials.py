@@ -128,3 +128,83 @@ def test_material_attach(api_client):
         edge["source"] == material_node_id and edge["target"] == node_id
         for edge in summary["edges"]
     )
+
+
+def test_material_replace_nodes(api_client):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-replace",
+            "name": "Replace Project",
+            "description": "Project for replace links",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    node_one_resp = api_client.post(
+        "/api/v1/graph/nodes",
+        json={
+            "project_id": "proj-replace",
+            "topic_name": "First Node",
+            "importance": 0.6,
+            "relevance": 0.6,
+        },
+    )
+    assert node_one_resp.status_code == 200
+    node_one_id = node_one_resp.json()["id"]
+
+    node_two_resp = api_client.post(
+        "/api/v1/graph/nodes",
+        json={
+            "project_id": "proj-replace",
+            "topic_name": "Second Node",
+            "importance": 0.6,
+            "relevance": 0.6,
+        },
+    )
+    assert node_two_resp.status_code == 200
+    node_two_id = node_two_resp.json()["id"]
+
+    material_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-replace-1",
+            "project_id": "proj-replace",
+            "title": "Replace Material",
+            "content_text": "Replace content",
+        },
+    )
+    assert material_resp.status_code == 200
+
+    replace_resp = api_client.put(
+        "/api/v1/materials/mat-replace-1/nodes",
+        json={"node_ids": [node_one_id]},
+    )
+    assert replace_resp.status_code == 200
+    assert replace_resp.json()["node_ids"] == [node_one_id]
+
+    replace_resp = api_client.put(
+        "/api/v1/materials/mat-replace-1/nodes",
+        json={"node_ids": [node_two_id]},
+    )
+    assert replace_resp.status_code == 200
+    assert replace_resp.json()["node_ids"] == [node_two_id]
+
+    summary_resp = api_client.get(
+        "/api/v1/graph",
+        params={"project_id": "proj-replace"},
+    )
+    assert summary_resp.status_code == 200
+    summary = summary_resp.json()
+
+    material_node_id = "material:mat-replace-1"
+    edges = summary["edges"]
+    assert any(
+        edge["source"] == material_node_id and edge["target"] == node_two_id
+        for edge in edges
+    )
+    assert not any(
+        edge["source"] == material_node_id and edge["target"] == node_one_id
+        for edge in edges
+    )

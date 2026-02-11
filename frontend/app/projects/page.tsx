@@ -25,6 +25,7 @@ import {
   deleteMaterial,
   fetchMaterial,
   updateMaterial,
+  replaceMaterialNodes,
 } from "@/lib/api/material";
 import {
   listCommunities,
@@ -108,6 +109,9 @@ export default function ProjectsPage() {
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
   const [editMaterialTitle, setEditMaterialTitle] = useState("");
   const [editMaterialText, setEditMaterialText] = useState("");
+  const [editingMaterialNodesId, setEditingMaterialNodesId] = useState<string | null>(null);
+  const [materialNodeSearch, setMaterialNodeSearch] = useState("");
+  const [materialNodeSelection, setMaterialNodeSelection] = useState<string[]>([]);
 
   const [communityName, setCommunityName] = useState("");
   const [communityDescription, setCommunityDescription] = useState("");
@@ -125,6 +129,17 @@ export default function ProjectsPage() {
     () => projects.find((project) => project.id === currentProjectId) ?? null,
     [projects, currentProjectId]
   );
+
+  const materialNodeMap = useMemo(() => {
+    const map = new Map<string, NodeDTO[]>();
+    materials.forEach((material) => {
+      const linkedNodes = nodes.filter((node) =>
+        (node.source_material_ids ?? []).includes(material.id)
+      );
+      map.set(material.id, linkedNodes);
+    });
+    return map;
+  }, [materials, nodes]);
 
   const resetStatus = () => setStatus({ type: "idle", message: "" });
 
@@ -433,6 +448,37 @@ export default function ProjectsPage() {
 
   const cancelEditMaterial = () => {
     setEditingMaterialId(null);
+  };
+
+  const beginEditMaterialNodes = (material: MaterialDTO) => {
+    const linked = materialNodeMap.get(material.id) ?? [];
+    setEditingMaterialNodesId(material.id);
+    setMaterialNodeSelection(linked.map((node) => node.id));
+    setMaterialNodeSearch("");
+  };
+
+  const cancelEditMaterialNodes = () => {
+    setEditingMaterialNodesId(null);
+    setMaterialNodeSelection([]);
+    setMaterialNodeSearch("");
+  };
+
+  const handleSaveMaterialNodes = async (materialId: string) => {
+    if (!currentProjectId) {
+      return;
+    }
+    resetStatus();
+    setBusy(true);
+    try {
+      await replaceMaterialNodes(materialId, materialNodeSelection);
+      await refreshProjectData(currentProjectId);
+      setEditingMaterialNodesId(null);
+      setStatus({ type: "success", message: "Material links updated" });
+    } catch {
+      setStatus({ type: "error", message: "Failed to update material links" });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleUpdateMaterial = async (materialId: string) => {
@@ -978,6 +1024,18 @@ export default function ProjectsPage() {
               <div className="grid gap-2">
                 {materials.map((material) => {
                   const isEditing = editingMaterialId === material.id;
+                  const isEditingNodes = editingMaterialNodesId === material.id;
+                  const linkedNodes = materialNodeMap.get(material.id) ?? [];
+                  const searchValue = materialNodeSearch.trim().toLowerCase();
+                  const filteredNodes = nodes.filter((node) => {
+                    if (!searchValue) {
+                      return true;
+                    }
+                    return (
+                      node.topic_name.toLowerCase().includes(searchValue) ||
+                      node.id.toLowerCase().includes(searchValue)
+                    );
+                  });
                   return (
                     <div
                       key={material.id}
@@ -1013,29 +1071,112 @@ export default function ProjectsPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <div className="text-sm font-semibold text-white">{material.title}</div>
-                            <div className="text-xs text-slate-400">
-                              {material.chunk_count} chunks
+                        <div className="grid gap-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="text-sm font-semibold text-white">{material.title}</div>
+                              <div className="text-xs text-slate-400">
+                                {material.chunk_count} chunks
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => beginEditMaterial(material)}
+                                disabled={busy}
+                                className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMaterial(material.id)}
+                                disabled={busy}
+                                className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                Delete
+                              </button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-xs text-slate-500">Linked nodes:</div>
+                            {linkedNodes.length === 0 && (
+                              <div className="text-xs text-slate-400">None</div>
+                            )}
+                            {linkedNodes.map((node) => (
+                              <span
+                                key={node.id}
+                                className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-200"
+                              >
+                                {node.topic_name}
+                              </span>
+                            ))}
                             <button
-                              onClick={() => beginEditMaterial(material)}
+                              onClick={() => beginEditMaterialNodes(material)}
                               disabled={busy}
-                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              title="Edit linked nodes"
                             >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMaterial(material.id)}
-                              disabled={busy}
-                              className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Delete
+                              ✎
                             </button>
                           </div>
+
+                          {isEditingNodes && (
+                            <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                              <input
+                                value={materialNodeSearch}
+                                onChange={(event) => setMaterialNodeSearch(event.target.value)}
+                                placeholder="Search nodes"
+                                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                              />
+                              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                                {filteredNodes.map((node) => {
+                                  const isSelected = materialNodeSelection.includes(node.id);
+                                  return (
+                                    <button
+                                      key={node.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setMaterialNodeSelection((prev) =>
+                                          prev.includes(node.id)
+                                            ? prev.filter((id) => id !== node.id)
+                                            : [...prev, node.id]
+                                        );
+                                      }}
+                                      className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                                        isSelected
+                                          ? "bg-rose-600/20 text-rose-100"
+                                          : "text-slate-200 hover:bg-slate-800/60"
+                                      }`}
+                                    >
+                                      <span className="font-medium">{node.topic_name}</span>
+                                      <span className="text-[10px] text-slate-500">{node.id}</span>
+                                    </button>
+                                  );
+                                })}
+                                {filteredNodes.length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-slate-500">
+                                    No matching nodes.
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => handleSaveMaterialNodes(material.id)}
+                                  disabled={busy}
+                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Save links
+                                </button>
+                                <button
+                                  onClick={cancelEditMaterialNodes}
+                                  disabled={busy}
+                                  className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
