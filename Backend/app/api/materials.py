@@ -7,7 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models import Material as MaterialModel, AppUser as AppUserModel
+from app.models import (
+    Material as MaterialModel,
+    AppUser as AppUserModel,
+    Node as NodeModel,
+    Question as QuestionModel,
+)
 
 router = APIRouter()
 
@@ -133,6 +138,87 @@ async def delete_material(material_id: str, db: AsyncSession = Depends(get_db)):
     await db.delete(material)
     await db.commit()
     return {"status": "deleted"}
+
+
+@router.post("/materials/{material_id}/attach")
+async def attach_material(
+    material_id: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Attach a material to nodes and/or questions."""
+    result = await db.execute(
+        select(MaterialModel).where(MaterialModel.id == material_id)
+    )
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    node_ids = data.get("node_ids") or []
+    question_ids = data.get("question_ids") or []
+
+    if not node_ids and not question_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="node_ids or question_ids are required",
+        )
+
+    attached_nodes = 0
+    attached_questions = 0
+
+    if node_ids:
+        nodes_result = await db.execute(
+            select(NodeModel).where(
+                NodeModel.project_id == material.project_id,
+                NodeModel.id.in_(node_ids),
+            )
+        )
+        nodes = nodes_result.scalars().all()
+        found_node_ids = {node.id for node in nodes}
+        missing_nodes = sorted(set(node_ids) - found_node_ids)
+        if missing_nodes:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Nodes not found: {', '.join(missing_nodes)}",
+            )
+
+        for node in nodes:
+            source_ids = set(node.source_material_ids or [])
+            if material_id not in source_ids:
+                source_ids.add(material_id)
+                node.source_material_ids = list(source_ids)
+                attached_nodes += 1
+
+    if question_ids:
+        questions_result = await db.execute(
+            select(QuestionModel).where(
+                QuestionModel.project_id == material.project_id,
+                QuestionModel.id.in_(question_ids),
+            )
+        )
+        questions = questions_result.scalars().all()
+        found_question_ids = {question.id for question in questions}
+        missing_questions = sorted(set(question_ids) - found_question_ids)
+        if missing_questions:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Questions not found: {', '.join(missing_questions)}",
+            )
+
+        for question in questions:
+            source_ids = set(question.source_material_ids or [])
+            if material_id not in source_ids:
+                source_ids.add(material_id)
+                question.source_material_ids = list(source_ids)
+                attached_questions += 1
+
+    await db.commit()
+
+    return {
+        "material_id": material_id,
+        "attached_nodes": attached_nodes,
+        "attached_questions": attached_questions,
+    }
 
 
 @router.post("/materials/sessions")

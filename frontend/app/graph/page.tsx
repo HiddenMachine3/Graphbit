@@ -22,6 +22,7 @@ export default function GraphPage() {
   const [clickModeActive, setClickModeActive] = useState(false);
   const [selectedNodesForEdge, setSelectedNodesForEdge] = useState<string[]>([]);
   const [brightnessAttribute, setBrightnessAttribute] = useState<keyof GraphNodeDTO>('proven_knowledge_rating');
+  const [showMaterials, setShowMaterials] = useState(true);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
 
   const loadGraph = useCallback(async () => {
@@ -48,8 +49,39 @@ export default function GraphPage() {
     loadGraph();
   }, [loadGraph]);
 
+  const visibleNodes = summary
+    ? showMaterials
+      ? summary.nodes
+      : summary.nodes.filter((node) => node.node_type !== "material")
+    : [];
+
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+
+  useEffect(() => {
+    if (!summary) {
+      return;
+    }
+
+    if (selectedNodeId && visibleNodeIds.has(selectedNodeId)) {
+      return;
+    }
+
+    setSelectedNodeId(visibleNodes[0]?.id ?? null);
+  }, [summary, showMaterials, selectedNodeId, visibleNodes, visibleNodeIds]);
+
+  const visibleEdges = summary
+    ? showMaterials
+      ? summary.edges
+      : summary.edges.filter(
+          (edge) =>
+            edge.type !== "MATERIAL" &&
+            visibleNodeIds.has(edge.source) &&
+            visibleNodeIds.has(edge.target)
+        )
+    : [];
+
   const selectedNode: GraphNodeDTO | null =
-    summary?.nodes.find((node) => node.id === selectedNodeId) ?? null;
+    visibleNodes.find((node) => node.id === selectedNodeId) ?? null;
 
   const handleEditClick = () => {
     if (selectedNodeId) {
@@ -97,8 +129,8 @@ export default function GraphPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <KnowledgeGraphView
-          nodes={summary.nodes}
-          edges={summary.edges}
+          nodes={visibleNodes}
+          edges={visibleEdges}
           selectedNodeId={clickModeActive ? undefined : selectedNodeId}
           onSelectNode={handleNodeClick}
           highlightedNodeIds={clickModeActive ? selectedNodesForEdge : undefined}
@@ -132,7 +164,7 @@ export default function GraphPage() {
             />
           )}
           <EdgeManagementPanel
-            nodes={summary.nodes}
+            nodes={visibleNodes}
             selectedNodeId={selectedNodeId}
             projectId={currentProjectId}
             onEdgeCreated={() => {
@@ -145,6 +177,30 @@ export default function GraphPage() {
             selectedNodesForEdge={selectedNodesForEdge}
             onNodesChange={setSelectedNodesForEdge}
           />
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-white">Materials</h3>
+                <p className="text-xs text-slate-400">Show materials linked to nodes</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMaterials((value) => !value)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                  showMaterials
+                    ? "border-rose-500/70 bg-rose-600/30"
+                    : "border-slate-700 bg-slate-900/60"
+                }`}
+                aria-pressed={showMaterials}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white/90 transition ${
+                    showMaterials ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
           <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
             <h3 className="font-semibold text-white">Node Brightness</h3>
             <select
