@@ -17,6 +17,7 @@ from app.models import (
     Node as NodeModel,
     Edge as EdgeModel,
     Question as QuestionModel,
+    Material as MaterialModel,
     AppUser as AppUserModel,
 )
 
@@ -107,10 +108,64 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
     )
     questions = questions_result.scalars().all()
 
+    materials_result = await db.execute(
+        select(MaterialModel).where(MaterialModel.project_id == project_id)
+    )
+    materials = materials_result.scalars().all()
+
     question_counts: dict[str, int] = {}
     for question in questions:
         for node_id in question.covered_node_ids:
             question_counts[node_id] = question_counts.get(node_id, 0) + 1
+
+    material_links: dict[str, set[str]] = {}
+    for node in nodes:
+        for material_id in node.source_material_ids or []:
+            material_links.setdefault(material_id, set()).add(node.id)
+
+    for question in questions:
+        for material_id in question.source_material_ids or []:
+            for node_id in question.covered_node_ids:
+                material_links.setdefault(material_id, set()).add(node_id)
+
+    material_nodes = []
+    material_edges = []
+    for material in materials:
+        linked_nodes = material_links.get(material.id, set())
+        if not linked_nodes:
+            continue
+
+        material_node_id = f"material:{material.id}"
+        material_nodes.append(
+            {
+                "id": material_node_id,
+                "project_id": material.project_id,
+                "created_by": material.created_by,
+                "topic_name": material.title,
+                "proven_knowledge_rating": 0.05,
+                "user_estimated_knowledge_rating": 0.05,
+                "importance": 1.0,
+                "relevance": 1.0,
+                "view_frequency": 1,
+                "source_material_ids": [material.id],
+                "forgetting_score": 0.95,
+                "linked_questions_count": 0,
+                "linked_materials_count": 0,
+                "node_type": "material",
+            }
+        )
+
+        for node_id in sorted(linked_nodes):
+            material_edges.append(
+                {
+                    "id": f"{material_node_id}-node:{node_id}-MATERIAL",
+                    "project_id": material.project_id,
+                    "source": material_node_id,
+                    "target": node_id,
+                    "type": "MATERIAL",
+                    "weight": 0.8,
+                }
+            )
 
     return {
         "nodes": [
@@ -128,9 +183,10 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
                 "forgetting_score": 1.0 - node.proven_knowledge_rating,
                 "linked_questions_count": question_counts.get(node.id, 0),
                 "linked_materials_count": len(node.source_material_ids or []),
+                "node_type": "topic",
             }
             for node in nodes
-        ],
+        ] + material_nodes,
         "edges": [
             {
                 "id": edge.id,
@@ -141,7 +197,7 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
                 "weight": edge.weight,
             }
             for edge in edges
-        ],
+        ] + material_edges,
     }
 
 

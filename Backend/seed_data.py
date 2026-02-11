@@ -611,6 +611,24 @@ async def seed_database(reset_db: bool = False):
                         content_text=material_text,
                     )
                     session.add(db_material)
+
+                node_result = await session.execute(
+                    select(NodeModel).where(NodeModel.project_id == project.id)
+                )
+                for node in node_result.scalars().all():
+                    source_ids = set(node.source_material_ids or [])
+                    if material_id not in source_ids:
+                        source_ids.add(material_id)
+                        node.source_material_ids = list(source_ids)
+
+                question_result = await session.execute(
+                    select(QuestionModel).where(QuestionModel.project_id == project.id)
+                )
+                for question in question_result.scalars().all():
+                    source_ids = set(question.source_material_ids or [])
+                    if material_id not in source_ids:
+                        source_ids.add(material_id)
+                        question.source_material_ids = list(source_ids)
         
         await session.commit()
     

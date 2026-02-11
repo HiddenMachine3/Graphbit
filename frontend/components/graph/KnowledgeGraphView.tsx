@@ -19,6 +19,7 @@ import type { GraphEdgeDTO, GraphNodeDTO } from "../../lib/types";
 import { createEdge } from "../../lib/api/graph";
 import GraphEdge from "./GraphEdge";
 import GraphNode from "./GraphNode";
+import MaterialNode from "./MaterialNode";
 import useForceLayout from "../../lib/graph/useForceLayout";
 
 export type KnowledgeGraphViewProps = {
@@ -30,7 +31,7 @@ export type KnowledgeGraphViewProps = {
   brightnessAttribute?: keyof GraphNodeDTO;
 };
 
-const nodeTypes = { graphNode: GraphNode };
+const nodeTypes = { graphNode: GraphNode, materialNode: MaterialNode };
 const edgeTypes = { graphEdge: GraphEdge };
 
 function buildFlowNodes(
@@ -39,7 +40,7 @@ function buildFlowNodes(
 ): Node[] {
   return nodes.map((node) => ({
     id: node.id,
-    type: "graphNode",
+    type: node.node_type === "material" ? "materialNode" : "graphNode",
     position: { x: 0, y: 0 },
     data: { ...node, brightnessAttribute },
     selected: false,
@@ -52,6 +53,7 @@ function buildFlowEdges(edges: GraphEdgeDTO[]): Edge[] {
     source: edge.source,
     target: edge.target,
     type: "graphEdge",
+    data: { edgeType: edge.type },
   }));
 }
 
@@ -68,8 +70,23 @@ export default function KnowledgeGraphView({
     [nodes, brightnessAttribute]
   );
   const baseEdges = useMemo(() => buildFlowEdges(edges), [edges]);
+  const layoutNodes = useMemo(
+    () => baseNodes.filter((node) => node.type !== "materialNode"),
+    [baseNodes]
+  );
+  const layoutEdges = useMemo(
+    () =>
+      baseEdges.filter(
+        (edge) => (edge.data as { edgeType?: string } | undefined)?.edgeType !== "MATERIAL"
+      ),
+    [baseEdges]
+  );
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState(baseEdges);
+  const materialNodeIds = useMemo(
+    () => new Set(nodes.filter((node) => node.node_type === "material").map((node) => node.id)),
+    [nodes]
+  );
 
   useEffect(() => {
     setFlowNodes((current) => {
@@ -107,7 +124,55 @@ export default function KnowledgeGraphView({
     setFlowEdges(baseEdges);
   }, [baseEdges, setFlowEdges]);
 
-  useForceLayout(baseNodes, baseEdges, setFlowNodes);
+  useForceLayout(layoutNodes, layoutEdges, setFlowNodes);
+
+  useEffect(() => {
+    if (materialNodeIds.size === 0) {
+      return;
+    }
+
+    setFlowNodes((current) => {
+      const nodeMap = new Map(current.map((node) => [node.id, node]));
+
+      return current.map((node) => {
+        if (!materialNodeIds.has(node.id)) {
+          return node;
+        }
+
+        const connectedNodes = flowEdges
+          .filter(
+            (edge) =>
+              edge.source === node.id &&
+              (edge.data as { edgeType?: string } | undefined)?.edgeType === "MATERIAL"
+          )
+          .map((edge) => nodeMap.get(edge.target))
+          .filter((target): target is Node => Boolean(target));
+
+        if (connectedNodes.length === 0) {
+          return node;
+        }
+
+        const averageX =
+          connectedNodes.reduce((sum, target) => sum + (target.position?.x ?? 0), 0) /
+          connectedNodes.length;
+        const averageY =
+          connectedNodes.reduce((sum, target) => sum + (target.position?.y ?? 0), 0) /
+          connectedNodes.length;
+
+        if (
+          Math.abs((node.position?.x ?? 0) - averageX) < 1 &&
+          Math.abs((node.position?.y ?? 0) - averageY) < 1
+        ) {
+          return node;
+        }
+
+        return {
+          ...node,
+          position: { x: averageX, y: averageY },
+        };
+      });
+    });
+  }, [flowEdges, materialNodeIds, setFlowNodes]);
 
   const onConnect = useCallback(
     async (connection: Connection) => {

@@ -28,6 +28,7 @@ export interface GraphNodeDTO extends NodeDTO {
   forgetting_score: number;
   linked_questions_count: number;
   linked_materials_count: number;
+  node_type?: "topic" | "material";
 }
 
 export interface GraphEdgeDTO {
