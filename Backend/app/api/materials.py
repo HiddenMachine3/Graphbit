@@ -221,6 +221,54 @@ async def attach_material(
     }
 
 
+@router.put("/materials/{material_id}/nodes")
+async def replace_material_nodes(
+    material_id: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace the set of nodes linked to a material."""
+    result = await db.execute(
+        select(MaterialModel).where(MaterialModel.id == material_id)
+    )
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    node_ids = data.get("node_ids")
+    if node_ids is None:
+        raise HTTPException(status_code=400, detail="node_ids are required")
+
+    nodes_result = await db.execute(
+        select(NodeModel).where(NodeModel.project_id == material.project_id)
+    )
+    nodes = nodes_result.scalars().all()
+    node_map = {node.id: node for node in nodes}
+
+    desired_ids = {node_id for node_id in node_ids if node_id in node_map}
+    missing_ids = sorted(set(node_ids) - set(node_map))
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Nodes not found: {', '.join(missing_ids)}",
+        )
+
+    for node in nodes:
+        source_ids = set(node.source_material_ids or [])
+        if node.id in desired_ids:
+            source_ids.add(material_id)
+        else:
+            source_ids.discard(material_id)
+        node.source_material_ids = list(source_ids)
+
+    await db.commit()
+
+    return {
+        "material_id": material_id,
+        "node_ids": sorted(desired_ids),
+    }
+
+
 @router.post("/materials/sessions")
 async def start_content_session(data: dict, db: AsyncSession = Depends(get_db)):
     """Start a new content reading session."""

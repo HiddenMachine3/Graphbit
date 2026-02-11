@@ -44,6 +44,19 @@ export async function updateMaterial(
   });
 }
 
+export async function replaceMaterialNodes(
+  materialId: string,
+  nodeIds: string[]
+): Promise<{ material_id: string; node_ids: string[] }> {
+  return apiFetch<{ material_id: string; node_ids: string[] }>(
+    `/materials/${materialId}/nodes`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ node_ids: nodeIds }),
+    }
+  );
+}
+
 export async function startContentSession(
   materialId: string,
   userId: string
