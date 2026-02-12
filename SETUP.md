@@ -238,7 +238,7 @@ powershell -ExecutionPolicy Bypass -File "Backend\scripts\stop_local_pgvector_db
 ## 6️⃣ Notes from the working setup
 
 - Native Windows PostgreSQL + pgvector compilation requires MSVC build tools; Conda avoids this.
-- If backend startup fails with `No module named uvicorn`, use the interpreter that has dependencies installed (example below).
+- Graphbit local development does not require manual DB migration scripts; schema is initialized on backend startup, and data can be reset via `seed_data.py --reset`.
 
 ---
 
@@ -301,13 +301,6 @@ The application runs on two separate servers: Backend API and Frontend. You'll n
 ```powershell
 Set-Location 'S:\files\files\Projects\Projects\Graphbit\Backend'
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-If `python -m uvicorn` fails due to interpreter mismatch, run with the explicit Python path:
-
-```powershell
-Set-Location 'S:\files\files\Projects\Projects\Graphbit\Backend'
-& "C:\Users\cosmo\AppData\Local\Programs\Python\Python312\python.exe" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The backend will be available at: `http://localhost:8000`
