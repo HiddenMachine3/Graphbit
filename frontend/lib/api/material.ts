@@ -17,16 +17,42 @@ export async function createMaterial(
   projectId: string,
   title: string,
   contentText: string,
-  createdBy?: string
-): Promise<MaterialDTO> {
-  return apiFetch<MaterialDTO>("/materials", {
+  createdBy?: string,
+  sourceUrl?: string
+): Promise<MaterialDTO & { imported_from_youtube?: boolean; youtube_video_id?: string | null; transcript_chunk_count?: number }> {
+  return apiFetch<MaterialDTO & { imported_from_youtube?: boolean; youtube_video_id?: string | null; transcript_chunk_count?: number }>("/materials", {
     method: "POST",
     body: JSON.stringify({
       project_id: projectId,
       title,
       content_text: contentText,
+      source_url: sourceUrl,
+      link: sourceUrl,
       created_by: createdBy,
     }),
+  });
+}
+
+export async function checkYoutubeTranscript(
+  link: string
+): Promise<{
+  link: string;
+  video_id: string | null;
+  has_transcript: boolean;
+  transcript_text: string;
+  chunk_count: number;
+  chunks: string[];
+}> {
+  return apiFetch<{
+    link: string;
+    video_id: string | null;
+    has_transcript: boolean;
+    transcript_text: string;
+    chunk_count: number;
+    chunks: string[];
+  }>("/materials/youtube/transcript-check", {
+    method: "POST",
+    body: JSON.stringify({ link }),
   });
 }
 
@@ -36,7 +62,7 @@ export async function deleteMaterial(materialId: string): Promise<void> {
 
 export async function updateMaterial(
   materialId: string,
-  updates: { title?: string; content_text?: string }
+  updates: { title?: string; content_text?: string; source_url?: string }
 ): Promise<MaterialDTO> {
   return apiFetch<MaterialDTO>(`/materials/${materialId}`, {
     method: "PATCH",
@@ -101,9 +127,10 @@ export async function startContentSession(
 export async function fetchMaterial(materialId: string): Promise<{
   id: string;
   title: string;
+  source_url?: string | null;
   chunks: string[];
 }> {
-  return apiFetch<{ id: string; title: string; chunks: string[] }>(
+  return apiFetch<{ id: string; title: string; source_url?: string | null; chunks: string[] }>(
     `/materials/${materialId}`
   );
 }

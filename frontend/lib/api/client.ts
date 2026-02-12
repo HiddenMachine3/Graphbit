@@ -28,8 +28,10 @@ export async function apiFetch<T>(
   if (!response.ok) {
     let message = "Request failed";
     try {
-      const data = await parseJson<{ message?: string }>(response);
-      if (data?.message) {
+      const data = await parseJson<{ message?: string; detail?: string }>(response);
+      if (data?.detail) {
+        message = data.detail;
+      } else if (data?.message) {
         message = data.message;
       }
     } catch {

@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/question";
 import {
   listMaterials,
+  checkYoutubeTranscript,
   createMaterial,
   deleteMaterial,
   fetchMaterial,
@@ -52,6 +53,10 @@ type SuggestionItem = {
   suggestion_type: "EXISTING" | "NEW" | string;
 };
 
+type ApiLikeError = {
+  message?: string;
+};
+
 function SectionCard({
   title,
   subtitle,
@@ -77,6 +82,34 @@ const parseCsv = (value: string) =>
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
+
+const isValidYoutubeUrl = (value: string) => {
+  if (!value.trim()) {
+    return true;
+  }
+  try {
+    const parsed = new URL(value.trim());
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.replace(/^\/+/, "");
+
+    if ((host === "youtu.be" || host === "www.youtu.be") && path.length > 0) {
+      return true;
+    }
+
+    if (host === "youtube.com" || host === "www.youtube.com" || host === "m.youtube.com") {
+      if (path === "watch" && parsed.searchParams.get("v")) {
+        return true;
+      }
+      if (path.startsWith("shorts/") || path.startsWith("embed/")) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+};
 
 const EMPTY_MCQ_OPTIONS = ["", "", "", ""];
 
@@ -182,10 +215,14 @@ export default function ProjectsPage() {
 
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialText, setMaterialText] = useState("");
+  const [materialSourceUrl, setMaterialSourceUrl] = useState("");
   const [materialFiles, setMaterialFiles] = useState<FileList | null>(null);
+  const [materialTranscriptStatus, setMaterialTranscriptStatus] = useState<string | null>(null);
+  const [materialTranscriptChecking, setMaterialTranscriptChecking] = useState(false);
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
   const [editMaterialTitle, setEditMaterialTitle] = useState("");
   const [editMaterialText, setEditMaterialText] = useState("");
+  const [editMaterialSourceUrl, setEditMaterialSourceUrl] = useState("");
   const [editingMaterialNodesId, setEditingMaterialNodesId] = useState<string | null>(null);
   const [materialNodeSearch, setMaterialNodeSearch] = useState("");
   const [materialNodeSelection, setMaterialNodeSelection] = useState<string[]>([]);
@@ -202,6 +239,21 @@ export default function ProjectsPage() {
     strong: SuggestionItem[];
     weak: SuggestionItem[];
   }>({ materialId: null, strong: [], weak: [] });
+
+  const createMaterialLinkInvalid =
+    Boolean(materialSourceUrl.trim()) && !isValidYoutubeUrl(materialSourceUrl);
+  const editMaterialLinkInvalid =
+    Boolean(editMaterialSourceUrl.trim()) && !isValidYoutubeUrl(editMaterialSourceUrl);
+
+  const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error && typeof error === "object") {
+      const candidate = (error as ApiLikeError).message;
+      if (candidate) {
+        return candidate;
+      }
+    }
+    return fallback;
+  };
 
   const [communityName, setCommunityName] = useState("");
   const [communityDescription, setCommunityDescription] = useState("");
@@ -818,30 +870,74 @@ export default function ProjectsPage() {
       setStatus({ type: "error", message: "Select a project first" });
       return;
     }
-    if (!materialTitle.trim() || !materialText.trim()) {
+    if (!materialTitle.trim() || (!materialText.trim() && !materialSourceUrl.trim())) {
       setStatus({
         type: "error",
-        message: "Material title and text are required",
+        message: "Material title and either text or a YouTube link are required",
+      });
+      return;
+    }
+    if (materialSourceUrl.trim() && !isValidYoutubeUrl(materialSourceUrl)) {
+      setStatus({
+        type: "error",
+        message: "Please enter a valid YouTube link",
       });
       return;
     }
     resetStatus();
     setBusy(true);
     try {
-      await createMaterial(
+      const created = await createMaterial(
         currentProjectId,
         materialTitle.trim(),
         materialText.trim(),
-        currentUser?.username ?? undefined
+        currentUser?.username ?? undefined,
+        materialSourceUrl.trim() || undefined
       );
       await refreshProjectData(currentProjectId);
       setMaterialTitle("");
       setMaterialText("");
-      setStatus({ type: "success", message: "Material created" });
-    } catch {
-      setStatus({ type: "error", message: "Failed to create material" });
+      setMaterialSourceUrl("");
+      setMaterialTranscriptStatus(null);
+      if (created.imported_from_youtube) {
+        setStatus({
+          type: "success",
+          message: `Material imported from YouTube transcript (${created.transcript_chunk_count ?? 0} chunks)`,
+        });
+      } else {
+        setStatus({ type: "success", message: "Material created" });
+      }
+    } catch (error) {
+      setStatus({
+        type: "error",
+        message: getErrorMessage(error, "Failed to create material"),
+      });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleCheckMaterialTranscript = async () => {
+    if (!materialSourceUrl.trim()) {
+      setMaterialTranscriptStatus("Paste a YouTube link first.");
+      return;
+    }
+    if (!isValidYoutubeUrl(materialSourceUrl)) {
+      setMaterialTranscriptStatus("Invalid YouTube URL format.");
+      return;
+    }
+
+    setMaterialTranscriptChecking(true);
+    setMaterialTranscriptStatus(null);
+    try {
+      const result = await checkYoutubeTranscript(materialSourceUrl.trim());
+      setMaterialTranscriptStatus(
+        `Transcript found for video ${result.video_id ?? "unknown"} (${result.chunk_count} chunks).`
+      );
+    } catch (error) {
+      setMaterialTranscriptStatus(getErrorMessage(error, "No transcript found for this video."));
+    } finally {
+      setMaterialTranscriptChecking(false);
     }
   };
 
@@ -853,6 +949,7 @@ export default function ProjectsPage() {
       setEditingMaterialId(material.id);
       setEditMaterialTitle(material.title);
       setEditMaterialText(fullMaterial.chunks.join("\n\n"));
+      setEditMaterialSourceUrl(fullMaterial.source_url ?? material.source_url ?? "");
     } catch {
       setStatus({ type: "error", message: "Failed to load material" });
     } finally {
@@ -862,6 +959,7 @@ export default function ProjectsPage() {
 
   const cancelEditMaterial = () => {
     setEditingMaterialId(null);
+    setEditMaterialSourceUrl("");
   };
 
   const beginEditMaterialNodes = (material: MaterialDTO) => {
@@ -982,12 +1080,20 @@ export default function ProjectsPage() {
       });
       return;
     }
+    if (editMaterialSourceUrl.trim() && !isValidYoutubeUrl(editMaterialSourceUrl)) {
+      setStatus({
+        type: "error",
+        message: "Please enter a valid YouTube link",
+      });
+      return;
+    }
     resetStatus();
     setBusy(true);
     try {
       await updateMaterial(materialId, {
         title: editMaterialTitle.trim(),
         content_text: editMaterialText.trim(),
+        source_url: editMaterialSourceUrl.trim() || undefined,
       });
       await refreshProjectData(currentProjectId);
       setEditingMaterialId(null);
@@ -2045,15 +2151,41 @@ export default function ProjectsPage() {
                   placeholder="Material title"
                   className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
                 />
+                <input
+                  value={materialSourceUrl}
+                  onChange={(event) => {
+                    setMaterialSourceUrl(event.target.value);
+                    setMaterialTranscriptStatus(null);
+                  }}
+                  placeholder="YouTube link (optional if text provided)"
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                />
+                <div className={`text-xs ${createMaterialLinkInvalid ? "text-red-300" : "text-slate-500"}`}>
+                  {createMaterialLinkInvalid
+                    ? "Invalid YouTube URL format"
+                    : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCheckMaterialTranscript}
+                    disabled={busy || materialTranscriptChecking || !materialSourceUrl.trim() || createMaterialLinkInvalid}
+                    className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {materialTranscriptChecking ? "Checking..." : "Check transcript"}
+                  </button>
+                  {materialTranscriptStatus ? (
+                    <div className="text-xs text-slate-300">{materialTranscriptStatus}</div>
+                  ) : null}
+                </div>
                 <textarea
                   value={materialText}
                   onChange={(event) => setMaterialText(event.target.value)}
-                  placeholder="Paste notes or study material"
+                  placeholder="Paste notes or study material (optional if YouTube link provided)"
                   className="min-h-[100px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
                 />
                 <button
                   onClick={handleCreateMaterial}
-                  disabled={busy}
+                  disabled={busy || createMaterialLinkInvalid}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Add material
@@ -2124,6 +2256,17 @@ export default function ProjectsPage() {
                             onChange={(event) => setEditMaterialTitle(event.target.value)}
                             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                           />
+                          <input
+                            value={editMaterialSourceUrl}
+                            onChange={(event) => setEditMaterialSourceUrl(event.target.value)}
+                            placeholder="YouTube/source link"
+                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          />
+                          <div className={`text-[11px] ${editMaterialLinkInvalid ? "text-red-300" : "text-slate-500"}`}>
+                            {editMaterialLinkInvalid
+                              ? "Invalid YouTube URL format"
+                              : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
+                          </div>
                           <textarea
                             value={editMaterialText}
                             onChange={(event) => setEditMaterialText(event.target.value)}
@@ -2132,7 +2275,7 @@ export default function ProjectsPage() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               onClick={() => handleUpdateMaterial(material.id)}
-                              disabled={busy}
+                              disabled={busy || editMaterialLinkInvalid}
                               className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Save
@@ -2154,6 +2297,16 @@ export default function ProjectsPage() {
                               <div className="text-xs text-slate-400">
                                 {material.chunk_count} chunks
                               </div>
+                              {material.source_url ? (
+                                <a
+                                  href={material.source_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-blue-300 hover:text-blue-200"
+                                >
+                                  Source link
+                                </a>
+                              ) : null}
                             </div>
                             <div className="flex items-center gap-2">
                               <button

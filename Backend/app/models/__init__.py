@@ -171,6 +171,7 @@ class Material(Base):
     project_id = Column(String, nullable=False)
     created_by = Column(String, nullable=False)
     title = Column(String, nullable=False)
+    source_url = Column(Text, nullable=True)
     content_text = Column(Text, nullable=False)
     summary = Column(Text, nullable=True)
     embedding = Column(VectorType(768), nullable=True)
