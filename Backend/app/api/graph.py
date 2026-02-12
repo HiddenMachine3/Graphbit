@@ -26,7 +26,7 @@ router = APIRouter()
 class CreateNodeRequest(BaseModel):
     project_id: str
     topic_name: str
-    importance: float = 0.5
+    importance: float = 0.0
     relevance: float = 0.5
 
 
