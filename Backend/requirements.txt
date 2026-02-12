@@ -8,7 +8,6 @@ httpx==0.24.1
 # --- Database (Async) ---
 SQLAlchemy[asyncio]==2.0.34
 psycopg[binary]==3.2.1
-alembic==1.13.2
 
 # --- Configuration ---
 pydantic-settings==2.3.0
@@ -27,7 +26,7 @@ redis==5.0.8
 pytest
 
 # --- Video transcripts ---
-youtube-transcript-api==0.6.2
+youtube-transcript-api>=1.2.4,<2.0
 
 # --- Local LLM (Hugging Face) ---
 transformers==4.47.1

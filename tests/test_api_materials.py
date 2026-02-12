@@ -1,5 +1,7 @@
 """API tests for material CRUD."""
 
+from youtube_transcript_api import YouTubeTranscriptApi
+
 
 def test_material_crud(api_client):
     project_resp = api_client.post(
@@ -50,6 +52,273 @@ def test_material_crud(api_client):
 
     missing_resp = api_client.get("/api/v1/materials/mat-1")
     assert missing_resp.status_code == 404
+
+
+def test_material_create_from_youtube_link(api_client, monkeypatch):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-youtube",
+            "name": "YouTube Project",
+            "description": "Project for YouTube materials",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    def fake_get_transcript(*args, **kwargs):
+        video_id = args[-1] if args else kwargs.get("video_id")
+        assert video_id == "dQw4w9WgXcQ"
+        return [
+            {"text": "First transcript line."},
+            {"text": "Second transcript line."},
+        ]
+
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-youtube-1",
+            "project_id": "proj-youtube",
+            "title": "YouTube Material",
+            "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        },
+    )
+    assert create_resp.status_code == 200
+    payload = create_resp.json()
+    assert payload["source_url"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert payload["chunk_count"] == 2
+
+    get_resp = api_client.get("/api/v1/materials/mat-youtube-1")
+    assert get_resp.status_code == 200
+    material = get_resp.json()
+    assert material["source_url"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert material["chunks"] == ["First transcript line.", "Second transcript line."]
+
+
+def test_material_create_from_youtube_link_with_extra_query_params(api_client, monkeypatch):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-youtube-query",
+            "name": "YouTube Query Params Project",
+            "description": "Project for YouTube URL query parsing",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    def fake_get_transcript(*args, **kwargs):
+        video_id = args[-1] if args else kwargs.get("video_id")
+        assert video_id == "EKOU3JWDNLI"
+        return [
+            {"text": "Transcript line A"},
+            {"text": "Transcript line B"},
+        ]
+
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+
+    test_link = "https://www.youtube.com/watch?si=rtB_OUYe-nqVXIf6&v=EKOU3JWDNLI&feature=youtu.be"
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-youtube-query-1",
+            "project_id": "proj-youtube-query",
+            "title": "YouTube Material Query Link",
+            "link": test_link,
+        },
+    )
+    assert create_resp.status_code == 200
+    payload = create_resp.json()
+    assert payload["source_url"] == test_link
+    assert payload["imported_from_youtube"] is True
+    assert payload["youtube_video_id"] == "EKOU3JWDNLI"
+    assert payload["transcript_chunk_count"] == 2
+
+
+def test_check_youtube_transcript_endpoint(api_client, monkeypatch):
+    def fake_get_transcript(*args, **kwargs):
+        video_id = args[-1] if args else kwargs.get("video_id")
+        assert video_id == "EKOU3JWDNLI"
+        return [
+            {"text": "Line 1"},
+            {"text": "Line 2"},
+        ]
+
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+
+    check_resp = api_client.post(
+        "/api/v1/materials/youtube/transcript-check",
+        json={
+            "link": "https://www.youtube.com/watch?si=rtB_OUYe-nqVXIf6&v=EKOU3JWDNLI&feature=youtu.be",
+        },
+    )
+    assert check_resp.status_code == 200
+    payload = check_resp.json()
+    assert payload["has_transcript"] is True
+    assert payload["video_id"] == "EKOU3JWDNLI"
+    assert payload["chunk_count"] == 2
+    assert payload["chunks"] == ["Line 1", "Line 2"]
+
+
+def test_material_create_imports_when_youtube_url_pasted_as_text(api_client, monkeypatch):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-youtube-paste",
+            "name": "YouTube Paste Project",
+            "description": "Project for YouTube URL pasted in text",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    def fake_get_transcript(*args, **kwargs):
+        video_id = args[-1] if args else kwargs.get("video_id")
+        assert video_id == "EKOU3JWDNLI"
+        return [
+            {"text": "Imported from pasted URL"},
+        ]
+
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+
+    pasted_link = "https://www.youtube.com/watch?si=rtB_OUYe-nqVXIf6&v=EKOU3JWDNLI&feature=youtu.be"
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-youtube-paste-1",
+            "project_id": "proj-youtube-paste",
+            "title": "Pasted URL Material",
+            "content_text": pasted_link,
+        },
+    )
+    assert create_resp.status_code == 200
+    payload = create_resp.json()
+    assert payload["source_url"] == pasted_link
+    assert payload["imported_from_youtube"] is True
+    assert payload["youtube_video_id"] == "EKOU3JWDNLI"
+
+
+def test_material_create_falls_back_when_get_transcript_fails(api_client, monkeypatch):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-youtube-fallback",
+            "name": "YouTube Fallback Project",
+            "description": "Project for transcript fallback",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    class FakeTranscriptEntry:
+        def fetch(self):
+            return [{"text": "Fallback transcript line"}]
+
+    class FakeTranscriptList:
+        def find_transcript(self, langs):
+            raise RuntimeError("preferred language not found")
+
+        def __iter__(self):
+            yield FakeTranscriptEntry()
+
+    def fake_get_transcript(*args, **kwargs):
+        raise RuntimeError("ParseError")
+
+    def fake_list_transcripts(*args, **kwargs):
+        return FakeTranscriptList()
+
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+    monkeypatch.setattr(YouTubeTranscriptApi, "list_transcripts", fake_list_transcripts)
+
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-youtube-fallback-1",
+            "project_id": "proj-youtube-fallback",
+            "title": "Fallback Material",
+            "link": "https://youtu.be/EKOU3JWDNLI?si=Nk1Gye3P3rnjfsGh",
+        },
+    )
+    assert create_resp.status_code == 200
+    payload = create_resp.json()
+    assert payload["imported_from_youtube"] is True
+    assert payload["youtube_video_id"] == "EKOU3JWDNLI"
+    assert payload["transcript_chunk_count"] == 1
+
+
+def test_material_create_uses_instance_fetch_when_available(api_client, monkeypatch):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-youtube-modern",
+            "name": "YouTube Modern API Project",
+            "description": "Project for instance fetch path",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    def fake_fetch(self, video_id, languages=None):
+        assert video_id == "EKOU3JWDNLI"
+        assert languages == ["en", "en-US", "en-GB"]
+        return [{"text": "Modern fetch transcript"}]
+
+    def fake_get_transcript(*args, **kwargs):
+        raise RuntimeError("legacy path should not be used when fetch exists")
+
+    monkeypatch.setattr(YouTubeTranscriptApi, "fetch", fake_fetch, raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-youtube-modern-1",
+            "project_id": "proj-youtube-modern",
+            "title": "Modern Fetch Material",
+            "link": "https://youtu.be/EKOU3JWDNLI?si=Nk1Gye3P3rnjfsGh",
+        },
+    )
+    assert create_resp.status_code == 200
+    payload = create_resp.json()
+    assert payload["imported_from_youtube"] is True
+    assert payload["youtube_video_id"] == "EKOU3JWDNLI"
+
+
+def test_live_transcript_fetch_for_exact_youtube_url():
+    """Live integration test using the simplest youtube_transcript_api usage."""
+    ytt_api = YouTubeTranscriptApi()
+    fetched_transcript = ytt_api.fetch("KyBgxe-rU48")
+
+    assert len(fetched_transcript) > 0
+    first_text = (getattr(fetched_transcript[0], "text", "") or "").strip()
+    assert bool(first_text)
+
+
+def test_material_create_from_invalid_youtube_link(api_client):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-youtube-invalid",
+            "name": "YouTube Invalid Project",
+            "description": "Project for invalid YouTube link",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-youtube-invalid-1",
+            "project_id": "proj-youtube-invalid",
+            "title": "YouTube Material",
+            "link": "https://example.com/video",
+        },
+    )
+    assert create_resp.status_code == 400
+    assert create_resp.json()["detail"] == "Invalid YouTube link"
 
 
 def test_material_attach(api_client):

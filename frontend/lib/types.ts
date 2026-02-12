@@ -148,6 +148,7 @@ export interface MaterialDTO {
   project_id: string;
   created_by: string;
   title: string;
+  source_url?: string | null;
   chunk_count: number;
 }
 

@@ -1,5 +1,6 @@
 """Material/content management API endpoints."""
 
+import asyncio
 from datetime import datetime
 import logging
 import os
@@ -21,6 +22,11 @@ from app.services.node_suggestions.embedding_service import EmbeddingService
 from app.services.node_suggestions.keyword_extraction_service import KeywordExtractionService
 from app.services.node_suggestions.node_suggestion_service import NodeSuggestionService
 from app.services.node_suggestions.postgres_repository import PostgresNodeSuggestionRepository
+from app.services.video_transcripts import (
+    extract_youtube_video_id,
+    fetch_youtube_transcript,
+    looks_like_single_url,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -47,12 +53,78 @@ def _serialize_material(material: MaterialModel) -> dict:
         "project_id": material.project_id,
         "created_by": material.created_by,
         "title": material.title,
+        "source_url": material.source_url,
         "chunk_count": len(_material_chunks(material.content_text)),
     }
 
 
 def _normalize_title(value: str) -> str:
     return " ".join(value.lower().strip().split())
+
+
+async def _fetch_youtube_transcript(link: str) -> tuple[str, str]:
+    video_id = extract_youtube_video_id(link)
+    if not video_id:
+        logger.warning("YouTube transcript fetch failed: invalid_link=%s", link)
+        raise HTTPException(status_code=400, detail="Invalid YouTube link")
+
+    try:
+        content_text, strategy_used = await asyncio.to_thread(fetch_youtube_transcript, link)
+    except Exception as exc:
+        detail = str(exc)
+        if "ParseError" in detail:
+            detail = (
+                "Unable to fetch transcript from YouTube link "
+                "(youtube_transcript_api ParseError; this often means the installed library is outdated "
+                "or YouTube response format changed). "
+                f"{detail}"
+            )
+        else:
+            detail = f"Unable to fetch transcript from YouTube link. {detail}"
+        logger.exception(
+            "YouTube transcript fetch failed in service: video_id=%s link=%s error=%s",
+            video_id,
+            link,
+            detail,
+        )
+        raise HTTPException(status_code=400, detail=detail) from exc
+
+    if not content_text.strip():
+        logger.warning(
+            "YouTube transcript fetch returned empty transcript: video_id=%s link=%s",
+            video_id,
+            link,
+        )
+        raise HTTPException(status_code=400, detail="YouTube transcript is empty")
+
+    logger.info(
+        "YouTube transcript fetched successfully: video_id=%s segments=%s chars=%s",
+        video_id,
+        len(_material_chunks(content_text)),
+        len(content_text),
+    )
+    return content_text, strategy_used
+
+
+@router.post("/materials/youtube/transcript-check")
+async def check_youtube_transcript(data: dict):
+    """Check whether a YouTube video has transcript and return parsed text when available."""
+    link = (data or {}).get("link") or (data or {}).get("source_url")
+    if not link:
+        raise HTTPException(status_code=400, detail="link is required")
+
+    content_text, strategy_used = await _fetch_youtube_transcript(link)
+    video_id = extract_youtube_video_id(link)
+    chunks = _material_chunks(content_text)
+    return {
+        "link": link,
+        "video_id": video_id,
+        "has_transcript": True,
+        "fetch_strategy": strategy_used,
+        "transcript_text": content_text,
+        "chunk_count": len(chunks),
+        "chunks": chunks,
+    }
 
 
 async def _update_node_search_vector(db: AsyncSession, node_id: str) -> None:
@@ -94,6 +166,7 @@ async def get_material(material_id: str, db: AsyncSession = Depends(get_db)):
     return {
         "id": material.id,
         "title": material.title,
+        "source_url": material.source_url,
         "chunks": _material_chunks(material.content_text),
     }
 
@@ -103,9 +176,46 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
     """Create a new material."""
     project_id = data.get("project_id")
     title = data.get("title")
-    content_text = data.get("content_text")
-    if not project_id or not title or not content_text:
-        raise HTTPException(status_code=400, detail="project_id, title, and content_text are required")
+    source_url = (data.get("source_url") or data.get("link") or "").strip()
+    content_text = (data.get("content_text") or "").strip()
+    if not project_id or not title:
+        raise HTTPException(status_code=400, detail="project_id and title are required")
+
+    imported_from_youtube = False
+    imported_video_id = None
+
+    if not source_url and looks_like_single_url(content_text):
+        detected_video_id = extract_youtube_video_id(content_text)
+        if detected_video_id:
+            source_url = content_text
+            content_text = ""
+            logger.info(
+                "Material create detected YouTube URL in content_text: project_id=%s title=%s video_id=%s",
+                project_id,
+                title,
+                detected_video_id,
+            )
+
+    logger.info(
+        "Material create request: project_id=%s title=%s has_source_url=%s has_content_text=%s",
+        project_id,
+        title,
+        bool(source_url),
+        bool(content_text),
+    )
+
+    if not content_text and source_url:
+        content_text, fetch_strategy = await _fetch_youtube_transcript(source_url)
+        imported_from_youtube = True
+        imported_video_id = extract_youtube_video_id(source_url)
+        logger.info(
+            "Material create YouTube import strategy: material_title=%s strategy=%s",
+            title,
+            fetch_strategy,
+        )
+
+    if not content_text:
+        raise HTTPException(status_code=400, detail="content_text is required unless a valid YouTube link is provided")
 
     material_id = data.get("id") or f"material-{int(datetime.now().timestamp())}"
     result = await db.execute(select(MaterialModel).where(MaterialModel.id == material_id))
@@ -120,6 +230,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         project_id=project_id,
         created_by=created_by,
         title=title,
+        source_url=source_url,
         content_text=content_text,
         created_at=datetime.now(),
         updated_at=datetime.now(),
@@ -127,7 +238,22 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
     db.add(material)
     await db.commit()
     await db.refresh(material)
-    return _serialize_material(material)
+
+    payload = _serialize_material(material)
+    payload.update(
+        {
+            "imported_from_youtube": imported_from_youtube,
+            "youtube_video_id": imported_video_id,
+            "transcript_chunk_count": len(_material_chunks(content_text)) if imported_from_youtube else 0,
+        }
+    )
+    logger.info(
+        "Material create success: material_id=%s imported_from_youtube=%s video_id=%s",
+        material.id,
+        imported_from_youtube,
+        imported_video_id,
+    )
+    return payload
 
 
 @router.patch("/materials/{material_id}")
@@ -142,6 +268,8 @@ async def update_material(material_id: str, data: dict, db: AsyncSession = Depen
 
     if "title" in data:
         material.title = data["title"]
+    if "source_url" in data or "link" in data:
+        material.source_url = data.get("source_url") or data.get("link")
     if "content_text" in data:
         material.content_text = data["content_text"]
     material.updated_at = datetime.now()

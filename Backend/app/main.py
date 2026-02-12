@@ -9,6 +9,7 @@ This file:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy import text
 from app.core.config import settings
 from app.api import api_router
 from app.db.session import async_engine
@@ -29,6 +30,10 @@ async def lifespan(app: FastAPI):
     # Startup: Create database tables
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if conn.dialect.name == "postgresql":
+            await conn.execute(
+                text("ALTER TABLE IF EXISTS materials ADD COLUMN IF NOT EXISTS source_url TEXT")
+            )
     print("✓ Database tables created/verified")
     
     yield
