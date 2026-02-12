@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { GraphNodeDTO } from '../../lib/types';
 import { createEdge } from '../../lib/api/graph';
+import { attachMaterialNodes } from '../../lib/api/material';
 
 type EdgeManagementPanelProps = {
   nodes: GraphNodeDTO[];
@@ -58,10 +59,26 @@ export default function EdgeManagementPanel({
       return;
     }
 
+    const fromNode = nodes.find((node) => node.id === from);
+    const toNode = nodes.find((node) => node.id === to);
+    const fromIsMaterial = fromNode?.node_type === "material" || from.startsWith("material:");
+    const toIsMaterial = toNode?.node_type === "material" || to.startsWith("material:");
+
+    if (fromIsMaterial && toIsMaterial) {
+      setError('Connect materials to topic nodes only');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      await createEdge(projectId, from, to, edgeType, weight);
+      if (fromIsMaterial || toIsMaterial) {
+        const materialId = (fromIsMaterial ? from : to).replace("material:", "");
+        const nodeId = fromIsMaterial ? to : from;
+        await attachMaterialNodes(materialId, [nodeId]);
+      } else {
+        await createEdge(projectId, from, to, edgeType, weight);
+      }
       setToNodeId('');
       setEdgeType('PREREQUISITE');
       setWeight(1.0);
@@ -78,7 +95,7 @@ export default function EdgeManagementPanel({
     } finally {
       setLoading(false);
     }
-  }, [clickModeActive, selectedNodesForEdge, fromNodeId, toNodeId, edgeType, weight, projectId, onEdgeCreated, onClickModeChange, onNodesChange]);
+  }, [clickModeActive, selectedNodesForEdge, fromNodeId, toNodeId, edgeType, weight, projectId, nodes, onEdgeCreated, onClickModeChange, onNodesChange]);
 
   const handleNodeClick = (nodeId: string) => {
     if (!onNodesChange) return;
@@ -151,7 +168,7 @@ export default function EdgeManagementPanel({
       {clickModeActive && (
         <div className='mt-3'>
           <div className='rounded border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200'>
-            <p className='font-medium text-rose-200'>Click mode: Select 2 nodes</p>
+            <p className='font-medium text-rose-200'>Click mode: Select 2 nodes or a material + node</p>
             <p className='mt-1'>
               {selectedNodesForEdge.length === 0 && 'Click first node...'}
               {selectedNodesForEdge.length === 1 && 'Click second node...'}

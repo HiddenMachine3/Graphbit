@@ -4,7 +4,7 @@ Combines all API routers into a single main router.
 This router is then included in the FastAPI app with the /api/v1 prefix.
 """
 from fastapi import APIRouter
-from app.api import auth, graph, communities, revision, sessions, materials, projects, questions, users
+from app.api import auth, graph, communities, revision, sessions, materials, projects, questions, users, search
 
 # Create main API router
 api_router = APIRouter()
@@ -62,4 +62,10 @@ api_router.include_router(
 api_router.include_router(
     users.router,
     tags=["Users"]
+)
+
+# Search routes
+api_router.include_router(
+    search.router,
+    tags=["Search"]
 )

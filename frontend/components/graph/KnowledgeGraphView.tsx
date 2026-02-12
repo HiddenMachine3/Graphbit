@@ -25,10 +25,12 @@ import useForceLayout from "../../lib/graph/useForceLayout";
 export type KnowledgeGraphViewProps = {
   nodes: GraphNodeDTO[];
   edges: GraphEdgeDTO[];
+  projectId: string | null;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
   highlightedNodeIds?: string[];
   brightnessAttribute?: keyof GraphNodeDTO;
+  onGraphUpdated?: () => void;
 };
 
 const nodeTypes = { graphNode: GraphNode, materialNode: MaterialNode };
@@ -60,10 +62,12 @@ function buildFlowEdges(edges: GraphEdgeDTO[]): Edge[] {
 export default function KnowledgeGraphView({
   nodes,
   edges,
+  projectId,
   selectedNodeId,
   onSelectNode,
   highlightedNodeIds,
   brightnessAttribute = "proven_knowledge_rating",
+  onGraphUpdated,
 }: KnowledgeGraphViewProps) {
   const baseNodes = useMemo(
     () => buildFlowNodes(nodes, brightnessAttribute),
@@ -120,6 +124,10 @@ export default function KnowledgeGraphView({
   useEffect(() => {
     setFlowEdges(baseEdges);
   }, [baseEdges, setFlowEdges]);
+
+  useEffect(() => {
+    initialRepulsionDoneRef.current = false;
+  }, [baseNodes.length]);
 
   useForceLayout(layoutNodes, layoutEdges, emptyRepulsors, 0, setFlowNodes);
 
@@ -219,6 +227,33 @@ export default function KnowledgeGraphView({
       if (!connection.source || !connection.target) {
         return;
       }
+      if (!projectId) {
+        console.error("Project id is required to create connections");
+        return;
+      }
+
+      const sourceNode = flowNodes.find((node) => node.id === connection.source);
+      const targetNode = flowNodes.find((node) => node.id === connection.target);
+      const sourceIsMaterial = sourceNode?.type === "materialNode" || connection.source.startsWith("material:");
+      const targetIsMaterial = targetNode?.type === "materialNode" || connection.target.startsWith("material:");
+
+      if (sourceIsMaterial && targetIsMaterial) {
+        console.error("Material to material connections are not supported");
+        return;
+      }
+
+      if (sourceIsMaterial || targetIsMaterial) {
+        try {
+          const materialId = (sourceIsMaterial ? connection.source : connection.target).replace("material:", "");
+          const nodeId = sourceIsMaterial ? connection.target : connection.source;
+          const { attachMaterialNodes } = await import("../../lib/api/material");
+          await attachMaterialNodes(materialId, [nodeId]);
+          onGraphUpdated?.();
+        } catch (error) {
+          console.error("Failed to attach material node:", error);
+        }
+        return;
+      }
 
       const edgePayload = {
         ...connection,
@@ -228,7 +263,7 @@ export default function KnowledgeGraphView({
       setFlowEdges((current) => addEdge(edgePayload, current));
 
       try {
-        await createEdge(connection.source, connection.target, "APPLIED_WITH", 0.6);
+        await createEdge(projectId, connection.source, connection.target, "APPLIED_WITH", 0.6);
       } catch (error) {
         console.error("Failed to create edge:", error);
         setFlowEdges((current) =>
@@ -239,7 +274,7 @@ export default function KnowledgeGraphView({
         );
       }
     },
-    [setFlowEdges]
+    [flowNodes, onGraphUpdated, projectId, setFlowEdges]
   );
 
   const handleNodesChange = useCallback(
