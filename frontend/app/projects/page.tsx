@@ -26,6 +26,7 @@ import {
   fetchMaterial,
   updateMaterial,
   replaceMaterialNodes,
+  suggestMaterialNodes,
 } from "@/lib/api/material";
 import {
   listCommunities,
@@ -38,6 +39,14 @@ import { getCurrentUser } from "@/lib/api/user";
 type StatusState = {
   type: "idle" | "success" | "error";
   message: string;
+};
+
+type SuggestionItem = {
+  node_id?: string | null;
+  suggested_title?: string | null;
+  suggested_description?: string | null;
+  confidence: number;
+  suggestion_type: "EXISTING" | "NEW" | string;
 };
 
 function SectionCard({
@@ -112,6 +121,18 @@ export default function ProjectsPage() {
   const [editingMaterialNodesId, setEditingMaterialNodesId] = useState<string | null>(null);
   const [materialNodeSearch, setMaterialNodeSearch] = useState("");
   const [materialNodeSelection, setMaterialNodeSelection] = useState<string[]>([]);
+  const [materialNewNodeSelection, setMaterialNewNodeSelection] = useState<string[]>([]);
+  const [suggestionThreshold, setSuggestionThreshold] = useState(0.75);
+  const [semanticWeight, setSemanticWeight] = useState(0.6);
+  const [keywordWeight, setKeywordWeight] = useState(0.4);
+  const [suggestionTopK] = useState(20);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [materialSuggestions, setMaterialSuggestions] = useState<{
+    materialId: string | null;
+    strong: SuggestionItem[];
+    weak: SuggestionItem[];
+  }>({ materialId: null, strong: [], weak: [] });
 
   const [communityName, setCommunityName] = useState("");
   const [communityDescription, setCommunityDescription] = useState("");
@@ -159,7 +180,7 @@ export default function ProjectsPage() {
       listQuestionBank(projectId),
       listMaterials(projectId),
     ]);
-    setNodes(nodeData);
+    setNodes(nodeData.filter((node) => !node.id.startsWith("material:")));
     setQuestions(questionData);
     setMaterials(materialData);
   };
@@ -454,13 +475,19 @@ export default function ProjectsPage() {
     const linked = materialNodeMap.get(material.id) ?? [];
     setEditingMaterialNodesId(material.id);
     setMaterialNodeSelection(linked.map((node) => node.id));
+    setMaterialNewNodeSelection([]);
     setMaterialNodeSearch("");
+    setSuggestionError(null);
+    setMaterialSuggestions({ materialId: material.id, strong: [], weak: [] });
   };
 
   const cancelEditMaterialNodes = () => {
     setEditingMaterialNodesId(null);
     setMaterialNodeSelection([]);
+    setMaterialNewNodeSelection([]);
     setMaterialNodeSearch("");
+    setSuggestionError(null);
+    setMaterialSuggestions({ materialId: null, strong: [], weak: [] });
   };
 
   const handleSaveMaterialNodes = async (materialId: string) => {
@@ -470,14 +497,44 @@ export default function ProjectsPage() {
     resetStatus();
     setBusy(true);
     try {
-      await replaceMaterialNodes(materialId, materialNodeSelection);
+      const newNodes = materialNewNodeSelection.map((title) => ({ title }));
+      await replaceMaterialNodes(materialId, materialNodeSelection, newNodes);
       await refreshProjectData(currentProjectId);
       setEditingMaterialNodesId(null);
+      setMaterialNewNodeSelection([]);
       setStatus({ type: "success", message: "Material links updated" });
     } catch {
       setStatus({ type: "error", message: "Failed to update material links" });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleSuggestMaterialNodes = async (materialId: string) => {
+    if (!currentProjectId) {
+      return;
+    }
+    resetStatus();
+    setSuggestionError(null);
+    setSuggestionLoading(true);
+    try {
+      const response = await suggestMaterialNodes(materialId, {
+        project_id: currentProjectId,
+        threshold: suggestionThreshold,
+        semantic_weight: semanticWeight,
+        keyword_weight: keywordWeight,
+        top_k: suggestionTopK,
+      });
+      setMaterialSuggestions({ materialId, strong: response.strong, weak: response.weak });
+      const strongNodeIds = response.strong
+        .filter((item: SuggestionItem) => item.suggestion_type === "EXISTING" && item.node_id)
+        .map((item: SuggestionItem) => item.node_id as string);
+      setMaterialNodeSelection(strongNodeIds);
+      setMaterialNewNodeSelection([]);
+    } catch {
+      setSuggestionError("Failed to fetch suggestions");
+    } finally {
+      setSuggestionLoading(false);
     }
   };
 
@@ -1026,6 +1083,23 @@ export default function ProjectsPage() {
                   const isEditing = editingMaterialId === material.id;
                   const isEditingNodes = editingMaterialNodesId === material.id;
                   const linkedNodes = materialNodeMap.get(material.id) ?? [];
+                  const suggestionData =
+                    materialSuggestions.materialId === material.id
+                      ? materialSuggestions
+                      : { materialId: null, strong: [], weak: [] };
+                  const strongSuggestionIds = new Set(
+                    suggestionData.strong
+                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                      .map((item) => item.node_id as string)
+                  );
+                  const weakSuggestionIds = new Set(
+                    suggestionData.weak
+                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                      .map((item) => item.node_id as string)
+                  );
+                  const newSuggestions = suggestionData.weak.filter(
+                    (item) => item.suggestion_type === "NEW"
+                  );
                   const searchValue = materialNodeSearch.trim().toLowerCase();
                   const filteredNodes = nodes.filter((node) => {
                     if (!searchValue) {
@@ -1122,6 +1196,93 @@ export default function ProjectsPage() {
 
                           {isEditingNodes && (
                             <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  onClick={() => handleSuggestMaterialNodes(material.id)}
+                                  disabled={busy || suggestionLoading}
+                                  className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {suggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                </button>
+                                <div className="text-[11px] text-slate-400">
+                                  Adjust threshold + weights before suggesting.
+                                </div>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                  Threshold: {suggestionThreshold.toFixed(2)}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    value={suggestionThreshold}
+                                    onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                  />
+                                </label>
+                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                  Semantic weight: {semanticWeight.toFixed(2)}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.05}
+                                    value={semanticWeight}
+                                    onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                  />
+                                </label>
+                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                  Keyword weight: {keywordWeight.toFixed(2)}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.05}
+                                    value={keywordWeight}
+                                    onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                  />
+                                </label>
+                              </div>
+                              {suggestionError && (
+                                <div className="text-xs text-red-300">{suggestionError}</div>
+                              )}
+                              {suggestionData.strong.length > 0 && (
+                                <div className="text-[11px] text-slate-400">
+                                  Strong suggestions preselected: {suggestionData.strong.length}
+                                </div>
+                              )}
+                              {newSuggestions.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                                  New candidates (click to add):
+                                  {newSuggestions.map((item, index) => {
+                                    const title = item.suggested_title?.trim();
+                                    if (!title) {
+                                      return null;
+                                    }
+                                    const isSelected = materialNewNodeSelection.includes(title);
+                                    return (
+                                      <button
+                                        key={`${title}-${index}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setMaterialNewNodeSelection((prev) =>
+                                            prev.includes(title)
+                                              ? prev.filter((entry) => entry !== title)
+                                              : [...prev, title]
+                                          );
+                                        }}
+                                        className={`rounded-full border px-2 py-0.5 transition ${
+                                          isSelected
+                                            ? "border-rose-400 bg-rose-500/20 text-rose-100"
+                                            : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                        }`}
+                                      >
+                                        {title}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                               <input
                                 value={materialNodeSearch}
                                 onChange={(event) => setMaterialNodeSearch(event.target.value)}
@@ -1131,6 +1292,8 @@ export default function ProjectsPage() {
                               <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
                                 {filteredNodes.map((node) => {
                                   const isSelected = materialNodeSelection.includes(node.id);
+                                  const isStrongSuggested = strongSuggestionIds.has(node.id);
+                                  const isWeakSuggested = weakSuggestionIds.has(node.id);
                                   return (
                                     <button
                                       key={node.id}
@@ -1145,7 +1308,11 @@ export default function ProjectsPage() {
                                       className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
                                         isSelected
                                           ? "bg-rose-600/20 text-rose-100"
-                                          : "text-slate-200 hover:bg-slate-800/60"
+                                          : isStrongSuggested
+                                            ? "bg-rose-500/10 text-rose-100"
+                                            : isWeakSuggested
+                                              ? "bg-slate-800/60 text-slate-200"
+                                              : "text-slate-200 hover:bg-slate-800/60"
                                       }`}
                                     >
                                       <span className="font-medium">{node.topic_name}</span>

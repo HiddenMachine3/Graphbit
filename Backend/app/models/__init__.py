@@ -4,6 +4,8 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import func
 import json
 
+from app.db.types import VectorType, SearchVectorType
+
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
@@ -141,6 +143,8 @@ class Node(Base):
     relevance = Column(Float, nullable=False, default=0.5)
     view_frequency = Column(Integer, nullable=False, default=0)
     source_material_ids = Column(JSON, nullable=False, default=lambda: [])
+    embedding = Column(VectorType(768), nullable=True)
+    search_vector = Column(SearchVectorType(), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
 
@@ -168,5 +172,21 @@ class Material(Base):
     created_by = Column(String, nullable=False)
     title = Column(String, nullable=False)
     content_text = Column(Text, nullable=False)
+    summary = Column(Text, nullable=True)
+    embedding = Column(VectorType(768), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), onupdate=func.now())
+
+
+class MaterialNodeSuggestion(Base):
+    """Material to node suggestion model."""
+    __tablename__ = "material_node_suggestions"
+
+    id = Column(String, primary_key=True, nullable=False)
+    material_id = Column(String, nullable=False)
+    node_id = Column(String, nullable=True)
+    suggested_title = Column(String, nullable=True)
+    suggested_description = Column(Text, nullable=True)
+    confidence = Column(Float, nullable=False, default=0.0)
+    suggestion_type = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

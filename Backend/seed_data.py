@@ -481,6 +481,16 @@ async def seed_database(reset_db: bool = False):
                     session.add(db_node)
                     existing_node_ids.add(node_id)
                 print(f"      ✓ {topic_name}")
+
+            if session.bind.dialect.name == "postgresql":
+                await session.execute(
+                    text(
+                        "UPDATE nodes "
+                        "SET search_vector = to_tsvector('english', COALESCE(topic_name, '')) "
+                        "WHERE project_id = :project_id"
+                    ),
+                    {"project_id": project.id},
+                )
             
             # Create edges
             print(f"    Creating {len(data['edges'])} edges...")
@@ -609,6 +619,8 @@ async def seed_database(reset_db: bool = False):
                         created_by=user.id,
                         title=f"{project.name} Notes",
                         content_text=material_text,
+                        summary=None,
+                        embedding=None,
                     )
                     session.add(db_material)
 
