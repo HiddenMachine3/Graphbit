@@ -261,9 +261,10 @@ docker-compose up postgres redis -d
 ### Step 4: Initialize Database Tables
 The tables are created automatically on first app startup via the `lifespan` handler in `main.py`.
 
-Alternatively, you can run migrations if using Alembic:
+For development resets, flush and reseed with:
 ```powershell
-alembic upgrade head
+cd Backend
+python seed_data.py --reset
 ```
 
 ### Step 5: Start the Backend

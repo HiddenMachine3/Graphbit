@@ -33,8 +33,9 @@ The node suggestion pipeline generates node links for materials using a hybrid o
 **Required env vars:**
 - `HF_TOKEN`
 
-**Database migration:**
-- [Backend/db/migrations/20260212_node_suggestions.sql](Backend/db/migrations/20260212_node_suggestions.sql)
+**Database setup (dev):**
+- Tables are initialized automatically on backend startup.
+- To reset and reseed local data: `cd Backend` then `python seed_data.py --reset`
 
 ---
 
