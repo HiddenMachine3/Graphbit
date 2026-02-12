@@ -545,6 +545,30 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleAddNodeFromMaterialSearch = async () => {
+    if (!currentProjectId) {
+      return;
+    }
+    const value = materialNodeSearch.trim();
+    if (!value) {
+      return;
+    }
+    setBusy(true);
+    setSuggestionError(null);
+    try {
+      const created = await createNode(currentProjectId, value, 0, 0.6);
+      setNodes((prev) => [created, ...prev]);
+      setMaterialNodeSelection((prev) =>
+        prev.includes(created.id) ? prev : [...prev, created.id]
+      );
+      setMaterialNodeSearch("");
+    } catch {
+      setSuggestionError("Failed to add node");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleUpdateMaterial = async (materialId: string) => {
     if (!currentProjectId) {
       return;
@@ -1326,9 +1350,33 @@ export default function ProjectsPage() {
                               <input
                                 value={materialNodeSearch}
                                 onChange={(event) => setMaterialNodeSearch(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" && event.shiftKey) {
+                                    event.preventDefault();
+                                    handleAddNodeFromMaterialSearch();
+                                  }
+                                }}
                                 placeholder="Search nodes"
                                 className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                               />
+                              <div className="text-[10px] text-slate-500">
+                                Shift + Enter to add new node
+                              </div>
+                              {materialNodeSearch.trim() &&
+                                !nodes.some(
+                                  (node) =>
+                                    node.topic_name.toLowerCase() ===
+                                    materialNodeSearch.trim().toLowerCase()
+                                ) && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAddNodeFromMaterialSearch}
+                                    disabled={busy}
+                                    className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Add "{materialNodeSearch.trim()}"
+                                  </button>
+                                )}
                               <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
                                 {filteredNodes.map((node) => {
                                   const isSelected = materialNodeSelection.includes(node.id);

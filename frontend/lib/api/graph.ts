@@ -16,7 +16,7 @@ export async function fetchGraphSummary(projectId: string): Promise<GraphSummary
 export async function createNode(
   projectId: string,
   topicName: string,
-  importance: number = 0.5,
+  importance: number = 0,
   relevance: number = 0.5
 ): Promise<NodeDTO> {
   return apiFetch<NodeDTO>("/graph/nodes", {
