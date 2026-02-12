@@ -19,9 +19,9 @@ export default function GraphEdge({ id, sourceX, sourceY, targetX, targetY, data
         id={id}
         path={edgePath}
         style={{
-          stroke: isMaterialEdge ? "#d96a87" : "#8a1b3c",
-          strokeWidth: isMaterialEdge ? 1.2 : 1,
-          opacity: isMaterialEdge ? 0.55 : 0.35,
+          stroke: isMaterialEdge ? "#d96a87" : "#b0274d",
+          strokeWidth: isMaterialEdge ? 1.4 : 2,
+          opacity: isMaterialEdge ? 0.65 : 0.8,
           strokeDasharray: isMaterialEdge ? "6 4" : undefined,
         }}
       />

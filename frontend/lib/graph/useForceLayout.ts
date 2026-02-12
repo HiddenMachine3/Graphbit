@@ -45,7 +45,19 @@ function createSeed(nodes: Node[], edges: Edge[]) {
   return hashString(`${nodeKey}::${edgeKey}`) || 1;
 }
 
-export default function useForceLayout(nodes: Node[], edges: Edge[], setNodes: (payload: Node[] | ((nodes: Node[]) => Node[])) => void) {
+type Repulsor = {
+  id: string;
+  x: number;
+  y: number;
+};
+
+export default function useForceLayout(
+  nodes: Node[],
+  edges: Edge[],
+  repulsors: Repulsor[],
+  layoutTrigger: number,
+  setNodes: (payload: Node[] | ((nodes: Node[]) => Node[])) => void
+) {
   useEffect(() => {
     if (nodes.length === 0) {
       return undefined;
@@ -81,6 +93,39 @@ export default function useForceLayout(nodes: Node[], edges: Edge[], setNodes: (
 
     const seed = createSeed(nodes, edges);
 
+    const materialRepulsion = () => {
+      let nodeList: (SimulationNodeDatum & Node)[] = [];
+
+      const strength = 0.22;
+      const maxDistance = 280;
+
+      function force(alpha: number) {
+        if (repulsors.length === 0) {
+          return;
+        }
+
+        for (const node of nodeList) {
+          for (const repulsor of repulsors) {
+            const dx = (node.x ?? 0) - repulsor.x;
+            const dy = (node.y ?? 0) - repulsor.y;
+            const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+            if (distance > maxDistance) {
+              continue;
+            }
+            const factor = ((maxDistance - distance) / maxDistance) * strength * alpha;
+            node.vx = (node.vx ?? 0) + (dx / distance) * factor;
+            node.vy = (node.vy ?? 0) + (dy / distance) * factor;
+          }
+        }
+      }
+
+      force.initialize = (nodesInput: SimulationNodeDatum[]) => {
+        nodeList = nodesInput as (SimulationNodeDatum & Node)[];
+      };
+
+      return force;
+    };
+
     const simulation = forceSimulation(simulationNodes)
       .force("link", linkForce)
       .force("charge", chargeForce)
@@ -88,6 +133,7 @@ export default function useForceLayout(nodes: Node[], edges: Edge[], setNodes: (
       .force("centerX", centerPullX)
       .force("centerY", centerPullY)
       .force("radial", radialForce)
+      .force("materialRepulsion", materialRepulsion())
       .alpha(1)
       .alphaDecay(0.04)
       .randomSource(mulberry32(seed));
@@ -113,5 +159,5 @@ export default function useForceLayout(nodes: Node[], edges: Edge[], setNodes: (
     );
 
     return undefined;
-  }, [nodes, edges, setNodes]);
+  }, [nodes, edges, repulsors, layoutTrigger, setNodes]);
 }

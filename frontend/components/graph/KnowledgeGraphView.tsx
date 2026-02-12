@@ -83,11 +83,8 @@ export default function KnowledgeGraphView({
   );
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState(baseEdges);
-  const materialNodeIds = useMemo(
-    () => new Set(nodes.filter((node) => node.node_type === "material").map((node) => node.id)),
-    [nodes]
-  );
-
+  const emptyRepulsors = useMemo(() => [] as { id: string; x: number; y: number }[], []);
+  const initialRepulsionDoneRef = useRef(false);
   useEffect(() => {
     setFlowNodes((current) => {
       if (current.length === 0 || current.length !== baseNodes.length) {
@@ -124,56 +121,99 @@ export default function KnowledgeGraphView({
     setFlowEdges(baseEdges);
   }, [baseEdges, setFlowEdges]);
 
-  useForceLayout(layoutNodes, layoutEdges, setFlowNodes);
+  useForceLayout(layoutNodes, layoutEdges, emptyRepulsors, 0, setFlowNodes);
 
-  useEffect(() => {
-    if (materialNodeIds.size === 0) {
-      return;
+  const applyMaterialRepulsion = useCallback((current: Node[]) => {
+    const repulsors = current.filter((node) => node.type === "materialNode");
+    if (repulsors.length === 0) {
+      return current;
     }
 
-    setFlowNodes((current) => {
-      const nodeMap = new Map(current.map((node) => [node.id, node]));
+    const minDistance = 200;
+    const minNodeDistance = 120;
 
-      return current.map((node) => {
-        if (!materialNodeIds.has(node.id)) {
-          return node;
+    const nextNodes = current.map((node) => ({
+      ...node,
+      position: {
+        x: node.position?.x ?? 0,
+        y: node.position?.y ?? 0,
+      },
+    }));
+
+    const materialAdjusted = nextNodes.map((node) => {
+      if (node.type === "materialNode") {
+        return node;
+      }
+
+      let pushX = 0;
+      let pushY = 0;
+      const nodeX = node.position?.x ?? 0;
+      const nodeY = node.position?.y ?? 0;
+
+      repulsors.forEach((repulsor) => {
+        const repX = repulsor.position?.x ?? 0;
+        const repY = repulsor.position?.y ?? 0;
+        const dx = nodeX - repX;
+        const dy = nodeY - repY;
+        const distance = Math.hypot(dx, dy) || 1;
+        if (distance >= minDistance) {
+          return;
         }
-
-        const connectedNodes = flowEdges
-          .filter(
-            (edge) =>
-              edge.source === node.id &&
-              (edge.data as { edgeType?: string } | undefined)?.edgeType === "MATERIAL"
-          )
-          .map((edge) => nodeMap.get(edge.target))
-          .filter((target): target is Node => Boolean(target));
-
-        if (connectedNodes.length === 0) {
-          return node;
-        }
-
-        const averageX =
-          connectedNodes.reduce((sum, target) => sum + (target.position?.x ?? 0), 0) /
-          connectedNodes.length;
-        const averageY =
-          connectedNodes.reduce((sum, target) => sum + (target.position?.y ?? 0), 0) /
-          connectedNodes.length;
-
-        if (
-          Math.abs((node.position?.x ?? 0) - averageX) < 1 &&
-          Math.abs((node.position?.y ?? 0) - averageY) < 1
-        ) {
-          return node;
-        }
-
-        return {
-          ...node,
-          position: { x: averageX, y: averageY },
-        };
+        const strength = (minDistance - distance) / distance;
+        pushX += dx * strength;
+        pushY += dy * strength;
       });
-    });
-  }, [flowEdges, materialNodeIds, setFlowNodes]);
 
+      if (pushX === 0 && pushY === 0) {
+        return node;
+      }
+
+      return {
+        ...node,
+        position: {
+          x: nodeX + pushX,
+          y: nodeY + pushY,
+        },
+      };
+    });
+
+    const topicNodes = materialAdjusted.filter((node) => node.type !== "materialNode");
+    for (let i = 0; i < topicNodes.length; i += 1) {
+      for (let j = i + 1; j < topicNodes.length; j += 1) {
+        const a = topicNodes[i];
+        const b = topicNodes[j];
+        const ax = a.position?.x ?? 0;
+        const ay = a.position?.y ?? 0;
+        const bx = b.position?.x ?? 0;
+        const by = b.position?.y ?? 0;
+        const dx = bx - ax;
+        const dy = by - ay;
+        const distance = Math.hypot(dx, dy) || 1;
+        if (distance >= minNodeDistance) {
+          continue;
+        }
+        const overlap = (minNodeDistance - distance) / 2;
+        const ux = dx / distance;
+        const uy = dy / distance;
+        a.position = { x: ax - ux * overlap, y: ay - uy * overlap };
+        b.position = { x: bx + ux * overlap, y: by + uy * overlap };
+      }
+    }
+
+    return materialAdjusted;
+  }, []);
+
+  useEffect(() => {
+    if (initialRepulsionDoneRef.current) {
+      return;
+    }
+    const hasMaterials = flowNodes.some((node) => node.type === "materialNode");
+    if (!hasMaterials) {
+      return;
+    }
+    initialRepulsionDoneRef.current = true;
+    setFlowNodes((current) => applyMaterialRepulsion(current));
+  }, [applyMaterialRepulsion, flowNodes, setFlowNodes]);
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (!connection.source || !connection.target) {
@@ -202,13 +242,31 @@ export default function KnowledgeGraphView({
     [setFlowEdges]
   );
 
+  const handleNodesChange = useCallback(
+    (changes: Parameters<typeof onFlowNodesChange>[0]) => {
+      onFlowNodesChange(changes);
+      let triggerLayout = false;
+
+      changes.forEach((change) => {
+        if (change.type === "position" && !change.dragging) {
+          triggerLayout = true;
+        }
+      });
+
+      if (triggerLayout) {
+        setFlowNodes((current) => applyMaterialRepulsion(current));
+      }
+    },
+    [applyMaterialRepulsion, onFlowNodesChange, setFlowNodes]
+  );
+
   return (
     <div className="h-full w-full rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
       <ReactFlowProvider>
         <GraphFlowCanvas
           nodes={flowNodes}
           edges={flowEdges}
-          onNodesChange={onFlowNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onFlowEdgesChange}
           onConnect={onConnect}
           onSelectNode={onSelectNode}
