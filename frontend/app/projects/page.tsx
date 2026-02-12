@@ -162,6 +162,10 @@ export default function ProjectsPage() {
     return map;
   }, [materials, nodes]);
 
+  const nodeLookup = useMemo(() => {
+    return new Map(nodes.map((node) => [node.id, node]));
+  }, [nodes]);
+
   const resetStatus = () => setStatus({ type: "idle", message: "" });
 
   const refreshProjects = async () => {
@@ -517,6 +521,7 @@ export default function ProjectsPage() {
     resetStatus();
     setSuggestionError(null);
     setSuggestionLoading(true);
+    const priorSelection = new Set(materialNodeSelection);
     try {
       const response = await suggestMaterialNodes(materialId, {
         project_id: currentProjectId,
@@ -529,7 +534,9 @@ export default function ProjectsPage() {
       const strongNodeIds = response.strong
         .filter((item: SuggestionItem) => item.suggestion_type === "EXISTING" && item.node_id)
         .map((item: SuggestionItem) => item.node_id as string);
-      setMaterialNodeSelection(strongNodeIds);
+      const mergedSelection = new Set(priorSelection);
+      strongNodeIds.forEach((nodeId) => mergedSelection.add(nodeId));
+      setMaterialNodeSelection(Array.from(mergedSelection));
       setMaterialNewNodeSelection([]);
     } catch {
       setSuggestionError("Failed to fetch suggestions");
@@ -1283,6 +1290,39 @@ export default function ProjectsPage() {
                                   })}
                                 </div>
                               )}
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                                Selected nodes (click to toggle):
+                                {Array.from(
+                                  new Set([
+                                    ...linkedNodes.map((node) => node.id),
+                                    ...materialNodeSelection,
+                                  ])
+                                ).map((nodeId) => {
+                                  const node = nodeLookup.get(nodeId);
+                                  const label = node?.topic_name ?? nodeId;
+                                  const isSelected = materialNodeSelection.includes(nodeId);
+                                  return (
+                                    <button
+                                      key={nodeId}
+                                      type="button"
+                                      onClick={() => {
+                                        setMaterialNodeSelection((prev) =>
+                                          prev.includes(nodeId)
+                                            ? prev.filter((id) => id !== nodeId)
+                                            : [...prev, nodeId]
+                                        );
+                                      }}
+                                      className={`rounded-full border px-2 py-0.5 transition ${
+                                        isSelected
+                                          ? "border-rose-400 bg-rose-500/20 text-rose-100"
+                                          : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500"
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                               <input
                                 value={materialNodeSearch}
                                 onChange={(event) => setMaterialNodeSearch(event.target.value)}
