@@ -139,6 +139,17 @@ export default function KnowledgeGraphView({
 
     const minDistance = 200;
     const minNodeDistance = 120;
+    const minMaterialDistance = 160;
+
+    const unitVectorForPair = (aId: string, bId: string) => {
+      const input = `${aId}|${bId}`;
+      let hash = 0;
+      for (let i = 0; i < input.length; i += 1) {
+        hash = (hash * 31 + input.charCodeAt(i)) % 360;
+      }
+      const angle = (hash * Math.PI) / 180;
+      return { x: Math.cos(angle), y: Math.sin(angle) };
+    };
 
     const nextNodes = current.map((node) => ({
       ...node,
@@ -185,6 +196,7 @@ export default function KnowledgeGraphView({
       };
     });
 
+    const materialNodes = materialAdjusted.filter((node) => node.type === "materialNode");
     const topicNodes = materialAdjusted.filter((node) => node.type !== "materialNode");
     for (let i = 0; i < topicNodes.length; i += 1) {
       for (let j = i + 1; j < topicNodes.length; j += 1) {
@@ -194,13 +206,47 @@ export default function KnowledgeGraphView({
         const ay = a.position?.y ?? 0;
         const bx = b.position?.x ?? 0;
         const by = b.position?.y ?? 0;
-        const dx = bx - ax;
-        const dy = by - ay;
-        const distance = Math.hypot(dx, dy) || 1;
+        let dx = bx - ax;
+        let dy = by - ay;
+        let distance = Math.hypot(dx, dy);
+        if (distance < 1) {
+          const unit = unitVectorForPair(a.id, b.id);
+          dx = unit.x;
+          dy = unit.y;
+          distance = 1;
+        }
         if (distance >= minNodeDistance) {
           continue;
         }
         const overlap = (minNodeDistance - distance) / 2;
+        const ux = dx / distance;
+        const uy = dy / distance;
+        a.position = { x: ax - ux * overlap, y: ay - uy * overlap };
+        b.position = { x: bx + ux * overlap, y: by + uy * overlap };
+      }
+    }
+
+    for (let i = 0; i < materialNodes.length; i += 1) {
+      for (let j = i + 1; j < materialNodes.length; j += 1) {
+        const a = materialNodes[i];
+        const b = materialNodes[j];
+        const ax = a.position?.x ?? 0;
+        const ay = a.position?.y ?? 0;
+        const bx = b.position?.x ?? 0;
+        const by = b.position?.y ?? 0;
+        let dx = bx - ax;
+        let dy = by - ay;
+        let distance = Math.hypot(dx, dy);
+        if (distance < 1) {
+          const unit = unitVectorForPair(a.id, b.id);
+          dx = unit.x;
+          dy = unit.y;
+          distance = 1;
+        }
+        if (distance >= minMaterialDistance) {
+          continue;
+        }
+        const overlap = (minMaterialDistance - distance) / 2;
         const ux = dx / distance;
         const uy = dy / distance;
         a.position = { x: ax - ux * overlap, y: ay - uy * overlap };
@@ -215,13 +261,12 @@ export default function KnowledgeGraphView({
     if (initialRepulsionDoneRef.current) {
       return;
     }
-    const hasMaterials = flowNodes.some((node) => node.type === "materialNode");
-    if (!hasMaterials) {
+    if (flowNodes.length === 0) {
       return;
     }
     initialRepulsionDoneRef.current = true;
     setFlowNodes((current) => applyMaterialRepulsion(current));
-  }, [applyMaterialRepulsion, flowNodes, setFlowNodes]);
+  }, [applyMaterialRepulsion, flowNodes.length, setFlowNodes]);
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (!connection.source || !connection.target) {

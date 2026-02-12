@@ -531,13 +531,25 @@ export default function ProjectsPage() {
         top_k: suggestionTopK,
       });
       setMaterialSuggestions({ materialId, strong: response.strong, weak: response.weak });
-      const strongNodeIds = response.strong
+      const newCandidates = response.weak
+        .filter((item: SuggestionItem) => item.suggestion_type === "NEW" && item.suggested_title)
+        .sort((a: SuggestionItem, b: SuggestionItem) => b.confidence - a.confidence);
+      const newTopCount = Math.ceil(newCandidates.length * 0.5);
+      const newTopTitles = newCandidates
+        .slice(0, newTopCount)
+        .map((item: SuggestionItem) => (item.suggested_title as string).trim())
+        .filter(Boolean);
+      const existingSuggestions = [...response.strong, ...response.weak]
         .filter((item: SuggestionItem) => item.suggestion_type === "EXISTING" && item.node_id)
+        .sort((a: SuggestionItem, b: SuggestionItem) => b.confidence - a.confidence);
+      const topCount = Math.ceil(existingSuggestions.length * 0.5);
+      const topNodeIds = existingSuggestions
+        .slice(0, topCount)
         .map((item: SuggestionItem) => item.node_id as string);
       const mergedSelection = new Set(priorSelection);
-      strongNodeIds.forEach((nodeId) => mergedSelection.add(nodeId));
+      topNodeIds.forEach((nodeId) => mergedSelection.add(nodeId));
       setMaterialNodeSelection(Array.from(mergedSelection));
-      setMaterialNewNodeSelection([]);
+      setMaterialNewNodeSelection(newTopTitles);
     } catch {
       setSuggestionError("Failed to fetch suggestions");
     } finally {
@@ -1285,6 +1297,18 @@ export default function ProjectsPage() {
                               {newSuggestions.length > 0 && (
                                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
                                   New candidates (click to add):
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const titles = newSuggestions
+                                        .map((item) => item.suggested_title?.trim())
+                                        .filter((title): title is string => Boolean(title));
+                                      setMaterialNewNodeSelection(Array.from(new Set(titles)));
+                                    }}
+                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                                  >
+                                    Select all
+                                  </button>
                                   {newSuggestions.map((item, index) => {
                                     const title = item.suggested_title?.trim();
                                     if (!title) {
@@ -1304,7 +1328,7 @@ export default function ProjectsPage() {
                                         }}
                                         className={`rounded-full border px-2 py-0.5 transition ${
                                           isSelected
-                                            ? "border-rose-400 bg-rose-500/20 text-rose-100"
+                                            ? "border-amber-400 bg-amber-500/20 text-amber-100"
                                             : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
                                         }`}
                                       >
@@ -1359,9 +1383,6 @@ export default function ProjectsPage() {
                                 placeholder="Search nodes"
                                 className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                               />
-                              <div className="text-[10px] text-slate-500">
-                                Shift + Enter to add new node
-                              </div>
                               {materialNodeSearch.trim() &&
                                 !nodes.some(
                                   (node) =>
@@ -1372,9 +1393,10 @@ export default function ProjectsPage() {
                                     type="button"
                                     onClick={handleAddNodeFromMaterialSearch}
                                     disabled={busy}
-                                    className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
-                                    Add "{materialNodeSearch.trim()}"
+                                    <span>Add "{materialNodeSearch.trim()}"</span>
+                                    <span className="text-[10px] text-slate-400">Shift + Enter</span>
                                   </button>
                                 )}
                               <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
