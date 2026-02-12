@@ -123,6 +123,14 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
         for material_id in node.source_material_ids or []:
             material_links.setdefault(material_id, set()).add(node.id)
 
+    for question in questions:
+        if not question.covered_node_ids:
+            continue
+        for material_id in question.source_material_ids or []:
+            linked_nodes = material_links.setdefault(material_id, set())
+            for node_id in question.covered_node_ids:
+                linked_nodes.add(node_id)
+
     material_nodes = []
     material_edges = []
     for material in materials:

@@ -11,6 +11,8 @@ export async function createQuestion(payload: {
   project_id: string;
   text: string;
   answer: string;
+  options?: string[];
+  option_explanations?: string[];
   question_type?: string;
   knowledge_type?: string;
   covered_node_ids?: string[];
@@ -34,6 +36,8 @@ export async function updateQuestion(
   updates: Partial<{
     text: string;
     answer: string;
+    options: string[];
+    option_explanations: string[];
     question_type: string;
     knowledge_type: string;
     covered_node_ids: string[];
@@ -69,10 +73,26 @@ export async function suggestQuestionNodes(
     threshold: number;
     semantic_weight: number;
     keyword_weight: number;
+    dedup_threshold: number;
     top_k: number;
   }
 ): Promise<{ strong: any[]; weak: any[] }> {
   return apiFetch(`/questions/${questionId}/suggestions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function suggestQuestionNodesByText(payload: {
+  project_id: string;
+  text: string;
+  threshold: number;
+  semantic_weight: number;
+  keyword_weight: number;
+  dedup_threshold: number;
+  top_k: number;
+}): Promise<{ strong: any[]; weak: any[] }> {
+  return apiFetch(`/questions/suggestions/raw-text`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

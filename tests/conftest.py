@@ -7,6 +7,20 @@ import pytest
 from datetime import datetime
 import asyncio
 
+
+def _load_backend_env_values(env_file: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not env_file.exists():
+        return values
+
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
 # Add Backend directory to Python path
 backend_dir = Path(__file__).parent.parent / "Backend"
 sys.path.insert(0, str(backend_dir))
@@ -16,6 +30,14 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test_app.db")
 os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
 os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 os.environ.setdefault("SECRET_KEY", "test-secret")
+
+backend_env_values = _load_backend_env_values(backend_dir / ".env")
+if "POSTGRES_TEST_URL" not in os.environ:
+    postgres_test_url = backend_env_values.get("POSTGRES_TEST_URL")
+    if not postgres_test_url:
+        postgres_test_url = backend_env_values.get("DATABASE_URL")
+    if postgres_test_url:
+        os.environ["POSTGRES_TEST_URL"] = postgres_test_url
 
 # Create 'backend' namespace module that points to 'app'
 class BackendNamespace:
