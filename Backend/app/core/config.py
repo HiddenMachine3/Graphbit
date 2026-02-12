@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -11,6 +12,19 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized.startswith("sqlite"):
+            raise ValueError("SQLite is disabled. Use PostgreSQL DATABASE_URL.")
+        if not (
+            normalized.startswith("postgresql://")
+            or normalized.startswith("postgresql+")
+        ):
+            raise ValueError("DATABASE_URL must be a PostgreSQL URL.")
+        return value
     
     # Redis (for Celery)
     CELERY_BROKER_URL: str
