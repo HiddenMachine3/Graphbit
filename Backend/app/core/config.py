@@ -21,6 +21,30 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour token lifetime
 
+    # Hugging Face
+    HF_TOKEN: str = ""
+    HF_EMBED_MODEL: str = "BAAI/bge-base-en-v1.5"
+    HF_KEYPHRASE_MODEL: str = "ml6team/keyphrase-extraction-distilbert-inspec"
+
+    # Node suggestion defaults
+    SUGGESTION_THRESHOLD: float = 0.75
+    SUGGESTION_SEMANTIC_WEIGHT: float = 0.6
+    SUGGESTION_KEYWORD_WEIGHT: float = 0.4
+    SUGGESTION_TOP_K: int = 20
+    SUGGESTION_DEDUP_THRESHOLD: float = 0.75
+
+    # HuggingFace
+    HF_TOKEN: str | None = None
+    HF_EMBED_MODEL: str = "BAAI/bge-base-en-v1.5"
+    HF_KEYPHRASE_MODEL: str = "ml6team/keyphrase-extraction-distilbert-inspec"
+
+    # Suggestion pipeline defaults
+    SUGGESTION_THRESHOLD: float = 0.75
+    SUGGESTION_SEMANTIC_WEIGHT: float = 0.6
+    SUGGESTION_KEYWORD_WEIGHT: float = 0.4
+    SUGGESTION_TOP_K: int = 20
+    SUGGESTION_DEDUP_THRESHOLD: float = 0.75
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()

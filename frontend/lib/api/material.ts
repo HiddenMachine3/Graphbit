@@ -46,15 +46,32 @@ export async function updateMaterial(
 
 export async function replaceMaterialNodes(
   materialId: string,
-  nodeIds: string[]
-): Promise<{ material_id: string; node_ids: string[] }> {
-  return apiFetch<{ material_id: string; node_ids: string[] }>(
+  nodeIds: string[],
+  newNodes?: Array<{ title: string }>
+): Promise<{ material_id: string; node_ids: string[]; created_node_ids?: string[] }> {
+  return apiFetch<{ material_id: string; node_ids: string[]; created_node_ids?: string[] }>(
     `/materials/${materialId}/nodes`,
     {
       method: "PUT",
-      body: JSON.stringify({ node_ids: nodeIds }),
+      body: JSON.stringify({ node_ids: nodeIds, new_nodes: newNodes }),
     }
   );
+}
+
+export async function suggestMaterialNodes(
+  materialId: string,
+  payload: {
+    project_id: string;
+    threshold: number;
+    semantic_weight: number;
+    keyword_weight: number;
+    top_k: number;
+  }
+): Promise<{ strong: any[]; weak: any[] }> {
+  return apiFetch(`/materials/${materialId}/suggestions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function startContentSession(

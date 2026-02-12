@@ -18,6 +18,26 @@ For setup instructions, see [SETUP.md](./SETUP.md)
 
 ---
 
+## Node Suggestion Pipeline
+
+The node suggestion pipeline generates node links for materials using a hybrid of vector similarity (pgvector) and Postgres FTS.
+
+**Backend flow (manual trigger):**
+- `POST /api/v1/materials/{material_id}/suggestions`
+- Sends `project_id`, `threshold`, `semantic_weight`, `keyword_weight`, `top_k`
+- Returns `strong` (preselected) and `weak` suggestions
+
+**Approve links:**
+- `PUT /api/v1/materials/{material_id}/nodes` with selected `node_ids`
+
+**Required env vars:**
+- `HF_TOKEN`
+
+**Database migration:**
+- [Backend/db/migrations/20260212_node_suggestions.sql](Backend/db/migrations/20260212_node_suggestions.sql)
+
+---
+
 ## Phase 1: Core Domain Models ✅
 
 **Status**: Complete

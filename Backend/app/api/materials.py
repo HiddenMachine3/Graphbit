@@ -1,11 +1,15 @@
 """Material/content management API endpoints."""
 
 from datetime import datetime
+import logging
+import os
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.models import (
     Material as MaterialModel,
@@ -13,8 +17,14 @@ from app.models import (
     Node as NodeModel,
     Question as QuestionModel,
 )
+from app.services.node_suggestions.embedding_service import EmbeddingService
+from app.services.node_suggestions.keyword_extraction_service import KeywordExtractionService
+from app.services.node_suggestions.node_suggestion_service import NodeSuggestionService
+from app.services.node_suggestions.postgres_repository import PostgresNodeSuggestionRepository
+from app.services.node_suggestions.types import SuggestionRequest
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _content_sessions = {}
 _session_counter = 0
@@ -40,6 +50,23 @@ def _serialize_material(material: MaterialModel) -> dict:
         "title": material.title,
         "chunk_count": len(_material_chunks(material.content_text)),
     }
+
+
+def _normalize_title(value: str) -> str:
+    return " ".join(value.lower().strip().split())
+
+
+async def _update_node_search_vector(db: AsyncSession, node_id: str) -> None:
+    if db.bind.dialect.name != "postgresql":
+        return
+    await db.execute(
+        text(
+            "UPDATE nodes "
+            "SET search_vector = to_tsvector('english', COALESCE(topic_name, '')) "
+            "WHERE id = :node_id"
+        ),
+        {"node_id": node_id},
+    )
 
 
 @router.get("/materials")
@@ -228,30 +255,130 @@ async def replace_material_nodes(
     db: AsyncSession = Depends(get_db),
 ):
     """Replace the set of nodes linked to a material."""
+    logger.info(
+        "Replace material nodes request: material_id=%s payload_keys=%s",
+        material_id,
+        list((data or {}).keys()),
+    )
     result = await db.execute(
         select(MaterialModel).where(MaterialModel.id == material_id)
     )
     material = result.scalar_one_or_none()
     if not material:
+        logger.warning("Material not found: material_id=%s", material_id)
         raise HTTPException(status_code=404, detail="Material not found")
 
-    node_ids = data.get("node_ids")
-    if node_ids is None:
-        raise HTTPException(status_code=400, detail="node_ids are required")
+    node_ids = data.get("node_ids") or []
+    new_nodes = data.get("new_nodes") or []
+
+    filtered_node_ids = [node_id for node_id in node_ids if not node_id.startswith("material:")]
+    ignored_ids = sorted(set(node_ids) - set(filtered_node_ids))
+    if ignored_ids:
+        logger.warning(
+            "Replace material nodes ignoring material node_ids: material_id=%s ignored=%s",
+            material_id,
+            ignored_ids,
+        )
+    node_ids = filtered_node_ids
+
+    if not node_ids and not new_nodes:
+        logger.info(
+            "Replace material nodes clearing all links: material_id=%s",
+            material_id,
+        )
+
+    logger.info(
+        "Replace material nodes payload: material_id=%s node_ids=%s new_nodes=%s",
+        material_id,
+        len(node_ids),
+        len(new_nodes),
+    )
 
     nodes_result = await db.execute(
         select(NodeModel).where(NodeModel.project_id == material.project_id)
     )
     nodes = nodes_result.scalars().all()
     node_map = {node.id: node for node in nodes}
+    title_map = {
+        _normalize_title(node.topic_name): node.id
+        for node in nodes
+        if node.topic_name
+    }
 
     desired_ids = {node_id for node_id in node_ids if node_id in node_map}
     missing_ids = sorted(set(node_ids) - set(node_map))
     if missing_ids:
+        logger.warning(
+            "Replace material nodes missing node_ids: material_id=%s missing=%s",
+            material_id,
+            missing_ids,
+        )
         raise HTTPException(
             status_code=404,
             detail=f"Nodes not found: {', '.join(missing_ids)}",
         )
+
+    created_nodes: list[NodeModel] = []
+    created_node_ids: list[str] = []
+    if new_nodes:
+        default_user = await _get_default_user(db)
+        created_by = default_user.username if default_user else ""
+        for entry in new_nodes:
+            title = None
+            if isinstance(entry, str):
+                title = entry
+            elif isinstance(entry, dict):
+                title = entry.get("title") or entry.get("suggested_title")
+            if not title or not title.strip():
+                logger.warning(
+                    "Replace material nodes invalid new_nodes title: material_id=%s entry=%s",
+                    material_id,
+                    entry,
+                )
+                raise HTTPException(status_code=400, detail="new_nodes titles are required")
+
+            normalized = _normalize_title(title)
+            existing_id = title_map.get(normalized)
+            if existing_id:
+                logger.info(
+                    "Replace material nodes reused existing node: material_id=%s title=%s node_id=%s",
+                    material_id,
+                    title,
+                    existing_id,
+                )
+                desired_ids.add(existing_id)
+                continue
+
+            node_id = f"node_{uuid.uuid4().hex}"
+            node = NodeModel(
+                id=node_id,
+                project_id=material.project_id,
+                created_by=created_by,
+                topic_name=title.strip(),
+                proven_knowledge_rating=0.0,
+                user_estimated_knowledge_rating=0.0,
+                importance=0.5,
+                relevance=0.5,
+                view_frequency=0,
+                source_material_ids=[material_id],
+            )
+            db.add(node)
+            created_nodes.append(node)
+            created_node_ids.append(node_id)
+            desired_ids.add(node_id)
+            title_map[normalized] = node_id
+            logger.info(
+                "Replace material nodes created node: material_id=%s node_id=%s title=%s",
+                material_id,
+                node_id,
+                title,
+            )
+
+        if created_nodes:
+            await db.flush()
+            for node in created_nodes:
+                await _update_node_search_vector(db, node.id)
+            nodes.extend(created_nodes)
 
     for node in nodes:
         source_ids = set(node.source_material_ids or [])
@@ -263,9 +390,66 @@ async def replace_material_nodes(
 
     await db.commit()
 
+    logger.info(
+        "Replace material nodes complete: material_id=%s node_ids=%s created=%s",
+        material_id,
+        len(desired_ids),
+        len(created_node_ids),
+    )
     return {
         "material_id": material_id,
         "node_ids": sorted(desired_ids),
+        "created_node_ids": created_node_ids,
+    }
+
+
+@router.post("/materials/{material_id}/suggestions")
+async def suggest_nodes_for_material(
+    material_id: str,
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Suggest nodes for a material using hybrid search."""
+    threshold = float(data.get("threshold", settings.SUGGESTION_THRESHOLD))
+    semantic_weight = float(data.get("semantic_weight", settings.SUGGESTION_SEMANTIC_WEIGHT))
+    keyword_weight = float(data.get("keyword_weight", settings.SUGGESTION_KEYWORD_WEIGHT))
+    top_k = int(data.get("top_k", settings.SUGGESTION_TOP_K))
+    project_id = data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+
+    hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
+    if not hf_token:
+        raise HTTPException(status_code=400, detail="HF_TOKEN is required")
+
+    from huggingface_hub import InferenceClient
+
+    client = InferenceClient(provider="hf-inference", api_key=hf_token)
+    embedding_service = EmbeddingService(client, expected_dim=768)
+    keyword_service = KeywordExtractionService(client)
+    repository = PostgresNodeSuggestionRepository(db)
+    service = NodeSuggestionService(repository, embedding_service, keyword_service)
+
+    logger.info(
+        "Running node suggestions for material %s (project %s)",
+        material_id,
+        project_id,
+    )
+
+    result = await service.suggest_nodes(
+        SuggestionRequest(
+            material_id=material_id,
+            project_id=project_id,
+            threshold=threshold,
+            semantic_weight=semantic_weight,
+            keyword_weight=keyword_weight,
+            top_k=top_k,
+        )
+    )
+
+    return {
+        "strong": [item.__dict__ for item in result.strong],
+        "weak": [item.__dict__ for item in result.weak],
     }
 
 

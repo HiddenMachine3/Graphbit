@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import EdgeType
@@ -123,11 +123,6 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
         for material_id in node.source_material_ids or []:
             material_links.setdefault(material_id, set()).add(node.id)
 
-    for question in questions:
-        for material_id in question.source_material_ids or []:
-            for node_id in question.covered_node_ids:
-                material_links.setdefault(material_id, set()).add(node_id)
-
     material_nodes = []
     material_edges = []
     for material in materials:
@@ -204,6 +199,19 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
 async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
     result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
     return result.scalar_one_or_none()
+
+
+async def _update_node_search_vector(db: AsyncSession, node_id: str) -> None:
+    if db.bind.dialect.name != "postgresql":
+        return
+    await db.execute(
+        text(
+            "UPDATE nodes "
+            "SET search_vector = to_tsvector('english', COALESCE(topic_name, '')) "
+            "WHERE id = :node_id"
+        ),
+        {"node_id": node_id},
+    )
 
 
 def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) -> Material:
@@ -379,6 +387,7 @@ async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get
     db.add(node)
     await db.commit()
     await db.refresh(node)
+    await _update_node_search_vector(db, node.id)
     
     return {
         "id": node.id,
@@ -427,6 +436,7 @@ async def update_node(
     
     await db.commit()
     await db.refresh(node)
+    await _update_node_search_vector(db, node.id)
 
     result = await db.execute(
         select(QuestionModel).where(QuestionModel.project_id == request.project_id)
