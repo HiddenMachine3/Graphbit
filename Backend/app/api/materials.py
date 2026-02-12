@@ -21,7 +21,6 @@ from app.services.node_suggestions.embedding_service import EmbeddingService
 from app.services.node_suggestions.keyword_extraction_service import KeywordExtractionService
 from app.services.node_suggestions.node_suggestion_service import NodeSuggestionService
 from app.services.node_suggestions.postgres_repository import PostgresNodeSuggestionRepository
-from app.services.node_suggestions.types import SuggestionRequest
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -409,14 +408,49 @@ async def suggest_nodes_for_material(
     data: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """Suggest nodes for a material using hybrid search."""
+    """Suggest nodes for a material by wrapping the raw-text suggestion workflow."""
+    project_id = data.get("project_id")
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+
+    result = await db.execute(
+        select(MaterialModel).where(MaterialModel.id == material_id)
+    )
+    material = result.scalar_one_or_none()
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+
+    return await suggest_nodes_for_material_text(
+        data={
+            "project_id": project_id,
+            "text": material.content_text or "",
+            "threshold": float(data.get("threshold", settings.SUGGESTION_THRESHOLD)),
+            "semantic_weight": float(data.get("semantic_weight", settings.SUGGESTION_SEMANTIC_WEIGHT)),
+            "keyword_weight": float(data.get("keyword_weight", settings.SUGGESTION_KEYWORD_WEIGHT)),
+            "top_k": int(data.get("top_k", settings.SUGGESTION_TOP_K)),
+            "dedup_threshold": float(data.get("dedup_threshold", settings.SUGGESTION_DEDUP_THRESHOLD)),
+            "material_id": material_id,
+        },
+        db=db,
+    )
+
+
+@router.post("/materials/suggestions/raw-text")
+async def suggest_nodes_for_material_text(data: dict, db: AsyncSession = Depends(get_db)):
+    """Suggest nodes from raw text using the shared hybrid workflow."""
     threshold = float(data.get("threshold", settings.SUGGESTION_THRESHOLD))
     semantic_weight = float(data.get("semantic_weight", settings.SUGGESTION_SEMANTIC_WEIGHT))
     keyword_weight = float(data.get("keyword_weight", settings.SUGGESTION_KEYWORD_WEIGHT))
     top_k = int(data.get("top_k", settings.SUGGESTION_TOP_K))
+    dedup_threshold = float(data.get("dedup_threshold", settings.SUGGESTION_DEDUP_THRESHOLD))
     project_id = data.get("project_id")
+    text_value = (data.get("text") or "").strip()
+    material_id = data.get("material_id")
+
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id is required")
+    if not text_value:
+        return {"strong": [], "weak": []}
 
     hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
     if not hf_token:
@@ -430,21 +464,15 @@ async def suggest_nodes_for_material(
     repository = PostgresNodeSuggestionRepository(db)
     service = NodeSuggestionService(repository, embedding_service, keyword_service)
 
-    logger.info(
-        "Running node suggestions for material %s (project %s)",
-        material_id,
-        project_id,
-    )
-
-    result = await service.suggest_nodes(
-        SuggestionRequest(
-            material_id=material_id,
-            project_id=project_id,
-            threshold=threshold,
-            semantic_weight=semantic_weight,
-            keyword_weight=keyword_weight,
-            top_k=top_k,
-        )
+    result = await service.suggest_nodes_for_text(
+        project_id=project_id,
+        text=text_value,
+        threshold=threshold,
+        semantic_weight=semantic_weight,
+        keyword_weight=keyword_weight,
+        top_k=top_k,
+        dedup_threshold=dedup_threshold,
+        material_id=material_id,
     )
 
     return {

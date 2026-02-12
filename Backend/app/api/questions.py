@@ -12,14 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db
 from app.models import Question as QuestionModel, AppUser as AppUserModel, Node as NodeModel
-from app.services.node_suggestions.confidence import compute_confidence
-from app.services.node_suggestions.deduplication import deduplicate_candidates
 from app.services.node_suggestions.embedding_service import EmbeddingService
 from app.services.node_suggestions.keyword_extraction_service import KeywordExtractionService
+from app.services.node_suggestions.node_suggestion_service import NodeSuggestionService
 from app.services.node_suggestions.postgres_repository import PostgresNodeSuggestionRepository
-from app.services.node_suggestions.ranking_service import RankingService
-from app.services.node_suggestions.types import CandidatePhrase, SuggestionItem, SuggestionRequest
-from app.services.node_suggestions.utils import chunk_text, cosine_similarity
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -281,21 +277,51 @@ async def suggest_nodes_for_question(
     data: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """Suggest nodes for a question using hybrid search."""
+    """Suggest nodes for a question by wrapping the raw-text suggestion workflow."""
     threshold = float(data.get("threshold", settings.SUGGESTION_THRESHOLD))
     semantic_weight = float(data.get("semantic_weight", settings.SUGGESTION_SEMANTIC_WEIGHT))
     keyword_weight = float(data.get("keyword_weight", settings.SUGGESTION_KEYWORD_WEIGHT))
     top_k = int(data.get("top_k", settings.SUGGESTION_TOP_K))
+    dedup_threshold = float(data.get("dedup_threshold", settings.SUGGESTION_DEDUP_THRESHOLD))
     project_id = data.get("project_id")
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id is required")
 
-    result = await db.execute(
-        select(QuestionModel).where(QuestionModel.id == question_id)
-    )
+    result = await db.execute(select(QuestionModel).where(QuestionModel.id == question_id))
     question = result.scalar_one_or_none()
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
+
+    question_text = _question_text(question)
+    return await suggest_nodes_for_question_text(
+        data={
+            "project_id": project_id,
+            "text": question_text,
+            "threshold": threshold,
+            "semantic_weight": semantic_weight,
+            "keyword_weight": keyword_weight,
+            "top_k": top_k,
+            "dedup_threshold": dedup_threshold,
+        },
+        db=db,
+    )
+
+
+@router.post("/questions/suggestions/raw-text")
+async def suggest_nodes_for_question_text(data: dict, db: AsyncSession = Depends(get_db)):
+    """Suggest nodes from raw text using the shared hybrid workflow."""
+    threshold = float(data.get("threshold", settings.SUGGESTION_THRESHOLD))
+    semantic_weight = float(data.get("semantic_weight", settings.SUGGESTION_SEMANTIC_WEIGHT))
+    keyword_weight = float(data.get("keyword_weight", settings.SUGGESTION_KEYWORD_WEIGHT))
+    top_k = int(data.get("top_k", settings.SUGGESTION_TOP_K))
+    dedup_threshold = float(data.get("dedup_threshold", settings.SUGGESTION_DEDUP_THRESHOLD))
+    project_id = data.get("project_id")
+    text_value = (data.get("text") or "").strip()
+
+    if not project_id:
+        raise HTTPException(status_code=400, detail="project_id is required")
+    if not text_value:
+        return {"strong": [], "weak": []}
 
     hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
     if not hf_token:
@@ -307,100 +333,22 @@ async def suggest_nodes_for_question(
     embedding_service = EmbeddingService(client, expected_dim=768)
     keyword_service = KeywordExtractionService(client)
     repository = PostgresNodeSuggestionRepository(db)
+    service = NodeSuggestionService(repository, embedding_service, keyword_service)
 
-    question_text = _question_text(question)
-    if not question_text.strip():
-        return {"strong": [], "weak": []}
-
-    material_embedding = embedding_service.embed_texts([question_text])[0]
-
-    vector_matches = await repository.search_nodes_vector(
-        project_id,
-        material_embedding,
-        top_k,
-    )
-    keyword_matches = await repository.search_nodes_fts(
-        project_id,
-        question_text,
-        top_k,
-    )
-
-    semantic_scores = {match.node_id: match.score for match in vector_matches}
-    keyword_scores = {match.node_id: match.score for match in keyword_matches}
-
-    ranked = RankingService.hybrid_rank(
-        semantic_scores,
-        keyword_scores,
-        semantic_weight,
-        keyword_weight,
-    )
-
-    strong: list[SuggestionItem] = []
-    weak: list[SuggestionItem] = []
-    for match in ranked:
-        item = SuggestionItem(
-            node_id=match.node_id,
-            suggested_title=None,
-            suggested_description=None,
-            confidence=match.score,
-            suggestion_type="EXISTING",
-        )
-        if match.score >= threshold:
-            strong.append(item)
-        else:
-            weak.append(item)
-
-    candidate_phrases = keyword_service.extract_phrases(question_text)
-    chunks = chunk_text(question_text)
-    total_chunks = max(len(chunks), 1)
-
-    candidate_embeddings = []
-    if candidate_phrases:
-        candidate_embeddings = embedding_service.embed_texts(candidate_phrases)
-
-    candidates: list[CandidatePhrase] = [
-        CandidatePhrase(phrase=phrase, embedding=embedding)
-        for phrase, embedding in zip(candidate_phrases, candidate_embeddings)
-    ]
-
-    similarity_lookup = {}
-    for candidate in candidates:
-        similarity_lookup[candidate.phrase] = await repository.max_similarity_to_nodes(
-            project_id,
-            candidate.embedding,
-        )
-
-    candidates = deduplicate_candidates(
-        candidates,
-        similarity_lookup,
-        threshold=settings.SUGGESTION_DEDUP_THRESHOLD,
-    )
-
-    for candidate in candidates:
-        coverage = sum(
-            1 for chunk in chunks if candidate.phrase.lower() in chunk.lower()
-        ) / total_chunks
-        semantic_strength = cosine_similarity(candidate.embedding, material_embedding)
-        confidence = compute_confidence(coverage, semantic_strength)
-        weak.append(
-            SuggestionItem(
-                node_id=None,
-                suggested_title=candidate.phrase,
-                suggested_description=None,
-                confidence=confidence,
-                suggestion_type="NEW",
-            )
-        )
-
-    logger.info(
-        "Running node suggestions for question %s (project %s)",
-        question_id,
-        project_id,
+    result = await service.suggest_nodes_for_text(
+        project_id=project_id,
+        text=text_value,
+        threshold=threshold,
+        semantic_weight=semantic_weight,
+        keyword_weight=keyword_weight,
+        top_k=top_k,
+        dedup_threshold=dedup_threshold,
+        material_id=None,
     )
 
     return {
-        "strong": [item.__dict__ for item in strong],
-        "weak": [item.__dict__ for item in weak],
+        "strong": [item.__dict__ for item in result.strong],
+        "weak": [item.__dict__ for item in result.weak],
     }
 
 

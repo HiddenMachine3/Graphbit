@@ -65,6 +65,7 @@ export async function suggestMaterialNodes(
     threshold: number;
     semantic_weight: number;
     keyword_weight: number;
+    dedup_threshold: number;
     top_k: number;
   }
 ): Promise<{ strong: any[]; weak: any[] }> {

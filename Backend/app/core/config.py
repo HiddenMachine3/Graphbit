@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     SUGGESTION_SEMANTIC_WEIGHT: float = 0.6
     SUGGESTION_KEYWORD_WEIGHT: float = 0.4
     SUGGESTION_TOP_K: int = 20
-    SUGGESTION_DEDUP_THRESHOLD: float = 0.75
+    SUGGESTION_DEDUP_THRESHOLD: float = 0.9
 
     # HuggingFace
     HF_TOKEN: str | None = None
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     SUGGESTION_SEMANTIC_WEIGHT: float = 0.6
     SUGGESTION_KEYWORD_WEIGHT: float = 0.4
     SUGGESTION_TOP_K: int = 20
-    SUGGESTION_DEDUP_THRESHOLD: float = 0.75
+    SUGGESTION_DEDUP_THRESHOLD: float = 0.9
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
