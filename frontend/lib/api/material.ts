@@ -74,6 +74,19 @@ export async function suggestMaterialNodes(
   });
 }
 
+export async function attachMaterialNodes(
+  materialId: string,
+  nodeIds: string[]
+): Promise<{ material_id: string; attached_nodes: number }> {
+  return apiFetch<{ material_id: string; attached_nodes: number }>(
+    `/materials/${materialId}/attach`,
+    {
+      method: "POST",
+      body: JSON.stringify({ node_ids: nodeIds, question_ids: [] }),
+    }
+  );
+}
+
 export async function startContentSession(
   materialId: string,
   userId: string

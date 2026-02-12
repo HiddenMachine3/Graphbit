@@ -151,6 +151,17 @@ export interface MaterialDTO {
   chunk_count: number;
 }
 
+export interface SearchResultItemDTO {
+  id: string;
+  title: string;
+  score: number;
+}
+
+export interface SearchResultsDTO {
+  nodes: SearchResultItemDTO[];
+  materials: SearchResultItemDTO[];
+}
+
 export interface UserDTO {
   id: string;
   username: string;

@@ -131,10 +131,12 @@ export default function GraphPage() {
         <KnowledgeGraphView
           nodes={visibleNodes}
           edges={visibleEdges}
+          projectId={currentProjectId}
           selectedNodeId={clickModeActive ? undefined : selectedNodeId}
           onSelectNode={handleNodeClick}
           highlightedNodeIds={clickModeActive ? selectedNodesForEdge : undefined}
           brightnessAttribute={brightnessAttribute}
+          onGraphUpdated={loadGraph}
         />
         <div className="flex flex-col gap-4">
           <NodeDetailPanel 
