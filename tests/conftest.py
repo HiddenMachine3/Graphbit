@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from datetime import datetime
 import asyncio
+import uuid
 
 
 def _load_backend_env_values(env_file: Path) -> dict[str, str]:
@@ -21,23 +22,32 @@ def _load_backend_env_values(env_file: Path) -> dict[str, str]:
         values[key.strip()] = value.strip().strip('"').strip("'")
     return values
 
+
+def _ensure_windows_event_loop_policy() -> None:
+    if sys.platform.startswith("win"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 # Add Backend directory to Python path
 backend_dir = Path(__file__).parent.parent / "Backend"
 sys.path.insert(0, str(backend_dir))
 
-# Provide required settings for test imports
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test_app.db")
-os.environ.setdefault("CELERY_BROKER_URL", "redis://localhost:6379/0")
-os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
-os.environ.setdefault("SECRET_KEY", "test-secret")
-
 backend_env_values = _load_backend_env_values(backend_dir / ".env")
-if "POSTGRES_TEST_URL" not in os.environ:
-    postgres_test_url = backend_env_values.get("POSTGRES_TEST_URL")
-    if not postgres_test_url:
-        postgres_test_url = backend_env_values.get("DATABASE_URL")
-    if postgres_test_url:
-        os.environ["POSTGRES_TEST_URL"] = postgres_test_url
+
+# Provide required settings for test imports (PostgreSQL only)
+os.environ.setdefault("CELERY_BROKER_URL", backend_env_values.get("CELERY_BROKER_URL", "redis://localhost:6379/0"))
+os.environ.setdefault("CELERY_RESULT_BACKEND", backend_env_values.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"))
+os.environ.setdefault("SECRET_KEY", backend_env_values.get("SECRET_KEY", "test-secret"))
+
+database_url = os.environ.get("DATABASE_URL") or backend_env_values.get("DATABASE_URL")
+if not database_url:
+    raise RuntimeError("DATABASE_URL is required for tests and must point to PostgreSQL")
+if database_url.startswith("sqlite"):
+    raise RuntimeError("SQLite is disabled for tests. Configure a PostgreSQL DATABASE_URL.")
+if not (database_url.startswith("postgresql://") or database_url.startswith("postgresql+")):
+    raise RuntimeError("Tests require a PostgreSQL DATABASE_URL")
+
+os.environ["DATABASE_URL"] = database_url
+os.environ["POSTGRES_TEST_URL"] = database_url
 
 # Create 'backend' namespace module that points to 'app'
 class BackendNamespace:
@@ -81,17 +91,22 @@ def test_project():
 
 
 @pytest.fixture
-def api_client(tmp_path):
-    """Create a FastAPI test client with an isolated SQLite database."""
+def api_client():
+    """Create a FastAPI test client using PostgreSQL in an isolated schema."""
     from fastapi.testclient import TestClient
+    from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+    from sqlalchemy.pool import NullPool
 
     from app.main import app
     from app.db.session import get_db
     from app.models import Base, AppUser as AppUserModel
 
-    db_path = tmp_path / "test.db"
-    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+    _ensure_windows_event_loop_policy()
+
+    schema_name = f"test_api_{uuid.uuid4().hex[:8]}"
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    engine = engine.execution_options(schema_translate_map={None: schema_name})
     async_session = async_sessionmaker(
         engine,
         expire_on_commit=False,
@@ -100,6 +115,7 @@ def api_client(tmp_path):
 
     async def init_db():
         async with engine.begin() as conn:
+            await conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema_name}"))
             await conn.run_sync(Base.metadata.create_all)
         async with async_session() as session:
             admin = AppUserModel(
@@ -111,6 +127,11 @@ def api_client(tmp_path):
             session.add(admin)
             await session.commit()
 
+    async def drop_db():
+        async with engine.begin() as conn:
+            await conn.execute(text(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE"))
+        await engine.dispose()
+
     asyncio.run(init_db())
 
     async def override_get_db():
@@ -118,9 +139,9 @@ def api_client(tmp_path):
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    client = TestClient(app)
     try:
-        yield client
+        with TestClient(app) as client:
+            yield client
     finally:
         app.dependency_overrides.clear()
-        asyncio.run(engine.dispose())
+        asyncio.run(drop_db())
