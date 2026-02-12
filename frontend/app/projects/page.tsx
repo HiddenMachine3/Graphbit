@@ -18,6 +18,8 @@ import {
   createQuestion,
   deleteQuestion,
   updateQuestion,
+  replaceQuestionNodes,
+  suggestQuestionNodes,
 } from "@/lib/api/question";
 import {
   listMaterials,
@@ -111,6 +113,17 @@ export default function ProjectsPage() {
   const [editQuestionDifficulty, setEditQuestionDifficulty] = useState(1);
   const [editQuestionTags, setEditQuestionTags] = useState("");
   const [editQuestionNodeIds, setEditQuestionNodeIds] = useState("");
+  const [editingQuestionNodesId, setEditingQuestionNodesId] = useState<string | null>(null);
+  const [questionNodeSearch, setQuestionNodeSearch] = useState("");
+  const [questionNodeSelection, setQuestionNodeSelection] = useState<string[]>([]);
+  const [questionNewNodeSelection, setQuestionNewNodeSelection] = useState<string[]>([]);
+  const [questionSuggestionLoading, setQuestionSuggestionLoading] = useState(false);
+  const [questionSuggestionError, setQuestionSuggestionError] = useState<string | null>(null);
+  const [questionSuggestions, setQuestionSuggestions] = useState<{
+    questionId: string | null;
+    strong: SuggestionItem[];
+    weak: SuggestionItem[];
+  }>({ questionId: null, strong: [], weak: [] });
 
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialText, setMaterialText] = useState("");
@@ -390,6 +403,112 @@ export default function ProjectsPage() {
 
   const cancelEditQuestion = () => {
     setEditingQuestionId(null);
+  };
+
+  const beginEditQuestionNodes = (question: QuestionDTO) => {
+    setEditingQuestionNodesId(question.id);
+    setQuestionNodeSelection(question.covered_node_ids ?? []);
+    setQuestionNewNodeSelection([]);
+    setQuestionNodeSearch("");
+    setQuestionSuggestionError(null);
+    setQuestionSuggestions({ questionId: question.id, strong: [], weak: [] });
+  };
+
+  const cancelEditQuestionNodes = () => {
+    setEditingQuestionNodesId(null);
+    setQuestionNodeSelection([]);
+    setQuestionNewNodeSelection([]);
+    setQuestionNodeSearch("");
+    setQuestionSuggestionError(null);
+    setQuestionSuggestions({ questionId: null, strong: [], weak: [] });
+  };
+
+  const handleAddNodeFromQuestionSearch = async () => {
+    if (!currentProjectId) {
+      return;
+    }
+    const value = questionNodeSearch.trim();
+    if (!value) {
+      return;
+    }
+    setBusy(true);
+    setQuestionSuggestionError(null);
+    try {
+      const created = await createNode(currentProjectId, value, 0, 0.6);
+      setNodes((prev) => [created, ...prev]);
+      setQuestionNodeSelection((prev) =>
+        prev.includes(created.id) ? prev : [...prev, created.id]
+      );
+      setQuestionNodeSearch("");
+    } catch {
+      setQuestionSuggestionError("Failed to add node");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSuggestQuestionNodes = async (questionId: string) => {
+    if (!currentProjectId) {
+      return;
+    }
+    setQuestionSuggestionError(null);
+    setQuestionSuggestionLoading(true);
+    const priorSelection = new Set(questionNodeSelection);
+    try {
+      const response = await suggestQuestionNodes(questionId, {
+        project_id: currentProjectId,
+        threshold: suggestionThreshold,
+        semantic_weight: semanticWeight,
+        keyword_weight: keywordWeight,
+        top_k: suggestionTopK,
+      });
+      setQuestionSuggestions({ questionId, strong: response.strong, weak: response.weak });
+
+      const newCandidates = response.weak
+        .filter((item: SuggestionItem) => item.suggestion_type === "NEW" && item.suggested_title)
+        .sort((a: SuggestionItem, b: SuggestionItem) => b.confidence - a.confidence);
+      const newTopCount = Math.ceil(newCandidates.length * 0.5);
+      const newTopTitles = newCandidates
+        .slice(0, newTopCount)
+        .map((item: SuggestionItem) => (item.suggested_title as string).trim())
+        .filter(Boolean);
+
+      const existingSuggestions = [...response.strong, ...response.weak]
+        .filter((item: SuggestionItem) => item.suggestion_type === "EXISTING" && item.node_id)
+        .sort((a: SuggestionItem, b: SuggestionItem) => b.confidence - a.confidence);
+      const topCount = Math.ceil(existingSuggestions.length * 0.5);
+      const topNodeIds = existingSuggestions
+        .slice(0, topCount)
+        .map((item: SuggestionItem) => item.node_id as string);
+      const mergedSelection = new Set(priorSelection);
+      topNodeIds.forEach((nodeId) => mergedSelection.add(nodeId));
+      setQuestionNodeSelection(Array.from(mergedSelection));
+      setQuestionNewNodeSelection(newTopTitles);
+    } catch {
+      setQuestionSuggestionError("Failed to fetch suggestions");
+    } finally {
+      setQuestionSuggestionLoading(false);
+    }
+  };
+
+  const handleSaveQuestionNodes = async (questionId: string) => {
+    if (!currentProjectId) {
+      return;
+    }
+    setBusy(true);
+    setQuestionSuggestionError(null);
+    try {
+      const newNodes = questionNewNodeSelection.map((title) => ({ title }));
+      await replaceQuestionNodes(questionId, questionNodeSelection, newNodes);
+      await refreshProjectData(currentProjectId);
+      setEditingQuestionNodesId(null);
+      setQuestionNewNodeSelection([]);
+      setStatus({ type: "success", message: "Question links updated" });
+    } catch {
+      setStatus({ type: "error", message: "Failed to update question links" });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleUpdateQuestion = async (questionId: string) => {
@@ -972,6 +1091,37 @@ export default function ProjectsPage() {
               <div className="grid gap-2">
                 {questions.map((question) => {
                   const isEditing = editingQuestionId === question.id;
+                  const isEditingNodes = editingQuestionNodesId === question.id;
+                  const linkedNodes = nodes.filter((node) =>
+                    (question.covered_node_ids ?? []).includes(node.id)
+                  );
+                  const questionSuggestionData =
+                    questionSuggestions.questionId === question.id
+                      ? questionSuggestions
+                      : { questionId: null, strong: [], weak: [] };
+                  const questionStrongIds = new Set(
+                    questionSuggestionData.strong
+                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                      .map((item) => item.node_id as string)
+                  );
+                  const questionWeakIds = new Set(
+                    questionSuggestionData.weak
+                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                      .map((item) => item.node_id as string)
+                  );
+                  const questionNewSuggestions = questionSuggestionData.weak.filter(
+                    (item) => item.suggestion_type === "NEW"
+                  );
+                  const questionSearchValue = questionNodeSearch.trim().toLowerCase();
+                  const questionFilteredNodes = nodes.filter((node) => {
+                    if (!questionSearchValue) {
+                      return true;
+                    }
+                    return (
+                      node.topic_name.toLowerCase().includes(questionSearchValue) ||
+                      node.id.toLowerCase().includes(questionSearchValue)
+                    );
+                  });
                   return (
                     <div
                       key={question.id}
@@ -1042,6 +1192,28 @@ export default function ProjectsPage() {
                         <>
                           <div className="text-sm font-semibold text-white">{question.text}</div>
                           <div className="text-xs text-slate-400">Answer: {question.answer}</div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <div className="text-xs text-slate-500">Linked nodes:</div>
+                            {linkedNodes.length === 0 && (
+                              <div className="text-xs text-slate-400">None</div>
+                            )}
+                            {linkedNodes.map((node) => (
+                              <span
+                                key={node.id}
+                                className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-200"
+                              >
+                                {node.topic_name}
+                              </span>
+                            ))}
+                            <button
+                              onClick={() => beginEditQuestionNodes(question)}
+                              disabled={busy}
+                              className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              title="Edit linked nodes"
+                            >
+                              ✎
+                            </button>
+                          </div>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button
                               onClick={() => beginEditQuestion(question)}
@@ -1058,6 +1230,218 @@ export default function ProjectsPage() {
                               Delete
                             </button>
                           </div>
+                          {isEditingNodes && (
+                            <div className="mt-3 grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  onClick={() => handleSuggestQuestionNodes(question.id)}
+                                  disabled={busy || questionSuggestionLoading}
+                                  className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                </button>
+                                <div className="text-[11px] text-slate-400">
+                                  Adjust threshold + weights before suggesting.
+                                </div>
+                              </div>
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                  Threshold: {suggestionThreshold.toFixed(2)}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    value={suggestionThreshold}
+                                    onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                  />
+                                </label>
+                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                  Semantic weight: {semanticWeight.toFixed(2)}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.05}
+                                    value={semanticWeight}
+                                    onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                  />
+                                </label>
+                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                  Keyword weight: {keywordWeight.toFixed(2)}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.05}
+                                    value={keywordWeight}
+                                    onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                  />
+                                </label>
+                              </div>
+                              {questionSuggestionError && (
+                                <div className="text-xs text-red-300">{questionSuggestionError}</div>
+                              )}
+                              {questionNewSuggestions.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                                  New candidates (click to add):
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const titles = questionNewSuggestions
+                                        .map((item) => item.suggested_title?.trim())
+                                        .filter((title): title is string => Boolean(title));
+                                      setQuestionNewNodeSelection(Array.from(new Set(titles)));
+                                    }}
+                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                                  >
+                                    Select all
+                                  </button>
+                                  {questionNewSuggestions.map((item, index) => {
+                                    const title = item.suggested_title?.trim();
+                                    if (!title) {
+                                      return null;
+                                    }
+                                    const isSelected = questionNewNodeSelection.includes(title);
+                                    return (
+                                      <button
+                                        key={`${title}-${index}`}
+                                        type="button"
+                                        onClick={() => {
+                                          setQuestionNewNodeSelection((prev) =>
+                                            prev.includes(title)
+                                              ? prev.filter((entry) => entry !== title)
+                                              : [...prev, title]
+                                          );
+                                        }}
+                                        className={`rounded-full border px-2 py-0.5 transition ${
+                                          isSelected
+                                            ? "border-amber-400 bg-amber-500/20 text-amber-100"
+                                            : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                        }`}
+                                      >
+                                        {title}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                                Selected nodes (click to toggle):
+                                {Array.from(
+                                  new Set([
+                                    ...linkedNodes.map((node) => node.id),
+                                    ...questionNodeSelection,
+                                  ])
+                                ).map((nodeId) => {
+                                  const node = nodeLookup.get(nodeId);
+                                  const label = node?.topic_name ?? nodeId;
+                                  const isSelected = questionNodeSelection.includes(nodeId);
+                                  return (
+                                    <button
+                                      key={nodeId}
+                                      type="button"
+                                      onClick={() => {
+                                        setQuestionNodeSelection((prev) =>
+                                          prev.includes(nodeId)
+                                            ? prev.filter((id) => id !== nodeId)
+                                            : [...prev, nodeId]
+                                        );
+                                      }}
+                                      className={`rounded-full border px-2 py-0.5 transition ${
+                                        isSelected
+                                          ? "border-rose-400 bg-rose-500/20 text-rose-100"
+                                          : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500"
+                                      }`}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <input
+                                value={questionNodeSearch}
+                                onChange={(event) => setQuestionNodeSearch(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" && event.shiftKey) {
+                                    event.preventDefault();
+                                    handleAddNodeFromQuestionSearch();
+                                  }
+                                }}
+                                placeholder="Search nodes"
+                                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                              />
+                              {questionNodeSearch.trim() &&
+                                !nodes.some(
+                                  (node) =>
+                                    node.topic_name.toLowerCase() ===
+                                    questionNodeSearch.trim().toLowerCase()
+                                ) && (
+                                  <button
+                                    type="button"
+                                    onClick={handleAddNodeFromQuestionSearch}
+                                    disabled={busy}
+                                    className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <span>Add "{questionNodeSearch.trim()}"</span>
+                                    <span className="text-[10px] text-slate-400">Shift + Enter</span>
+                                  </button>
+                                )}
+                              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                                {questionFilteredNodes.map((node) => {
+                                  const isSelected = questionNodeSelection.includes(node.id);
+                                  const isStrongSuggested = questionStrongIds.has(node.id);
+                                  const isWeakSuggested = questionWeakIds.has(node.id);
+                                  return (
+                                    <button
+                                      key={node.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setQuestionNodeSelection((prev) =>
+                                          prev.includes(node.id)
+                                            ? prev.filter((id) => id !== node.id)
+                                            : [...prev, node.id]
+                                        );
+                                      }}
+                                      className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                                        isSelected
+                                          ? "bg-rose-600/20 text-rose-100"
+                                          : isStrongSuggested
+                                            ? "bg-rose-500/10 text-rose-100"
+                                            : isWeakSuggested
+                                              ? "bg-slate-800/60 text-slate-200"
+                                              : "text-slate-200 hover:bg-slate-800/60"
+                                      }`}
+                                    >
+                                      <span className="font-medium">{node.topic_name}</span>
+                                      <span className="text-[10px] text-slate-500">{node.id}</span>
+                                    </button>
+                                  );
+                                })}
+                                {questionFilteredNodes.length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-slate-500">
+                                    No matching nodes.
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  onClick={() => handleSaveQuestionNodes(question.id)}
+                                  disabled={busy}
+                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Save links
+                                </button>
+                                <button
+                                  onClick={cancelEditQuestionNodes}
+                                  disabled={busy}
+                                  className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
