@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   addEdge,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlowProvider,
   type Connection,
@@ -24,8 +25,10 @@ import useForceLayout from "../../lib/graph/useForceLayout";
 export type KnowledgeGraphViewProps = {
   nodes: GraphNodeDTO[];
   edges: GraphEdgeDTO[];
+  projectId: string | null;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+  onSelectEdge?: (edgeId: string | null) => void;
   highlightedNodeIds?: string[];
   brightnessAttribute?: keyof GraphNodeDTO;
 };
@@ -58,8 +61,10 @@ function buildFlowEdges(edges: GraphEdgeDTO[]): Edge[] {
 export default function KnowledgeGraphView({
   nodes,
   edges,
+  projectId,
   selectedNodeId,
   onSelectNode,
+  onSelectEdge,
   highlightedNodeIds,
   brightnessAttribute = "proven_knowledge_rating",
 }: KnowledgeGraphViewProps) {
@@ -114,6 +119,18 @@ export default function KnowledgeGraphView({
       if (!connection.source || !connection.target) {
         return;
       }
+      if (!projectId) {
+        return;
+      }
+
+      const alreadyConnected = flowEdges.some(
+        (edge) =>
+          (edge.source === connection.source && edge.target === connection.target) ||
+          (edge.source === connection.target && edge.target === connection.source)
+      );
+      if (alreadyConnected) {
+        return;
+      }
 
       const edgePayload = {
         ...connection,
@@ -123,7 +140,7 @@ export default function KnowledgeGraphView({
       setFlowEdges((current) => addEdge(edgePayload, current));
 
       try {
-        await createEdge(connection.source, connection.target, "APPLIED_WITH", 0.6);
+        await createEdge(projectId, connection.source, connection.target, "APPLIED_WITH", 0.6);
       } catch (error) {
         console.error("Failed to create edge:", error);
         setFlowEdges((current) =>
@@ -134,11 +151,11 @@ export default function KnowledgeGraphView({
         );
       }
     },
-    [setFlowEdges]
+    [setFlowEdges, projectId, flowEdges]
   );
 
   return (
-    <div className="h-full w-full rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
+    <div className="h-[80vh] w-full rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
       <ReactFlowProvider>
         <GraphFlowCanvas
           nodes={flowNodes}
@@ -147,6 +164,7 @@ export default function KnowledgeGraphView({
           onEdgesChange={onFlowEdgesChange}
           onConnect={onConnect}
           onSelectNode={onSelectNode}
+          onSelectEdge={onSelectEdge}
         />
       </ReactFlowProvider>
     </div>
@@ -160,6 +178,7 @@ type GraphFlowCanvasProps = {
   onEdgesChange: Parameters<typeof useEdgesState>[2];
   onConnect: (connection: Connection) => void;
   onSelectNode: (nodeId: string) => void;
+  onSelectEdge?: (edgeId: string | null) => void;
 };
 
 function GraphFlowCanvas({
@@ -169,9 +188,11 @@ function GraphFlowCanvas({
   onEdgesChange,
   onConnect,
   onSelectNode,
+  onSelectEdge,
 }: GraphFlowCanvasProps) {
   const { fitView } = useReactFlow();
   const fitTimeoutRef = useRef<number | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     if (nodes.length > 0) {
@@ -215,14 +236,41 @@ function GraphFlowCanvas({
 
   return (
     <ReactFlow
+      className="h-full w-full"
+      defaultEdgeOptions={{
+        type: "graphEdge",
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: "rgba(226, 232, 240, 0.7)",
+          width: 12,
+          height: 12,
+        },
+      }}
+      connectionMode="loose"
+      connectionRadius={40}
+      nodesDraggable={!isConnecting}
+      nodesConnectable
+      isValidConnection={(connection) => {
+        if (!connection.source || !connection.target) {
+          return false;
+        }
+        return !edges.some(
+          (edge) =>
+            (edge.source === connection.source && edge.target === connection.target) ||
+            (edge.source === connection.target && edge.target === connection.source)
+        );
+      }}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
+      onConnectStart={() => setIsConnecting(true)}
+      onConnectEnd={() => setIsConnecting(false)}
       onConnect={onConnect}
       onNodeClick={(_, node) => onSelectNode(node.id)}
+      onEdgeClick={(_, edge) => onSelectEdge?.(edge.id)}
       fitView
     >
       <MiniMap />

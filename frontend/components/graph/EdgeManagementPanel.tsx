@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import type { GraphNodeDTO } from '../../lib/types';
-import { createEdge } from '../../lib/api/graph';
+import type { GraphEdgeDTO, GraphNodeDTO } from '../../lib/types';
+import { createEdge, deleteEdge } from '../../lib/api/graph';
 
 type EdgeManagementPanelProps = {
   nodes: GraphNodeDTO[];
+  edges: GraphEdgeDTO[];
   selectedNodeId: string | null;
   projectId: string | null;
+  selectedEdgeId?: string | null;
+  onEdgeDeleted?: () => void;
   onEdgeCreated: () => void;
   clickModeActive?: boolean;
   onClickModeChange?: (active: boolean) => void;
@@ -17,8 +20,11 @@ type EdgeManagementPanelProps = {
 
 export default function EdgeManagementPanel({
   nodes,
+  edges,
   selectedNodeId,
   projectId,
+  selectedEdgeId,
+  onEdgeDeleted,
   onEdgeCreated,
   clickModeActive = false,
   onClickModeChange,
@@ -32,6 +38,10 @@ export default function EdgeManagementPanel({
   const [weight, setWeight] = useState(1.0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedEdge = selectedEdgeId
+    ? edges.find((edge) => edge.id === selectedEdgeId) ?? null
+    : null;
 
   // Update fromNodeId when selectedNodeId changes
   useEffect(() => {
@@ -79,6 +89,27 @@ export default function EdgeManagementPanel({
       setLoading(false);
     }
   }, [clickModeActive, selectedNodesForEdge, fromNodeId, toNodeId, edgeType, weight, projectId, onEdgeCreated, onClickModeChange, onNodesChange]);
+
+  const handleDeleteEdge = useCallback(async () => {
+    if (!projectId || !selectedEdge) {
+      return;
+    }
+
+    if (!window.confirm("Delete this connection?") ) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      await deleteEdge(projectId, selectedEdge.id);
+      onEdgeDeleted?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete connection');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, selectedEdge, onEdgeDeleted]);
 
   const handleNodeClick = (nodeId: string) => {
     if (!onNodesChange) return;
@@ -138,6 +169,15 @@ export default function EdgeManagementPanel({
           >
             Click nodes to connect
           </button>
+          {selectedEdge && (
+            <button
+              className='w-full rounded border border-rose-500/60 bg-rose-950/50 px-3 py-2 text-xs text-rose-100 hover:bg-rose-900 disabled:opacity-60'
+              onClick={handleDeleteEdge}
+              disabled={loading}
+            >
+              Delete selected connection
+            </button>
+          )}
           <button
             className='w-full rounded bg-slate-700 px-3 py-2 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
             onClick={() => { setShowForm(true); }}

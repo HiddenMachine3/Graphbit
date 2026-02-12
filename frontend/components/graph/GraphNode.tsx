@@ -1,11 +1,8 @@
-import { Handle, Position } from "reactflow";
+import { Handle, Position, type NodeProps } from "reactflow";
 
 import type { GraphNodeDTO } from "../../lib/types";
 
-type GraphNodeProps = {
-  data: GraphNodeDTO & { brightnessAttribute?: keyof GraphNodeDTO };
-  selected: boolean;
-};
+type GraphNodeProps = NodeProps<GraphNodeDTO & { brightnessAttribute?: keyof GraphNodeDTO }>;
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
@@ -20,51 +17,89 @@ function normalizeValue(value: any, attribute: keyof GraphNodeDTO): number {
   return clamp(value);
 }
 
-export default function GraphNode({ data, selected }: GraphNodeProps) {
+export default function GraphNode({ data, selected, isConnectable }: GraphNodeProps) {
   const brightnessAttribute = data.brightnessAttribute || 'proven_knowledge_rating';
   const brightnessValue = data[brightnessAttribute];
   const brightness = normalizeValue(brightnessValue, brightnessAttribute);
   const borderIntensity = clamp(data.forgetting_score);
   const importance = clamp(data.importance);
+  const isChapterNode = data.id.startsWith("chapter_");
 
-  const minSize = 48;
-  const maxSize = 110;
-  const size = minSize + (maxSize - minSize) * importance;
+  const size = isChapterNode ? 14 : 18 + 18 * importance;
 
-  const boostedBrightness = clamp(brightness * 1.6);
-  const backgroundColor = `rgba(178, 38, 76, ${0.1 + boostedBrightness * 0.85})`;
-  const borderColor = `rgba(120, 24, 46, ${0.2 + borderIntensity * 0.7})`;
-  const glowStrength = 8 + boostedBrightness * 28;
-  const glowOpacity = 0.15 + boostedBrightness * 0.45;
-  const glowColor = `rgba(178, 38, 76, ${glowOpacity})`;
+  const boostedBrightness = clamp(brightness * (isChapterNode ? 1.1 : 1.4));
+  const baseColor = isChapterNode ? "217, 70, 239" : "148, 163, 184";
+  const backgroundColor = `rgba(${baseColor}, ${isChapterNode ? 0.95 : 0.18 + boostedBrightness * 0.25})`;
+  const borderColor = isChapterNode
+    ? `rgba(${baseColor}, 1)`
+    : `rgba(${baseColor}, ${0.2 + borderIntensity * 0.35})`;
+  const glowStrength = isChapterNode ? 16 : 8 + boostedBrightness * 10;
+  const glowOpacity = isChapterNode ? 0.55 : 0.12 + boostedBrightness * 0.18;
+  const glowColor = `rgba(${baseColor}, ${glowOpacity})`;
 
   return (
     <div
       title={`${brightnessAttribute.replace(/_/g, ' ')}: ${brightnessValue.toFixed(2)} | Importance: ${data.importance.toFixed(
         2
       )} | Forgetting: ${data.forgetting_score.toFixed(2)}`}
-      className={`flex flex-col items-center justify-center rounded-full border-2 text-center text-[11px] shadow-sm transition ${
+      className={`relative flex flex-col items-center justify-center gap-1 text-center transition ${
         selected ? "ring-2 ring-slate-900" : ""
       }`}
-      style={{
-        backgroundColor,
-        borderColor,
-        width: size,
-        height: size,
-        boxShadow: `0 0 ${glowStrength}px ${glowColor}, 0 0 ${glowStrength * 1.8}px ${glowColor}`,
-      }}
     >
-      <div className="px-2 font-semibold text-white">{data.topic_name}</div>
-      <div className="mt-1 text-[10px] text-slate-200/80">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
+      <div
+        className="rounded-full border"
+        style={{
+          backgroundColor,
+          borderColor,
+          width: size,
+          height: size,
+          boxShadow: `0 0 ${glowStrength}px ${glowColor}, 0 0 ${glowStrength * 1.4}px ${glowColor}`,
+        }}
+      />
+      <div
+        className={`max-w-[120px] truncate text-[11px] ${
+          isChapterNode ? "text-fuchsia-200" : "text-slate-300"
+        }`}
+      >
+        {data.topic_name}
+      </div>
       <Handle
         type="target"
         position={Position.Left}
-        style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)", opacity: 0 }}
+        isConnectable={isConnectable}
+        style={{
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 26,
+          height: 26,
+          borderRadius: 999,
+          background: "transparent",
+          border: "none",
+          opacity: 0,
+          cursor: "crosshair",
+          pointerEvents: "all",
+          zIndex: 10,
+        }}
       />
       <Handle
         type="source"
         position={Position.Right}
-        style={{ left: "50%", top: "50%", transform: "translate(-50%, -50%)", opacity: 0 }}
+        isConnectable={isConnectable}
+        style={{
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 26,
+          height: 26,
+          borderRadius: 999,
+          background: "transparent",
+          border: "none",
+          opacity: 0,
+          cursor: "crosshair",
+          pointerEvents: "all",
+          zIndex: 10,
+        }}
       />
     </div>
   );

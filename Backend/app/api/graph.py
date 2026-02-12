@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import EdgeType
 from app.domain.material import Material, MaterialRegistry, MaterialType
-from app.services.topic_extraction import extract_topics_from_text
+from app.services.topic_extraction import extract_topics_from_text, TopicExtractionError
 from app.services.video_transcripts import fetch_youtube_transcript
 from app.db.session import get_db
 from app.models import (
@@ -27,6 +27,7 @@ class CreateNodeRequest(BaseModel):
     topic_name: str
     importance: float = 0.5
     relevance: float = 0.5
+    node_kind: Optional[str] = None
 
 
 class UpdateNodeRequest(BaseModel):
@@ -44,6 +45,11 @@ class CreateEdgeRequest(BaseModel):
     to_node_id: str
     edge_type: str = "PREREQUISITE"
     weight: float = 1.0
+
+
+class BulkDeleteNodesRequest(BaseModel):
+    project_id: str
+    node_ids: list[str]
 
 
 class VideoIngestRequest(BaseModel):
@@ -89,6 +95,24 @@ async def _edge_exists(
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+async def _edge_exists_any(
+    db: AsyncSession,
+    project_id: str,
+    from_node_id: str,
+    to_node_id: str,
+) -> Optional[EdgeModel]:
+    result = await db.execute(
+        select(EdgeModel).where(
+            EdgeModel.project_id == project_id,
+            (
+                (EdgeModel.source == from_node_id) & (EdgeModel.target == to_node_id)
+                | (EdgeModel.source == to_node_id) & (EdgeModel.target == from_node_id)
+            ),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def _serialize_graph_summary(project_id: str, db: AsyncSession):
@@ -145,12 +169,113 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
     }
 
 
+async def _topic_is_shared(
+    db: AsyncSession,
+    project_id: str,
+    topic_id: str,
+    chapter_id: str,
+) -> bool:
+    result = await db.execute(
+        select(EdgeModel.id).where(
+            EdgeModel.project_id == project_id,
+            EdgeModel.target == topic_id,
+            EdgeModel.type == EdgeType.SUBCONCEPT_OF.value,
+            EdgeModel.source != chapter_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
+async def _collect_cascade_nodes(
+    db: AsyncSession,
+    project_id: str,
+    chapter_id: str,
+) -> list[str]:
+    result = await db.execute(
+        select(EdgeModel.target).where(
+            EdgeModel.project_id == project_id,
+            EdgeModel.source == chapter_id,
+            EdgeModel.type == EdgeType.SUBCONCEPT_OF.value,
+        )
+    )
+    topic_ids = [row[0] for row in result.fetchall()]
+
+    deletable = [chapter_id]
+    for topic_id in topic_ids:
+        if not await _topic_is_shared(db, project_id, topic_id, chapter_id):
+            deletable.append(topic_id)
+    return deletable
+
+
+async def _remove_nodes_and_edges(
+    db: AsyncSession,
+    project_id: str,
+    node_ids: list[str],
+) -> dict:
+    if not node_ids:
+        return {
+            "deleted_node_ids": [],
+            "deleted_edge_ids": [],
+            "updated_questions": 0,
+            "deleted_questions": 0,
+        }
+
+    edges_result = await db.execute(
+        select(EdgeModel).where(
+            EdgeModel.project_id == project_id,
+            (EdgeModel.source.in_(node_ids)) | (EdgeModel.target.in_(node_ids)),
+        )
+    )
+    edges = edges_result.scalars().all()
+    deleted_edge_ids = [edge.id for edge in edges]
+    for edge in edges:
+        await db.delete(edge)
+
+    nodes_result = await db.execute(
+        select(NodeModel).where(
+            NodeModel.project_id == project_id,
+            NodeModel.id.in_(node_ids),
+        )
+    )
+    nodes = nodes_result.scalars().all()
+    deleted_node_ids = [node.id for node in nodes]
+    for node in nodes:
+        await db.delete(node)
+
+    questions_result = await db.execute(
+        select(QuestionModel).where(QuestionModel.project_id == project_id)
+    )
+    questions = questions_result.scalars().all()
+
+    updated_questions = 0
+    deleted_questions = 0
+    delete_set = set(node_ids)
+    for question in questions:
+        covered = list(question.covered_node_ids or [])
+        filtered = [node_id for node_id in covered if node_id not in delete_set]
+        if filtered == covered:
+            continue
+        if not filtered:
+            await db.delete(question)
+            deleted_questions += 1
+        else:
+            question.covered_node_ids = filtered
+            updated_questions += 1
+
+    return {
+        "deleted_node_ids": deleted_node_ids,
+        "deleted_edge_ids": deleted_edge_ids,
+        "updated_questions": updated_questions,
+        "deleted_questions": deleted_questions,
+    }
+
+
 async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
     result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
     return result.scalar_one_or_none()
 
 
-def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) -> Material:
+def _get_or_create_material(video_url: str, title: str, channel: Optional[str], project_id: str = "") -> Material:
     global _material_counter
 
     existing_id = _material_index_by_source.get(video_url)
@@ -161,6 +286,7 @@ def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) 
     material_id = f"material-{_material_counter}"
     material = Material(
         id=material_id,
+        project_id=project_id,
         title=title,
         material_type=MaterialType.VIDEO,
         source=video_url,
@@ -195,6 +321,7 @@ async def _get_or_create_chapter_node(
     chapter_node = NodeModel(
         id=chapter_id,
         project_id=project_id,
+        created_by="system",
         topic_name=title,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -240,6 +367,7 @@ async def _get_or_create_topic_node(
     node = NodeModel(
         id=node_id,
         project_id=project_id,
+        created_by="system",
         topic_name=topic_name.strip(),
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -305,7 +433,9 @@ async def list_questions(
 @router.post("/graph/nodes")
 async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get_db)):
     """Create a new knowledge node."""
-    node_id = f"node_{int(datetime.now().timestamp() * 1000)}"
+    node_kind = (request.node_kind or "topic").lower()
+    node_prefix = "chapter" if node_kind == "chapter" else "node"
+    node_id = f"{node_prefix}_{int(datetime.now().timestamp() * 1000)}"
     default_user = await _get_default_user(db)
     created_by = default_user.username if default_user else ""
     node = NodeModel(
@@ -397,6 +527,47 @@ async def update_node(
     }
 
 
+@router.delete("/graph/nodes/{node_id}")
+async def delete_node(
+    node_id: str,
+    project_id: str = Query(...),
+    mode: str = Query("single"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a node. Use mode=cascade to remove connected topic nodes for a chapter."""
+    node_result = await db.execute(
+        select(NodeModel).where(
+            NodeModel.project_id == project_id,
+            NodeModel.id == node_id,
+        )
+    )
+    node = node_result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    mode_value = mode.lower()
+    if mode_value == "cascade":
+        node_ids = await _collect_cascade_nodes(db, project_id, node_id)
+    else:
+        node_ids = [node_id]
+
+    result = await _remove_nodes_and_edges(db, project_id, node_ids)
+    await db.commit()
+    return result
+
+
+@router.post("/graph/nodes/bulk-delete")
+async def bulk_delete_nodes(
+    request: BulkDeleteNodesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete multiple nodes at once (non-cascade)."""
+    unique_ids = [node_id for node_id in dict.fromkeys(request.node_ids) if node_id]
+    result = await _remove_nodes_and_edges(db, request.project_id, unique_ids)
+    await db.commit()
+    return result
+
+
 @router.post("/graph/edges")
 async def create_edge(request: CreateEdgeRequest, db: AsyncSession = Depends(get_db)):
     """Create a new connection between nodes."""
@@ -417,6 +588,19 @@ async def create_edge(request: CreateEdgeRequest, db: AsyncSession = Depends(get
     )
     if to_node.scalar_one_or_none() is None:
         raise HTTPException(status_code=404, detail="To node not found")
+
+    existing_edge = await _edge_exists_any(
+        db, request.project_id, request.from_node_id, request.to_node_id
+    )
+    if existing_edge:
+        return {
+            "id": existing_edge.id,
+            "project_id": existing_edge.project_id,
+            "source": existing_edge.source,
+            "target": existing_edge.target,
+            "type": existing_edge.type,
+            "weight": existing_edge.weight,
+        }
     
     # Map string to EdgeType
     edge_type_map = {
@@ -460,6 +644,28 @@ async def create_edge(request: CreateEdgeRequest, db: AsyncSession = Depends(get
     }
 
 
+@router.delete("/graph/edges/{edge_id}")
+async def delete_edge(
+    edge_id: str,
+    project_id: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a connection between nodes."""
+    result = await db.execute(
+        select(EdgeModel).where(
+            EdgeModel.project_id == project_id,
+            EdgeModel.id == edge_id,
+        )
+    )
+    edge = result.scalar_one_or_none()
+    if not edge:
+        raise HTTPException(status_code=404, detail="Edge not found")
+
+    await db.delete(edge)
+    await db.commit()
+    return {"deleted_edge_id": edge_id}
+
+
 @router.post("/graph/ingest/video")
 async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(get_db)):
     """Ingest a video transcript, extract topics, and merge into the graph."""
@@ -470,15 +676,27 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
 
     transcript = request.transcript
     if not transcript:
-        transcript = fetch_youtube_transcript(request.video_url)
+        try:
+            transcript = fetch_youtube_transcript(request.video_url)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to fetch transcript: {exc}",
+            )
 
-    topics = request.topics or extract_topics_from_text(transcript, title=request.title)
+    try:
+        topics = request.topics or extract_topics_from_text(transcript, title=request.title)
+    except TopicExtractionError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        )
     topics = [topic.strip() for topic in topics if topic.strip()]
 
     if not topics:
         raise HTTPException(status_code=400, detail="No topics extracted")
 
-    material = _get_or_create_material(request.video_url, request.title, request.channel)
+    material = _get_or_create_material(request.video_url, request.title, request.channel, project_id=request.project_id)
 
     chapter_created = request.video_url not in _chapter_index_by_source
     chapter_node_id = await _get_or_create_chapter_node(

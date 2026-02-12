@@ -17,7 +17,8 @@ export async function createNode(
   projectId: string,
   topicName: string,
   importance: number = 0.5,
-  relevance: number = 0.5
+  relevance: number = 0.5,
+  nodeKind?: "chapter" | "topic"
 ): Promise<NodeDTO> {
   return apiFetch<NodeDTO>("/graph/nodes", {
     method: "POST",
@@ -26,6 +27,7 @@ export async function createNode(
       topic_name: topicName,
       importance,
       relevance,
+      node_kind: nodeKind,
     }),
   });
 }
@@ -65,6 +67,37 @@ export async function createEdge(
       to_node_id: toNodeId,
       edge_type: edgeType,
       weight,
+    }),
+  });
+}
+
+export async function deleteEdge(projectId: string, edgeId: string): Promise<any> {
+  const params = new URLSearchParams({ project_id: projectId });
+  return apiFetch(`/graph/edges/${encodeURIComponent(edgeId)}?${params.toString()}`, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteNode(
+  projectId: string,
+  nodeId: string,
+  mode: "single" | "cascade" = "single"
+): Promise<any> {
+  const params = new URLSearchParams({ project_id: projectId, mode });
+  return apiFetch(`/graph/nodes/${encodeURIComponent(nodeId)}?${params.toString()}`, {
+    method: "DELETE",
+  });
+}
+
+export async function bulkDeleteNodes(
+  projectId: string,
+  nodeIds: string[]
+): Promise<any> {
+  return apiFetch(`/graph/nodes/bulk-delete`, {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      node_ids: nodeIds,
     }),
   });
 }

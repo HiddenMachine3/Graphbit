@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RecallGraph</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <!-- Not on YouTube state -->
+  <div id="not-youtube" class="hidden">
+    <div class="icon-large">&#127909;</div>
+    <p class="muted">Navigate to a YouTube video to ingest it.</p>
+  </div>
+
+  <!-- Main UI -->
+  <div id="main-ui" class="hidden">
+    <header>
+      <h1>RecallGraph</h1>
+      <span class="badge">YouTube Ingest</span>
+    </header>
+
+    <!-- Video info -->
+    <div id="video-info" class="card">
+      <div id="video-thumbnail" class="thumbnail"></div>
+      <div class="video-meta">
+        <p id="video-title" class="video-title">Loading…</p>
+        <p id="video-channel" class="video-channel"></p>
+      </div>
+    </div>
+
+    <!-- Project selector -->
+    <label for="project-select" class="label">Project</label>
+    <div class="select-wrap">
+      <select id="project-select">
+        <option value="" disabled selected>Loading projects…</option>
+      </select>
+    </div>
+
+    <!-- Ingest button -->
+    <button id="ingest-btn" disabled>
+      <span id="btn-icon">&#9889;</span>
+      <span id="btn-text">Ingest Video</span>
+    </button>
+
+    <!-- Status area -->
+    <div id="status" class="hidden"></div>
+
+    <!-- Result details (shown after success) -->
+    <div id="result-details" class="hidden">
+      <div class="result-row">
+        <span class="result-label">Main node</span>
+        <span id="result-chapter" class="result-value"></span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">Topics</span>
+        <span id="result-topics" class="result-value"></span>
+      </div>
+      <div class="result-row">
+        <span class="result-label">Edges</span>
+        <span id="result-edges" class="result-value"></span>
+      </div>
+      <a id="open-graph" href="http://localhost:3000/graph" target="_blank" class="open-link">
+        Open in RecallGraph &rarr;
+      </a>
+    </div>
+  </div>
+
+  <!-- Error state -->
+  <div id="error-state" class="hidden">
+    <div class="icon-large">&#9888;&#65039;</div>
+    <p id="error-message" class="muted">Something went wrong.</p>
+    <button id="retry-btn" class="secondary-btn">Retry</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

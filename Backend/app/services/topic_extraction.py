@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
-from collections import Counter
 from typing import Iterable
+
+
+class TopicExtractionError(Exception):
+    """Raised when topic extraction fails — no fallback, no fake results."""
+    pass
 
 
 def extract_topics_from_text(
@@ -14,58 +18,22 @@ def extract_topics_from_text(
     title: str | None = None,
     max_topics: int = 8,
 ) -> list[str]:
-    """Extract topic labels from text.
+    """Extract topic labels from text using a local HF model.
 
-    Uses a local HF model if configured, otherwise OpenAI if OPENAI_API_KEY is set.
-    Falls back to keyword extraction otherwise.
+    Raises TopicExtractionError if the model fails — never returns fake results.
     """
-    hf_model_name = os.getenv("HF_TOPIC_MODEL")
-    if hf_model_name:
-        topics = _extract_topics_with_local_model(
-            text, title=title, max_topics=max_topics, model_name=hf_model_name
-        )
-        if topics:
-            return topics
+    hf_model_name = os.getenv("HF_TOPIC_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        topics = _extract_topics_with_llm(text, title=title, max_topics=max_topics)
-        if topics:
-            return topics
-
-    return _extract_topics_fallback(text, max_topics=max_topics)
-
-
-def _extract_topics_with_llm(
-    text: str,
-    title: str | None,
-    max_topics: int,
-) -> list[str]:
-    prompt = (
-        "You extract concise study topics from lecture transcripts.\n"
-        "Return JSON only with a list of topics.\n\n"
-        f"Title: {title or 'Unknown'}\n"
-        "Transcript:\n"
-        f"{text}\n\n"
-        f"Respond with: {{\"topics\": [\"Topic 1\", ...]}} (max {max_topics})"
+    topics = _extract_topics_with_local_model(
+        text, title=title, max_topics=max_topics, model_name=hf_model_name
     )
+    if topics:
+        return topics
 
-    try:
-        import openai
-
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=200,
-        )
-        raw = response.choices[0].message.content
-        result = json.loads(raw)
-        topics = result.get("topics", [])
-        return _clean_topics(topics, max_topics=max_topics)
-    except Exception:
-        return []
+    raise TopicExtractionError(
+        f"Topic extraction failed: the local model ({hf_model_name}) "
+        "returned no topics. Check the server logs for details."
+    )
 
 
 def _extract_topics_with_local_model(
@@ -74,13 +42,24 @@ def _extract_topics_with_local_model(
     max_topics: int,
     model_name: str,
 ) -> list[str]:
+    # Truncate transcript to ~6000 words (~8k tokens) to fit context window.
+    # Sample from start and end to capture introduction + conclusion topics.
+    words = text.split()
+    max_words = 6000
+    if len(words) > max_words:
+        half = max_words // 2
+        truncated = " ".join(words[:half]) + "\n\n[...]\n\n" + " ".join(words[-half:])
+    else:
+        truncated = text
+
     prompt = (
-        "You extract concise study topics from lecture transcripts. "
-        "Return JSON only with a list of topics.\n\n"
-        f"Title: {title or 'Unknown'}\n"
-        "Transcript:\n"
-        f"{text}\n\n"
-        f"Respond with: {{\"topics\": [\"Topic 1\", ...]}} (max {max_topics})"
+        "You are a study-topic extractor. Given a lecture transcript, "
+        "identify the key study topics or concepts discussed.\n"
+        "Return ONLY valid JSON: {\"topics\": [\"Topic 1\", \"Topic 2\", ...]}\n"
+        "Each topic should be 1-4 words. No explanations.\n\n"
+        f"Title: {title or 'Unknown'}\n\n"
+        f"Transcript:\n{truncated}\n\n"
+        f"Extract up to {max_topics} concise study topics as JSON:"
     )
 
     try:
@@ -100,8 +79,15 @@ def _extract_topics_with_local_model(
         )
         topics = _parse_topics_from_json(generated)
         return _clean_topics(topics, max_topics=max_topics)
-    except Exception:
-        return []
+    except TopicExtractionError:
+        raise
+    except Exception as exc:
+        import traceback
+        print(f"[topic_extraction] Local model error: {exc}")
+        traceback.print_exc()
+        raise TopicExtractionError(
+            f"Local model ({model_name}) failed: {exc}"
+        ) from exc
 
 
 _LOCAL_MODEL_CACHE: tuple[object, object] | None = None
@@ -113,14 +99,23 @@ def _get_local_model(model_name: str) -> tuple[object, object]:
     if _LOCAL_MODEL_CACHE and _LOCAL_MODEL_NAME == model_name:
         return _LOCAL_MODEL_CACHE
 
+    import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    print(f"[topic_extraction] Loading model {model_name}…")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map="auto",
-        torch_dtype="auto",
-    )
+
+    has_cuda = torch.cuda.is_available()
+    load_kwargs: dict = {}
+    if has_cuda:
+        load_kwargs["device_map"] = "auto"
+        load_kwargs["torch_dtype"] = "auto"
+    else:
+        # CPU-only: use float32 (bfloat16 is slow on most CPUs)
+        load_kwargs["torch_dtype"] = torch.float32
+
+    model = AutoModelForCausalLM.from_pretrained(model_name, **load_kwargs)
+    print(f"[topic_extraction] Model loaded on {'CUDA' if has_cuda else 'CPU'}")
     _LOCAL_MODEL_CACHE = (tokenizer, model)
     _LOCAL_MODEL_NAME = model_name
     return _LOCAL_MODEL_CACHE
@@ -139,71 +134,6 @@ def _parse_topics_from_json(raw: str) -> list[str]:
             return parsed.get("topics", []) if isinstance(parsed, dict) else []
         except Exception:
             return []
-
-
-def _extract_topics_fallback(text: str, max_topics: int) -> list[str]:
-    words = _tokenize(text)
-    counts = Counter(words)
-    most_common = [word for word, _ in counts.most_common(max_topics * 2)]
-    topics = []
-    for word in most_common:
-        if word not in topics:
-            topics.append(word.title())
-        if len(topics) >= max_topics:
-            break
-    return topics
-
-
-def _tokenize(text: str) -> list[str]:
-    cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", text.lower())
-    words = [word for word in cleaned.split() if word not in _stop_words()]
-    return [word for word in words if 3 <= len(word) <= 24]
-
-
-def _stop_words() -> set[str]:
-    return {
-        "the",
-        "and",
-        "for",
-        "that",
-        "this",
-        "with",
-        "from",
-        "your",
-        "you",
-        "are",
-        "was",
-        "were",
-        "have",
-        "has",
-        "had",
-        "but",
-        "not",
-        "can",
-        "could",
-        "will",
-        "would",
-        "into",
-        "over",
-        "under",
-        "between",
-        "about",
-        "their",
-        "there",
-        "what",
-        "when",
-        "where",
-        "which",
-        "while",
-        "also",
-        "than",
-        "then",
-        "them",
-        "they",
-        "use",
-        "using",
-        "used",
-    }
 
 
 def _clean_topics(topics: Iterable[str], max_topics: int) -> list[str]:

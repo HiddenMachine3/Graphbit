@@ -2,8 +2,27 @@
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
+
+
+def _fix_ssl_env() -> None:
+    """Work around PostgreSQL installer overriding CA bundle env vars.
+
+    PostgreSQL 18 on Windows sets CURL_CA_BUNDLE to a path that may not
+    exist, and the ``requests`` library (used internally by
+    youtube-transcript-api) picks it up — causing an OSError.  We swap
+    it out for the bundle shipped with ``certifi`` if available.
+    """
+    for var in ("CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"):
+        path = os.environ.get(var, "")
+        if path and not os.path.isfile(path):
+            try:
+                import certifi
+                os.environ[var] = certifi.where()
+            except ImportError:
+                os.environ.pop(var, None)
 
 
 def fetch_youtube_transcript(video_url: str) -> str:
@@ -19,8 +38,13 @@ def fetch_youtube_transcript(video_url: str) -> str:
             "Install it or provide transcript text in the request."
         ) from exc
 
-    transcript = YouTubeTranscriptApi.get_transcript(video_id)
-    return " ".join(chunk.get("text", "") for chunk in transcript).strip()
+    _fix_ssl_env()
+
+    # v1.x API: instantiate, then call .fetch() which returns a
+    # FetchedTranscript with .snippets (list of snippet objects).
+    api = YouTubeTranscriptApi()
+    fetched = api.fetch(video_id)
+    return " ".join(s.text for s in fetched.snippets if s.text).strip()
 
 
 def extract_youtube_video_id(video_url: str) -> Optional[str]:

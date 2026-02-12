@@ -2,13 +2,15 @@
 
 import { useState, useCallback } from 'react';
 import type { GraphNodeDTO } from '../../lib/types';
-import { createNode, updateNode } from '../../lib/api/graph';
+import { createEdge, createNode, updateNode } from '../../lib/api/graph';
 
 type NodeManagementPanelProps = {
   selectedNode: GraphNodeDTO | null;
   projectId: string | null;
   onNodeCreated: () => void;
   onNodeUpdated: () => void;
+  selectingMainNode?: boolean;
+  onSelectMainNodeRequest?: () => void;
 };
 
 export default function NodeManagementPanel({
@@ -16,12 +18,15 @@ export default function NodeManagementPanel({
   projectId,
   onNodeCreated,
   onNodeUpdated,
+  selectingMainNode = false,
+  onSelectMainNodeRequest,
 }: NodeManagementPanelProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
   const [newImportance, setNewImportance] = useState(0.5);
   const [newRelevance, setNewRelevance] = useState(0.5);
+  const [newNodeKind, setNewNodeKind] = useState<'chapter' | 'topic'>('topic');
   const [editedTopic, setEditedTopic] = useState('');
   const [editedImportance, setEditedImportance] = useState(0.5);
   const [editedRelevance, setEditedRelevance] = useState(0.5);
@@ -37,11 +42,24 @@ export default function NodeManagementPanel({
       setError('Topic name is required');
       return;
     }
+    if (newNodeKind === 'topic' && (!selectedNode || !selectedNode.id.startsWith('chapter_'))) {
+      setError('Select a main node to connect this topic');
+      return;
+    }
 
     setLoading(true);
     setError(null);
     try {
-      await createNode(projectId, newTopicName, newImportance, newRelevance);
+      const createdNode = await createNode(
+        projectId,
+        newTopicName,
+        newImportance,
+        newRelevance,
+        newNodeKind
+      );
+      if (newNodeKind === 'topic' && selectedNode) {
+        await createEdge(projectId, selectedNode.id, createdNode.id, 'SUBCONCEPT_OF', 0.9);
+      }
       setNewTopicName('');
       setNewImportance(0.5);
       setNewRelevance(0.5);
@@ -52,7 +70,15 @@ export default function NodeManagementPanel({
     } finally {
       setLoading(false);
     }
-  }, [newTopicName, newImportance, newRelevance, onNodeCreated]);
+  }, [
+    newTopicName,
+    newImportance,
+    newRelevance,
+    newNodeKind,
+    projectId,
+    selectedNode,
+    onNodeCreated,
+  ]);
 
   const handleUpdateNode = useCallback(async () => {
     if (!selectedNode || !projectId) return;
@@ -99,10 +125,23 @@ export default function NodeManagementPanel({
         <div className='mt-3 space-y-2'>
           <button
             className='w-full rounded bg-rose-600 px-3 py-2 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
-            onClick={() => setShowCreateForm(true)}
+            onClick={() => {
+              setNewNodeKind('chapter');
+              setShowCreateForm(true);
+            }}
             disabled={loading || !projectId}
           >
-            + Add New Node
+            + Add Main Node
+          </button>
+          <button
+            className='w-full rounded bg-slate-800 px-3 py-2 text-xs text-white hover:bg-slate-700 disabled:opacity-60'
+            onClick={() => {
+              setNewNodeKind('topic');
+              setShowCreateForm(true);
+            }}
+            disabled={loading || !projectId}
+          >
+            + Add Connecting Node
           </button>
           {selectedNode && (
             <button
@@ -118,9 +157,35 @@ export default function NodeManagementPanel({
 
       {showCreateForm && (
         <div className='mt-3 space-y-2'>
+          <div className='rounded border border-slate-800 bg-slate-900/40 px-2 py-1 text-[11px] text-slate-300'>
+            {newNodeKind === 'chapter'
+              ? 'Creating main node (video title)'
+              : 'Creating connecting topic node'}
+          </div>
+          {newNodeKind === 'topic' && (
+            <div className='rounded border border-slate-800 bg-slate-950/40 px-2 py-2 text-[11px] text-slate-300'>
+              <div className='font-medium text-slate-200'>Main node</div>
+              {selectedNode && selectedNode.id.startsWith('chapter_') ? (
+                <div className='mt-1'>Selected: {selectedNode.topic_name}</div>
+              ) : selectingMainNode ? (
+                <div className='mt-1 text-rose-200'>Click a main node in the graph...</div>
+              ) : (
+                <div className='mt-1 flex items-center justify-between gap-2'>
+                  <span className='text-slate-400'>No main node selected</span>
+                  <button
+                    className='rounded bg-slate-800 px-2 py-1 text-[11px] text-white hover:bg-slate-700'
+                    onClick={onSelectMainNodeRequest}
+                    disabled={loading}
+                  >
+                    Select main node
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <input
             type='text'
-            placeholder='Topic name'
+            placeholder={newNodeKind === 'chapter' ? 'Video title' : 'Topic name'}
             value={newTopicName}
             onChange={(e) => setNewTopicName(e.target.value)}
             className='w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500'

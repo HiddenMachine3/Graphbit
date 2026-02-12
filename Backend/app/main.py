@@ -29,13 +29,13 @@ async def lifespan(app: FastAPI):
     # Startup: Create database tables
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    print("✓ Database tables created/verified")
+    print("[OK] Database tables created/verified")
     
     yield
     
     # Shutdown: cleanup
     await async_engine.dispose()
-    print("✓ Database connections closed")
+    print("[OK] Database connections closed")
 
 
 app = FastAPI(
@@ -55,6 +55,7 @@ app.add_middleware(
         "http://localhost:3001",
         "http://localhost:8080",
     ],
+    allow_origin_regex=r"^chrome-extension://.*$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
