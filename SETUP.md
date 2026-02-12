@@ -283,6 +283,7 @@ python seed_data.py
 
 This creates sample nodes, edges, questions, and users for testing. Skip this step if you prefer to start with an empty database.
 
+Use `python seed_data.py --reset` to flush the current db, and start fresh with the default db content.
 
 ### 4. Running the tests
 
