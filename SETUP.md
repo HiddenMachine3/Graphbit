@@ -182,6 +182,66 @@ You now have:
 
 Note: The backend reads its database settings from `Backend/.env`. The default `DATABASE_URL` is already configured for Docker on port `5433`.
 
+---
+
+# 🪟 pgvector Setup on Windows (Local, No Docker)
+
+This is the **local Windows** setup path (no Docker, no Visual Studio build tools). It uses Conda packages for PostgreSQL + pgvector.
+
+## 1️⃣ Install Miniconda (if not already installed)
+
+- Download and install Miniconda for Windows.
+- Open a new PowerShell and verify:
+
+```powershell
+conda --version
+```
+
+## 2️⃣ Create the local PostgreSQL + pgvector Conda environment
+
+From the repository root:
+
+```powershell
+Set-Location 'S:\files\files\Projects\Projects\Graphbit'
+conda create -n graphbit-pgvector-db -c conda-forge postgresql=16.10 pgvector=0.8.1 -y
+```
+
+## 3️⃣ Start local Postgres and enable pgvector
+
+Use the automation script in this repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "Backend\scripts\setup_local_pgvector_db.ps1" -CondaEnvName "graphbit-pgvector-db" -Port 5434 -DbUser postgres -DbPassword admin -DbName postgres
+```
+
+What this script does:
+
+- Initializes a local data directory at `Backend/.local_pgvector_db/data` (first run only)
+- Starts PostgreSQL on `127.0.0.1:5434`
+- Runs `CREATE EXTENSION IF NOT EXISTS vector;`
+- Runs a smoke test insert/select on a `vector(3)` column
+
+## 4️⃣ Configure backend connection string
+
+In `Backend/.env`, set:
+
+```dotenv
+DATABASE_URL=postgresql+psycopg://postgres:admin@localhost:5434/postgres
+```
+
+## 5️⃣ Stop local Postgres when needed
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "Backend\scripts\stop_local_pgvector_db.ps1"
+```
+
+## 6️⃣ Notes from the working setup
+
+- Native Windows PostgreSQL + pgvector compilation requires MSVC build tools; Conda avoids this.
+- If backend startup fails with `No module named uvicorn`, use the interpreter that has dependencies installed (example below).
+
+---
+
 ### Node.js & npm
 - If npm is not installed, first install Node.js which includes npm
 - Verify installation:
@@ -242,6 +302,13 @@ Set-Location 'S:\files\files\Projects\Projects\Graphbit\Backend'
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+If `python -m uvicorn` fails due to interpreter mismatch, run with the explicit Python path:
+
+```powershell
+Set-Location 'S:\files\files\Projects\Projects\Graphbit\Backend'
+& "C:\Users\cosmo\AppData\Local\Programs\Python\Python312\python.exe" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
 The backend will be available at: `http://localhost:8000`
 
 **Swagger API Documentation:** `http://localhost:8000/docs`
@@ -257,7 +324,9 @@ The frontend will typically be available at: `http://localhost:3000`
 ## Troubleshooting
 
 ### Backend won't start
-- Ensure Docker Desktop is running and the `pgvector` container is up (`docker ps`)
+- If using Docker setup: ensure Docker Desktop is running and the `pgvector` container is up (`docker ps`)
+- If using local Windows setup: run `Backend\scripts\setup_local_pgvector_db.ps1` and verify DB is on port `5434`
+- Verify `DATABASE_URL` in `Backend/.env` matches your setup (Docker `5433`, local Conda `5434`)
 - Check that port 8000 is not already in use
 - Verify Python dependencies installed correctly: `pip list`
 
