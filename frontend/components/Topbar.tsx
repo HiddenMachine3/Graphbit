@@ -6,10 +6,21 @@ import { Search } from "lucide-react";
 import ActiveCommunityBadge from "./communities/ActiveCommunityBadge";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { getCurrentUser } from "../lib/api/user";
-import type { UserDTO } from "../lib/types";
+import { searchKnowledge } from "../lib/api/search";
+import { useAppStore } from "../lib/store";
+import type { SearchResultsDTO, UserDTO } from "../lib/types";
 
 export default function Topbar() {
   const [currentUser, setCurrentUser] = useState<UserDTO | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResultsDTO>({
+    nodes: [],
+    materials: [],
+  });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const currentProjectId = useAppStore((state) => state.currentProjectId);
   const pathname = usePathname();
 
   const linkClass = (href: string) =>
@@ -35,6 +46,37 @@ export default function Topbar() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query || !currentProjectId) {
+      setSearchResults({ nodes: [], materials: [] });
+      setSearchOpen(false);
+      setSearchLoading(false);
+      setSearchError(null);
+      return undefined;
+    }
+
+    setSearchLoading(true);
+    setSearchError(null);
+
+    const handle = window.setTimeout(async () => {
+      try {
+        const data = await searchKnowledge(currentProjectId, query, 8);
+        setSearchResults(data);
+        setSearchOpen(true);
+      } catch {
+        setSearchError("Search failed");
+        setSearchOpen(true);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [currentProjectId, searchQuery]);
 
   return (
     <header className="border-b border-slate-800 bg-slate-950 px-4 py-4">
@@ -72,11 +114,53 @@ export default function Topbar() {
             <input
               type="text"
               placeholder="Search knowledge..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
               className="w-48 rounded-lg border border-slate-700 bg-slate-800 py-2 pl-9 pr-4 text-sm text-slate-200 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 lg:w-64"
             />
             <kbd className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-slate-600 bg-slate-700 px-1.5 py-0.5 text-xs text-slate-400 lg:block">
               ⌘K
             </kbd>
+            {searchOpen && (
+              <div className="absolute left-0 right-0 z-20 mt-2 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                {searchLoading && (
+                  <div className="text-xs text-slate-400">Searching...</div>
+                )}
+                {searchError && (
+                  <div className="text-xs text-red-300">{searchError}</div>
+                )}
+                {!searchLoading && !searchError && (
+                  <div className="grid gap-3 text-xs text-slate-200">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                        Nodes
+                      </div>
+                      {searchResults.nodes.length === 0 && (
+                        <div className="mt-1 text-slate-500">No node matches.</div>
+                      )}
+                      {searchResults.nodes.map((item) => (
+                        <div key={item.id} className="mt-1 rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1">
+                          {item.title}
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                        Materials
+                      </div>
+                      {searchResults.materials.length === 0 && (
+                        <div className="mt-1 text-slate-500">No material matches.</div>
+                      )}
+                      {searchResults.materials.map((item) => (
+                        <div key={item.id} className="mt-1 rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1">
+                          {item.title}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
