@@ -128,6 +128,16 @@ const toEditableMcqOptions = (options?: string[] | null) => {
 const optionLabel = (index: number) => String.fromCharCode(65 + index);
 const DRAFT_QUESTION_ID = "__create__";
 const DRAFT_MATERIAL_ID = "__create_material__";
+const SLIDER_HELP = {
+  threshold:
+    "Higher threshold = fewer, stricter matches. Lower threshold = more, broader matches.",
+  semantic:
+    "Higher semantic weight prioritizes meaning/context similarity. Lower semantic weight relies less on embeddings.",
+  keyword:
+    "Higher keyword weight prioritizes exact term overlap. Lower keyword weight emphasizes semantic similarity instead.",
+  dedup:
+    "Higher dedup threshold removes only near-duplicates. Lower dedup threshold merges more loosely similar suggestions.",
+} as const;
 
 const topNewSuggestionTitles = (weak: SuggestionItem[]) => {
   const newCandidates = weak
@@ -218,6 +228,7 @@ export default function ProjectsPage() {
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialText, setMaterialText] = useState("");
   const [materialSourceUrl, setMaterialSourceUrl] = useState("");
+  const [materialCheckedTranscriptText, setMaterialCheckedTranscriptText] = useState<string | null>(null);
   const [isCreateMaterialNodesOpen, setIsCreateMaterialNodesOpen] = useState(false);
   const [createMaterialNodeSearch, setCreateMaterialNodeSearch] = useState("");
   const [createMaterialNodeSelection, setCreateMaterialNodeSelection] = useState<string[]>([]);
@@ -229,6 +240,10 @@ export default function ProjectsPage() {
   const [editMaterialTitle, setEditMaterialTitle] = useState("");
   const [editMaterialText, setEditMaterialText] = useState("");
   const [editMaterialSourceUrl, setEditMaterialSourceUrl] = useState("");
+  const [editMaterialTranscriptText, setEditMaterialTranscriptText] = useState("");
+  const [editMaterialCheckedTranscriptText, setEditMaterialCheckedTranscriptText] = useState<string | null>(null);
+  const [editMaterialTranscriptStatus, setEditMaterialTranscriptStatus] = useState<string | null>(null);
+  const [editMaterialTranscriptChecking, setEditMaterialTranscriptChecking] = useState(false);
   const [editingMaterialNodesId, setEditingMaterialNodesId] = useState<string | null>(null);
   const [materialNodeSearch, setMaterialNodeSearch] = useState("");
   const [materialNodeSelection, setMaterialNodeSelection] = useState<string[]>([]);
@@ -929,7 +944,8 @@ export default function ProjectsPage() {
         materialTitle.trim(),
         materialText.trim(),
         currentUser?.username ?? undefined,
-        materialSourceUrl.trim() || undefined
+        materialSourceUrl.trim() || undefined,
+        materialCheckedTranscriptText ?? undefined
       );
       if (createMaterialNodeSelection.length > 0 || createMaterialNewNodeSelection.length > 0) {
         const newNodes = createMaterialNewNodeSelection.map((title) => ({ title }));
@@ -939,6 +955,7 @@ export default function ProjectsPage() {
       setMaterialTitle("");
       setMaterialText("");
       setMaterialSourceUrl("");
+      setMaterialCheckedTranscriptText(null);
       setMaterialTranscriptStatus(null);
       setCreateMaterialNodeSelection([]);
       setCreateMaterialNewNodeSelection([]);
@@ -978,10 +995,12 @@ export default function ProjectsPage() {
     setMaterialTranscriptStatus(null);
     try {
       const result = await checkYoutubeTranscript(materialSourceUrl.trim());
+      setMaterialCheckedTranscriptText(result.transcript_text?.trim() || "");
       setMaterialTranscriptStatus(
-        `Transcript found for video ${result.video_id ?? "unknown"} (${result.chunk_count} chunks).`
+        `Transcript found for video ${result.video_id ?? "unknown"} (${result.chunk_count} chunks). It will be saved when you click Create material.`
       );
     } catch (error) {
+      setMaterialCheckedTranscriptText(null);
       setMaterialTranscriptStatus(getErrorMessage(error, "No transcript found for this video."));
     } finally {
       setMaterialTranscriptChecking(false);
@@ -1091,6 +1110,42 @@ export default function ProjectsPage() {
     }
   };
 
+  const loadEditMaterialTranscript = async (link: string) => {
+    const trimmed = link.trim();
+    if (!trimmed) {
+      setEditMaterialCheckedTranscriptText(null);
+      setEditMaterialTranscriptText("");
+      setEditMaterialTranscriptStatus("No source link attached to this material.");
+      return;
+    }
+    if (!isValidYoutubeUrl(trimmed)) {
+      setEditMaterialCheckedTranscriptText(null);
+      setEditMaterialTranscriptText("");
+      setEditMaterialTranscriptStatus("Transcript preview is available only for valid YouTube links.");
+      return;
+    }
+
+    setEditMaterialTranscriptChecking(true);
+    setEditMaterialTranscriptStatus(null);
+    try {
+      const result = await checkYoutubeTranscript(trimmed);
+      const transcript = result.transcript_text?.trim() ?? "";
+      setEditMaterialTranscriptText(transcript);
+      setEditMaterialCheckedTranscriptText(transcript);
+      setEditMaterialTranscriptStatus(
+        `Transcript found for video ${result.video_id ?? "unknown"} (${result.chunk_count} chunks). Save to persist changes.`
+      );
+    } catch (error) {
+      setEditMaterialCheckedTranscriptText(null);
+      setEditMaterialTranscriptText("");
+      setEditMaterialTranscriptStatus(
+        getErrorMessage(error, "No transcript found for this video.")
+      );
+    } finally {
+      setEditMaterialTranscriptChecking(false);
+    }
+  };
+
   const beginEditMaterial = async (material: MaterialDTO) => {
     resetStatus();
     setBusy(true);
@@ -1099,7 +1154,18 @@ export default function ProjectsPage() {
       setEditingMaterialId(material.id);
       setEditMaterialTitle(material.title);
       setEditMaterialText(fullMaterial.chunks.join("\n\n"));
-      setEditMaterialSourceUrl(fullMaterial.source_url ?? material.source_url ?? "");
+      const sourceUrl = fullMaterial.source_url ?? material.source_url ?? "";
+      setEditMaterialSourceUrl(sourceUrl);
+      const persistedTranscript = fullMaterial.transcript_text?.trim() ?? "";
+      setEditMaterialTranscriptText(persistedTranscript);
+      setEditMaterialCheckedTranscriptText(null);
+      setEditMaterialTranscriptStatus(
+        persistedTranscript
+          ? `Transcript loaded from saved material (${fullMaterial.transcript_chunks?.length ?? 0} chunks).`
+          : sourceUrl
+            ? "No saved transcript for this material. Use Check transcript, then Save."
+            : "No source link attached to this material."
+      );
     } catch {
       setStatus({ type: "error", message: "Failed to load material" });
     } finally {
@@ -1110,6 +1176,10 @@ export default function ProjectsPage() {
   const cancelEditMaterial = () => {
     setEditingMaterialId(null);
     setEditMaterialSourceUrl("");
+    setEditMaterialTranscriptText("");
+    setEditMaterialCheckedTranscriptText(null);
+    setEditMaterialTranscriptStatus(null);
+    setEditMaterialTranscriptChecking(false);
   };
 
   const beginEditMaterialNodes = (material: MaterialDTO) => {
@@ -1223,10 +1293,10 @@ export default function ProjectsPage() {
     if (!currentProjectId) {
       return;
     }
-    if (!editMaterialTitle.trim() || !editMaterialText.trim()) {
+    if (!editMaterialTitle.trim()) {
       setStatus({
         type: "error",
-        message: "Material title and text are required",
+        message: "Material title is required",
       });
       return;
     }
@@ -1242,8 +1312,11 @@ export default function ProjectsPage() {
     try {
       await updateMaterial(materialId, {
         title: editMaterialTitle.trim(),
-        content_text: editMaterialText.trim(),
+        content_text: editMaterialText,
         source_url: editMaterialSourceUrl.trim() || undefined,
+        transcript_text: !editMaterialSourceUrl.trim()
+          ? ""
+          : editMaterialCheckedTranscriptText ?? undefined,
       });
       await refreshProjectData(currentProjectId);
       setEditingMaterialId(null);
@@ -1680,7 +1753,10 @@ export default function ProjectsPage() {
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.threshold}
+                      >
                         Threshold: {suggestionThreshold.toFixed(2)}
                         <input
                           type="range"
@@ -1689,9 +1765,14 @@ export default function ProjectsPage() {
                           step={0.01}
                           value={suggestionThreshold}
                           onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.threshold}
                         />
                       </label>
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.semantic}
+                      >
                         Semantic weight: {semanticWeight.toFixed(2)}
                         <input
                           type="range"
@@ -1700,9 +1781,14 @@ export default function ProjectsPage() {
                           step={0.05}
                           value={semanticWeight}
                           onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.semantic}
                         />
                       </label>
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.keyword}
+                      >
                         Keyword weight: {keywordWeight.toFixed(2)}
                         <input
                           type="range"
@@ -1711,9 +1797,14 @@ export default function ProjectsPage() {
                           step={0.05}
                           value={keywordWeight}
                           onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.keyword}
                         />
                       </label>
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.dedup}
+                      >
                         Dedup threshold: {dedupThreshold.toFixed(2)}
                         <input
                           type="range"
@@ -1722,6 +1813,8 @@ export default function ProjectsPage() {
                           step={0.01}
                           value={dedupThreshold}
                           onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.dedup}
                         />
                       </label>
                     </div>
@@ -2060,7 +2153,10 @@ export default function ProjectsPage() {
                                 </div>
                               </div>
                               <div className="grid gap-3 sm:grid-cols-2">
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.threshold}
+                                >
                                   Threshold: {suggestionThreshold.toFixed(2)}
                                   <input
                                     type="range"
@@ -2069,9 +2165,14 @@ export default function ProjectsPage() {
                                     step={0.01}
                                     value={suggestionThreshold}
                                     onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.threshold}
                                   />
                                 </label>
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.semantic}
+                                >
                                   Semantic weight: {semanticWeight.toFixed(2)}
                                   <input
                                     type="range"
@@ -2080,9 +2181,14 @@ export default function ProjectsPage() {
                                     step={0.05}
                                     value={semanticWeight}
                                     onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.semantic}
                                   />
                                 </label>
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.keyword}
+                                >
                                   Keyword weight: {keywordWeight.toFixed(2)}
                                   <input
                                     type="range"
@@ -2091,9 +2197,14 @@ export default function ProjectsPage() {
                                     step={0.05}
                                     value={keywordWeight}
                                     onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.keyword}
                                   />
                                 </label>
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.dedup}
+                                >
                                   Dedup threshold: {dedupThreshold.toFixed(2)}
                                   <input
                                     type="range"
@@ -2102,6 +2213,8 @@ export default function ProjectsPage() {
                                     step={0.01}
                                     value={dedupThreshold}
                                     onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.dedup}
                                   />
                                 </label>
                               </div>
@@ -2305,6 +2418,7 @@ export default function ProjectsPage() {
                   value={materialSourceUrl}
                   onChange={(event) => {
                     setMaterialSourceUrl(event.target.value);
+                    setMaterialCheckedTranscriptText(null);
                     setMaterialTranscriptStatus(null);
                   }}
                   placeholder="YouTube link (optional if text provided)"
@@ -2366,7 +2480,10 @@ export default function ProjectsPage() {
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.threshold}
+                      >
                         Threshold: {suggestionThreshold.toFixed(2)}
                         <input
                           type="range"
@@ -2375,9 +2492,14 @@ export default function ProjectsPage() {
                           step={0.01}
                           value={suggestionThreshold}
                           onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.threshold}
                         />
                       </label>
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.semantic}
+                      >
                         Semantic weight: {semanticWeight.toFixed(2)}
                         <input
                           type="range"
@@ -2386,9 +2508,14 @@ export default function ProjectsPage() {
                           step={0.05}
                           value={semanticWeight}
                           onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.semantic}
                         />
                       </label>
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.keyword}
+                      >
                         Keyword weight: {keywordWeight.toFixed(2)}
                         <input
                           type="range"
@@ -2397,9 +2524,14 @@ export default function ProjectsPage() {
                           step={0.05}
                           value={keywordWeight}
                           onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.keyword}
                         />
                       </label>
-                      <label className="grid gap-1 text-[11px] text-slate-400">
+                      <label
+                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                        title={SLIDER_HELP.dedup}
+                      >
                         Dedup threshold: {dedupThreshold.toFixed(2)}
                         <input
                           type="range"
@@ -2408,6 +2540,8 @@ export default function ProjectsPage() {
                           step={0.01}
                           value={dedupThreshold}
                           onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                          className="w-[calc(100%-8px)] max-w-full"
+                          title={SLIDER_HELP.dedup}
                         />
                       </label>
                     </div>
@@ -2623,7 +2757,17 @@ export default function ProjectsPage() {
                           />
                           <input
                             value={editMaterialSourceUrl}
-                            onChange={(event) => setEditMaterialSourceUrl(event.target.value)}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setEditMaterialSourceUrl(nextValue);
+                              setEditMaterialCheckedTranscriptText(null);
+                              setEditMaterialTranscriptText("");
+                              setEditMaterialTranscriptStatus(
+                                nextValue.trim()
+                                  ? "URL changed. Use Check transcript, then Save to persist the new transcript."
+                                  : "Transcript will be cleared when you save."
+                              );
+                            }}
                             placeholder="YouTube/source link"
                             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                           />
@@ -2632,11 +2776,41 @@ export default function ProjectsPage() {
                               ? "Invalid YouTube URL format"
                               : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
                           </div>
-                          <textarea
-                            value={editMaterialText}
-                            onChange={(event) => setEditMaterialText(event.target.value)}
-                            className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
-                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => loadEditMaterialTranscript(editMaterialSourceUrl)}
+                              disabled={busy || editMaterialTranscriptChecking || !editMaterialSourceUrl.trim() || editMaterialLinkInvalid}
+                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {editMaterialTranscriptChecking ? "Checking transcript..." : "Check transcript"}
+                            </button>
+                            {editMaterialTranscriptStatus && (
+                              <div className="text-[11px] text-slate-400">{editMaterialTranscriptStatus}</div>
+                            )}
+                          </div>
+                          <div className="grid gap-1">
+                            <div className="text-[11px] text-slate-400">Notes</div>
+                            <textarea
+                              value={editMaterialText}
+                              onChange={(event) => setEditMaterialText(event.target.value)}
+                              className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            />
+                          </div>
+                          {(editMaterialTranscriptChecking || editMaterialTranscriptText) && (
+                            <div className="grid gap-1">
+                              <div className="text-[11px] text-slate-400">Transcript (YouTube)</div>
+                              <textarea
+                                value={
+                                  editMaterialTranscriptChecking
+                                    ? "Loading transcript..."
+                                    : editMaterialTranscriptText
+                                }
+                                readOnly
+                                className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 focus:outline-none"
+                              />
+                            </div>
+                          )}
                           <div className="flex flex-wrap gap-2">
                             <button
                               onClick={() => handleUpdateMaterial(material.id)}
@@ -2729,7 +2903,10 @@ export default function ProjectsPage() {
                                 </div>
                               </div>
                               <div className="grid gap-3 sm:grid-cols-2">
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.threshold}
+                                >
                                   Threshold: {suggestionThreshold.toFixed(2)}
                                   <input
                                     type="range"
@@ -2738,9 +2915,14 @@ export default function ProjectsPage() {
                                     step={0.01}
                                     value={suggestionThreshold}
                                     onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.threshold}
                                   />
                                 </label>
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.semantic}
+                                >
                                   Semantic weight: {semanticWeight.toFixed(2)}
                                   <input
                                     type="range"
@@ -2749,9 +2931,14 @@ export default function ProjectsPage() {
                                     step={0.05}
                                     value={semanticWeight}
                                     onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.semantic}
                                   />
                                 </label>
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.keyword}
+                                >
                                   Keyword weight: {keywordWeight.toFixed(2)}
                                   <input
                                     type="range"
@@ -2760,9 +2947,14 @@ export default function ProjectsPage() {
                                     step={0.05}
                                     value={keywordWeight}
                                     onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.keyword}
                                   />
                                 </label>
-                                <label className="grid gap-1 text-[11px] text-slate-400">
+                                <label
+                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
+                                  title={SLIDER_HELP.dedup}
+                                >
                                   Dedup threshold: {dedupThreshold.toFixed(2)}
                                   <input
                                     type="range"
@@ -2771,6 +2963,8 @@ export default function ProjectsPage() {
                                     step={0.01}
                                     value={dedupThreshold}
                                     onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                    className="w-[calc(100%-8px)] max-w-full"
+                                    title={SLIDER_HELP.dedup}
                                   />
                                 </label>
                               </div>

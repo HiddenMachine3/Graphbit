@@ -150,6 +150,8 @@ export interface MaterialDTO {
   title: string;
   source_url?: string | null;
   chunk_count: number;
+  transcript_chunk_count?: number;
+  has_transcript?: boolean;
 }
 
 export interface SearchResultItemDTO {
