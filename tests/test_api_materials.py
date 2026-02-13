@@ -154,7 +154,8 @@ def test_material_create_from_youtube_link(api_client, monkeypatch):
             {"text": "Second transcript line."},
         ]
 
-    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+    monkeypatch.setattr(YouTubeTranscriptApi, "fetch", lambda self, video_id, languages=None: fake_get_transcript(video_id), raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript, raising=False)
 
     create_resp = api_client.post(
         "/api/v1/materials",
@@ -197,7 +198,8 @@ def test_material_create_from_youtube_link_with_extra_query_params(api_client, m
             {"text": "Transcript line B"},
         ]
 
-    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+    monkeypatch.setattr(YouTubeTranscriptApi, "fetch", lambda self, video_id, languages=None: fake_get_transcript(video_id), raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript, raising=False)
 
     test_link = "https://www.youtube.com/watch?si=rtB_OUYe-nqVXIf6&v=EKOU3JWDNLI&feature=youtu.be"
     create_resp = api_client.post(
@@ -226,7 +228,8 @@ def test_check_youtube_transcript_endpoint(api_client, monkeypatch):
             {"text": "Line 2"},
         ]
 
-    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+    monkeypatch.setattr(YouTubeTranscriptApi, "fetch", lambda self, video_id, languages=None: fake_get_transcript(video_id), raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript, raising=False)
 
     check_resp = api_client.post(
         "/api/v1/materials/youtube/transcript-check",
@@ -261,7 +264,8 @@ def test_material_create_imports_when_youtube_url_pasted_as_text(api_client, mon
             {"text": "Imported from pasted URL"},
         ]
 
-    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+    monkeypatch.setattr(YouTubeTranscriptApi, "fetch", lambda self, video_id, languages=None: fake_get_transcript(video_id), raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript, raising=False)
 
     pasted_link = "https://www.youtube.com/watch?si=rtB_OUYe-nqVXIf6&v=EKOU3JWDNLI&feature=youtu.be"
     create_resp = api_client.post(
@@ -309,8 +313,10 @@ def test_material_create_falls_back_when_get_transcript_fails(api_client, monkey
     def fake_list_transcripts(*args, **kwargs):
         return FakeTranscriptList()
 
-    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
-    monkeypatch.setattr(YouTubeTranscriptApi, "list_transcripts", fake_list_transcripts)
+    monkeypatch.setattr(YouTubeTranscriptApi, "fetch", lambda self, video_id, languages=None: fake_get_transcript(video_id), raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript, raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "list", lambda self, video_id: fake_list_transcripts(video_id), raising=False)
+    monkeypatch.setattr(YouTubeTranscriptApi, "list_transcripts", fake_list_transcripts, raising=False)
 
     create_resp = api_client.post(
         "/api/v1/materials",
@@ -349,7 +355,7 @@ def test_material_create_uses_instance_fetch_when_available(api_client, monkeypa
         raise RuntimeError("legacy path should not be used when fetch exists")
 
     monkeypatch.setattr(YouTubeTranscriptApi, "fetch", fake_fetch, raising=False)
-    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript)
+    monkeypatch.setattr(YouTubeTranscriptApi, "get_transcript", fake_get_transcript, raising=False)
 
     create_resp = api_client.post(
         "/api/v1/materials",
