@@ -8,7 +8,11 @@ import ReactFlow, {
   ReactFlowProvider,
   type Connection,
   type Edge,
+  type EdgeChange,
   type Node,
+  type NodeChange,
+  type OnEdgesChange,
+  type OnNodesChange,
   useReactFlow,
   useEdgesState,
   useNodesState,
@@ -359,8 +363,8 @@ export default function KnowledgeGraphView({
 type GraphFlowCanvasProps = {
   nodes: Node[];
   edges: Edge[];
-  onNodesChange: Parameters<typeof useNodesState>[2];
-  onEdgesChange: Parameters<typeof useEdgesState>[2];
+  onNodesChange: OnNodesChange;
+  onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   onSelectNode: (nodeId: string) => void;
 };
