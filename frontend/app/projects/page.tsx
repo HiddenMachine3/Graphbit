@@ -58,6 +58,11 @@ type ApiLikeError = {
   message?: string;
 };
 
+type MaterialSuggestionDraft = {
+  notes: string;
+  transcript: string;
+};
+
 function SectionCard({
   title,
   subtitle,
@@ -244,6 +249,7 @@ export default function ProjectsPage() {
   const [editMaterialCheckedTranscriptText, setEditMaterialCheckedTranscriptText] = useState<string | null>(null);
   const [editMaterialTranscriptStatus, setEditMaterialTranscriptStatus] = useState<string | null>(null);
   const [editMaterialTranscriptChecking, setEditMaterialTranscriptChecking] = useState(false);
+  const [materialSuggestionDrafts, setMaterialSuggestionDrafts] = useState<Record<string, MaterialSuggestionDraft>>({});
   const [editingMaterialNodesId, setEditingMaterialNodesId] = useState<string | null>(null);
   const [materialNodeSearch, setMaterialNodeSearch] = useState("");
   const [materialNodeSelection, setMaterialNodeSelection] = useState<string[]>([]);
@@ -277,6 +283,19 @@ export default function ProjectsPage() {
       }
     }
     return fallback;
+  };
+
+  const updateMaterialSuggestionDraft = (materialId: string, updates: Partial<MaterialSuggestionDraft>) => {
+    setMaterialSuggestionDrafts((prev) => {
+      const existing = prev[materialId] ?? { notes: "", transcript: "" };
+      return {
+        ...prev,
+        [materialId]: {
+          ...existing,
+          ...updates,
+        },
+      };
+    });
   };
 
   const [communityName, setCommunityName] = useState("");
@@ -1044,16 +1063,22 @@ export default function ProjectsPage() {
       textParts.push(notesText);
     }
 
+    if (materialCheckedTranscriptText?.trim()) {
+      textParts.push(materialCheckedTranscriptText.trim());
+    }
+
     if (sourceUrl && isValidYoutubeUrl(sourceUrl)) {
-      try {
-        const transcriptResult = await checkYoutubeTranscript(sourceUrl);
-        if (transcriptResult.transcript_text?.trim()) {
-          textParts.push(transcriptResult.transcript_text.trim());
-        }
-      } catch {
-        if (!notesText) {
-          setCreateMaterialSuggestionError("Transcript unavailable and notes are empty.");
-          return;
+      if (!materialCheckedTranscriptText?.trim()) {
+        try {
+          const transcriptResult = await checkYoutubeTranscript(sourceUrl);
+          if (transcriptResult.transcript_text?.trim()) {
+            textParts.push(transcriptResult.transcript_text.trim());
+          }
+        } catch {
+          if (!notesText) {
+            setCreateMaterialSuggestionError("Transcript unavailable and notes are empty.");
+            return;
+          }
         }
       }
     }
@@ -1132,6 +1157,9 @@ export default function ProjectsPage() {
       const transcript = result.transcript_text?.trim() ?? "";
       setEditMaterialTranscriptText(transcript);
       setEditMaterialCheckedTranscriptText(transcript);
+      if (editingMaterialId) {
+        updateMaterialSuggestionDraft(editingMaterialId, { transcript });
+      }
       setEditMaterialTranscriptStatus(
         `Transcript found for video ${result.video_id ?? "unknown"} (${result.chunk_count} chunks). Save to persist changes.`
       );
@@ -1159,6 +1187,10 @@ export default function ProjectsPage() {
       const persistedTranscript = fullMaterial.transcript_text?.trim() ?? "";
       setEditMaterialTranscriptText(persistedTranscript);
       setEditMaterialCheckedTranscriptText(null);
+      updateMaterialSuggestionDraft(material.id, {
+        notes: fullMaterial.chunks.join("\n\n"),
+        transcript: persistedTranscript,
+      });
       setEditMaterialTranscriptStatus(
         persistedTranscript
           ? `Transcript loaded from saved material (${fullMaterial.transcript_chunks?.length ?? 0} chunks).`
@@ -1230,14 +1262,28 @@ export default function ProjectsPage() {
     setSuggestionLoading(true);
     const priorSelection = new Set(materialNodeSelection);
     try {
-      const response = await suggestMaterialNodes(materialId, {
-        project_id: currentProjectId,
-        threshold: suggestionThreshold,
-        semantic_weight: semanticWeight,
-        keyword_weight: keywordWeight,
-        dedup_threshold: dedupThreshold,
-        top_k: suggestionTopK,
-      });
+      const draft = materialSuggestionDrafts[materialId];
+      const draftText = [draft?.notes?.trim() ?? "", draft?.transcript?.trim() ?? ""]
+        .filter(Boolean)
+        .join("\n\n");
+      const response = draftText
+        ? await suggestMaterialNodesByText({
+            project_id: currentProjectId,
+            text: draftText,
+            threshold: suggestionThreshold,
+            semantic_weight: semanticWeight,
+            keyword_weight: keywordWeight,
+            dedup_threshold: dedupThreshold,
+            top_k: suggestionTopK,
+          })
+        : await suggestMaterialNodes(materialId, {
+            project_id: currentProjectId,
+            threshold: suggestionThreshold,
+            semantic_weight: semanticWeight,
+            keyword_weight: keywordWeight,
+            dedup_threshold: dedupThreshold,
+            top_k: suggestionTopK,
+          });
       setMaterialSuggestions({ materialId, strong: response.strong, weak: response.weak });
       const newCandidates = response.weak
         .filter((item: SuggestionItem) => item.suggestion_type === "NEW" && item.suggested_title)
@@ -1317,6 +1363,11 @@ export default function ProjectsPage() {
         transcript_text: !editMaterialSourceUrl.trim()
           ? ""
           : editMaterialCheckedTranscriptText ?? undefined,
+      });
+      setMaterialSuggestionDrafts((prev) => {
+        const next = { ...prev };
+        delete next[materialId];
+        return next;
       });
       await refreshProjectData(currentProjectId);
       setEditingMaterialId(null);
@@ -2762,6 +2813,9 @@ export default function ProjectsPage() {
                               setEditMaterialSourceUrl(nextValue);
                               setEditMaterialCheckedTranscriptText(null);
                               setEditMaterialTranscriptText("");
+                              if (editingMaterialId) {
+                                updateMaterialSuggestionDraft(editingMaterialId, { transcript: "" });
+                              }
                               setEditMaterialTranscriptStatus(
                                 nextValue.trim()
                                   ? "URL changed. Use Check transcript, then Save to persist the new transcript."
@@ -2793,7 +2847,13 @@ export default function ProjectsPage() {
                             <div className="text-[11px] text-slate-400">Notes</div>
                             <textarea
                               value={editMaterialText}
-                              onChange={(event) => setEditMaterialText(event.target.value)}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                setEditMaterialText(nextValue);
+                                if (editingMaterialId) {
+                                  updateMaterialSuggestionDraft(editingMaterialId, { notes: nextValue });
+                                }
+                              }}
                               className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                             />
                           </div>
