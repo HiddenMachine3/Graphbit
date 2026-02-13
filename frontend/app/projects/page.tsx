@@ -69,6 +69,35 @@ type TranscriptSegment = {
   duration?: number;
 };
 
+const formatTimestamp = (seconds: number) => {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+};
+
+const formatTranscriptPreview = (segments: TranscriptSegment[] | null | undefined, fallbackText: string) => {
+  const validSegments = (segments ?? []).filter((segment) => segment.text?.trim());
+  if (validSegments.length === 0) {
+    return fallbackText;
+  }
+
+  return validSegments
+    .map((segment) => {
+      const text = segment.text.trim();
+      if (typeof segment.start === "number" && Number.isFinite(segment.start)) {
+        return `[${formatTimestamp(segment.start)}] ${text}`;
+      }
+      return text;
+    })
+    .join("\n");
+};
+
 function SectionCard({
   title,
   subtitle,
@@ -282,6 +311,14 @@ export default function ProjectsPage() {
     Boolean(materialSourceUrl.trim()) && !isValidYoutubeUrl(materialSourceUrl);
   const editMaterialLinkInvalid =
     Boolean(editMaterialSourceUrl.trim()) && !isValidYoutubeUrl(editMaterialSourceUrl);
+  const createTranscriptPreview = formatTranscriptPreview(
+    materialCheckedTranscriptSegments,
+    materialCheckedTranscriptText ?? ""
+  );
+  const editTranscriptPreview = formatTranscriptPreview(
+    editMaterialCheckedTranscriptSegments,
+    editMaterialTranscriptText
+  );
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error && typeof error === "object") {
@@ -2510,11 +2547,11 @@ export default function ProjectsPage() {
                 {materialTranscriptStatus ? (
                   <div className="text-xs text-slate-300">{materialTranscriptStatus}</div>
                 ) : null}
-                {Boolean(materialCheckedTranscriptText?.trim()) && (
+                {Boolean(createTranscriptPreview.trim()) && (
                   <div className="grid gap-1 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
                     <div className="text-[11px] text-slate-400">Fetched transcript preview</div>
                     <textarea
-                      value={materialCheckedTranscriptText ?? ""}
+                      value={createTranscriptPreview}
                       readOnly
                       className="min-h-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 focus:outline-none"
                     />
@@ -2886,14 +2923,14 @@ export default function ProjectsPage() {
                               className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
                             />
                           </div>
-                          {(editMaterialTranscriptChecking || editMaterialTranscriptText) && (
+                          {(editMaterialTranscriptChecking || Boolean(editTranscriptPreview.trim())) && (
                             <div className="grid gap-1">
                               <div className="text-[11px] text-slate-400">Transcript (YouTube)</div>
                               <textarea
                                 value={
                                   editMaterialTranscriptChecking
                                     ? "Loading transcript..."
-                                    : editMaterialTranscriptText
+                                    : editTranscriptPreview
                                 }
                                 readOnly
                                 className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 focus:outline-none"
