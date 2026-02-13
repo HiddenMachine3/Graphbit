@@ -63,6 +63,12 @@ type MaterialSuggestionDraft = {
   transcript: string;
 };
 
+type TranscriptSegment = {
+  text: string;
+  start?: number;
+  duration?: number;
+};
+
 function SectionCard({
   title,
   subtitle,
@@ -234,6 +240,7 @@ export default function ProjectsPage() {
   const [materialText, setMaterialText] = useState("");
   const [materialSourceUrl, setMaterialSourceUrl] = useState("");
   const [materialCheckedTranscriptText, setMaterialCheckedTranscriptText] = useState<string | null>(null);
+  const [materialCheckedTranscriptSegments, setMaterialCheckedTranscriptSegments] = useState<TranscriptSegment[]>([]);
   const [isCreateMaterialNodesOpen, setIsCreateMaterialNodesOpen] = useState(false);
   const [createMaterialNodeSearch, setCreateMaterialNodeSearch] = useState("");
   const [createMaterialNodeSelection, setCreateMaterialNodeSelection] = useState<string[]>([]);
@@ -247,6 +254,7 @@ export default function ProjectsPage() {
   const [editMaterialSourceUrl, setEditMaterialSourceUrl] = useState("");
   const [editMaterialTranscriptText, setEditMaterialTranscriptText] = useState("");
   const [editMaterialCheckedTranscriptText, setEditMaterialCheckedTranscriptText] = useState<string | null>(null);
+  const [editMaterialCheckedTranscriptSegments, setEditMaterialCheckedTranscriptSegments] = useState<TranscriptSegment[] | null>(null);
   const [editMaterialTranscriptStatus, setEditMaterialTranscriptStatus] = useState<string | null>(null);
   const [editMaterialTranscriptChecking, setEditMaterialTranscriptChecking] = useState(false);
   const [materialSuggestionDrafts, setMaterialSuggestionDrafts] = useState<Record<string, MaterialSuggestionDraft>>({});
@@ -964,7 +972,8 @@ export default function ProjectsPage() {
         materialText.trim(),
         currentUser?.username ?? undefined,
         materialSourceUrl.trim() || undefined,
-        materialCheckedTranscriptText ?? undefined
+        materialCheckedTranscriptText ?? undefined,
+        materialCheckedTranscriptSegments
       );
       if (createMaterialNodeSelection.length > 0 || createMaterialNewNodeSelection.length > 0) {
         const newNodes = createMaterialNewNodeSelection.map((title) => ({ title }));
@@ -975,6 +984,7 @@ export default function ProjectsPage() {
       setMaterialText("");
       setMaterialSourceUrl("");
       setMaterialCheckedTranscriptText(null);
+      setMaterialCheckedTranscriptSegments([]);
       setMaterialTranscriptStatus(null);
       setCreateMaterialNodeSelection([]);
       setCreateMaterialNewNodeSelection([]);
@@ -1015,11 +1025,13 @@ export default function ProjectsPage() {
     try {
       const result = await checkYoutubeTranscript(materialSourceUrl.trim());
       setMaterialCheckedTranscriptText(result.transcript_text?.trim() || "");
+      setMaterialCheckedTranscriptSegments(result.segments ?? []);
       setMaterialTranscriptStatus(
         `Transcript found for video ${result.video_id ?? "unknown"} (${result.chunk_count} chunks). It will be saved when you click Create material.`
       );
     } catch (error) {
       setMaterialCheckedTranscriptText(null);
+      setMaterialCheckedTranscriptSegments([]);
       setMaterialTranscriptStatus(getErrorMessage(error, "No transcript found for this video."));
     } finally {
       setMaterialTranscriptChecking(false);
@@ -1157,6 +1169,7 @@ export default function ProjectsPage() {
       const transcript = result.transcript_text?.trim() ?? "";
       setEditMaterialTranscriptText(transcript);
       setEditMaterialCheckedTranscriptText(transcript);
+      setEditMaterialCheckedTranscriptSegments(result.segments ?? []);
       if (editingMaterialId) {
         updateMaterialSuggestionDraft(editingMaterialId, { transcript });
       }
@@ -1165,6 +1178,7 @@ export default function ProjectsPage() {
       );
     } catch (error) {
       setEditMaterialCheckedTranscriptText(null);
+      setEditMaterialCheckedTranscriptSegments(null);
       setEditMaterialTranscriptText("");
       setEditMaterialTranscriptStatus(
         getErrorMessage(error, "No transcript found for this video.")
@@ -1187,6 +1201,7 @@ export default function ProjectsPage() {
       const persistedTranscript = fullMaterial.transcript_text?.trim() ?? "";
       setEditMaterialTranscriptText(persistedTranscript);
       setEditMaterialCheckedTranscriptText(null);
+      setEditMaterialCheckedTranscriptSegments(fullMaterial.transcript_segments ?? null);
       updateMaterialSuggestionDraft(material.id, {
         notes: fullMaterial.chunks.join("\n\n"),
         transcript: persistedTranscript,
@@ -1210,6 +1225,7 @@ export default function ProjectsPage() {
     setEditMaterialSourceUrl("");
     setEditMaterialTranscriptText("");
     setEditMaterialCheckedTranscriptText(null);
+    setEditMaterialCheckedTranscriptSegments(null);
     setEditMaterialTranscriptStatus(null);
     setEditMaterialTranscriptChecking(false);
   };
@@ -1363,6 +1379,9 @@ export default function ProjectsPage() {
         transcript_text: !editMaterialSourceUrl.trim()
           ? ""
           : editMaterialCheckedTranscriptText ?? undefined,
+        transcript_segments: !editMaterialSourceUrl.trim()
+          ? []
+          : editMaterialCheckedTranscriptSegments ?? undefined,
       });
       setMaterialSuggestionDrafts((prev) => {
         const next = { ...prev };
@@ -2470,6 +2489,7 @@ export default function ProjectsPage() {
                   onChange={(event) => {
                     setMaterialSourceUrl(event.target.value);
                     setMaterialCheckedTranscriptText(null);
+                    setMaterialCheckedTranscriptSegments([]);
                     setMaterialTranscriptStatus(null);
                   }}
                   placeholder="YouTube link (optional if text provided)"
@@ -2812,6 +2832,7 @@ export default function ProjectsPage() {
                               const nextValue = event.target.value;
                               setEditMaterialSourceUrl(nextValue);
                               setEditMaterialCheckedTranscriptText(null);
+                              setEditMaterialCheckedTranscriptSegments(null);
                               setEditMaterialTranscriptText("");
                               if (editingMaterialId) {
                                 updateMaterialSuggestionDraft(editingMaterialId, { transcript: "" });

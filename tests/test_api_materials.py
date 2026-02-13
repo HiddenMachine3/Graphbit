@@ -75,6 +75,10 @@ def test_material_persists_checked_transcript_and_allows_empty_notes(api_client)
             "content_text": "",
             "source_url": "https://www.youtube.com/watch?v=EKOU3JWDNLI",
             "transcript_text": "Transcript line 1\n\nTranscript line 2",
+            "transcript_segments": [
+                {"text": "Transcript line 1", "start": 1.5, "duration": 2.0},
+                {"text": "Transcript line 2", "start": 4.0, "duration": 1.5},
+            ],
         },
     )
     assert create_resp.status_code == 200
@@ -88,6 +92,8 @@ def test_material_persists_checked_transcript_and_allows_empty_notes(api_client)
     material = get_resp.json()
     assert material["chunks"] == []
     assert material["transcript_chunks"] == ["Transcript line 1", "Transcript line 2"]
+    assert len(material["transcript_segments"]) == 2
+    assert material["transcript_segments"][0]["start"] == 1.5
 
 
 def test_material_update_clears_transcript_when_url_removed(api_client):
@@ -224,8 +230,8 @@ def test_check_youtube_transcript_endpoint(api_client, monkeypatch):
         video_id = args[-1] if args else kwargs.get("video_id")
         assert video_id == "EKOU3JWDNLI"
         return [
-            {"text": "Line 1"},
-            {"text": "Line 2"},
+            {"text": "Line 1", "start": 0.0, "duration": 1.2},
+            {"text": "Line 2", "start": 1.2, "duration": 1.1},
         ]
 
     monkeypatch.setattr(YouTubeTranscriptApi, "fetch", lambda self, video_id, languages=None: fake_get_transcript(video_id), raising=False)
@@ -243,6 +249,8 @@ def test_check_youtube_transcript_endpoint(api_client, monkeypatch):
     assert payload["video_id"] == "EKOU3JWDNLI"
     assert payload["chunk_count"] == 2
     assert payload["chunks"] == ["Line 1", "Line 2"]
+    assert len(payload["segments"]) == 2
+    assert payload["segments"][1]["start"] == 1.2
 
 
 def test_material_create_imports_when_youtube_url_pasted_as_text(api_client, monkeypatch):

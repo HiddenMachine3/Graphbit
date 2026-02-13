@@ -24,8 +24,9 @@ from app.services.node_suggestions.node_suggestion_service import NodeSuggestion
 from app.services.node_suggestions.postgres_repository import PostgresNodeSuggestionRepository
 from app.services.video_transcripts import (
     extract_youtube_video_id,
-    fetch_youtube_transcript,
+    fetch_youtube_transcript_segments,
     looks_like_single_url,
+    transcript_to_text,
 )
 
 router = APIRouter()
@@ -48,6 +49,31 @@ def _optional_chunks(content_text: str | None) -> list[str]:
     return _material_chunks(content_text)
 
 
+def _normalize_transcript_segments(segments: list[dict] | list[object] | None) -> list[dict]:
+    normalized: list[dict] = []
+    for segment in segments or []:
+        if isinstance(segment, dict):
+            raw_text = segment.get("text")
+            raw_start = segment.get("start")
+            raw_duration = segment.get("duration")
+        else:
+            raw_text = getattr(segment, "text", None)
+            raw_start = getattr(segment, "start", None)
+            raw_duration = getattr(segment, "duration", None)
+
+        text_value = (raw_text or "").strip()
+        if not text_value:
+            continue
+
+        item = {"text": text_value}
+        if raw_start is not None:
+            item["start"] = float(raw_start)
+        if raw_duration is not None:
+            item["duration"] = float(raw_duration)
+        normalized.append(item)
+    return normalized
+
+
 async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
     result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
     return result.scalar_one_or_none()
@@ -55,6 +81,7 @@ async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
 
 def _serialize_material(material: MaterialModel) -> dict:
     transcript_chunks = _optional_chunks(getattr(material, "transcript_text", None))
+    transcript_segments = getattr(material, "transcript_segments", None) or []
     return {
         "id": material.id,
         "project_id": material.project_id,
@@ -63,6 +90,7 @@ def _serialize_material(material: MaterialModel) -> dict:
         "source_url": material.source_url,
         "chunk_count": len(_material_chunks(material.content_text)),
         "transcript_chunk_count": len(transcript_chunks),
+        "transcript_segment_count": len(transcript_segments),
         "has_transcript": bool(transcript_chunks),
     }
 
@@ -71,14 +99,16 @@ def _normalize_title(value: str) -> str:
     return " ".join(value.lower().strip().split())
 
 
-async def _fetch_youtube_transcript(link: str) -> tuple[str, str]:
+async def _fetch_youtube_transcript(link: str) -> tuple[str, str, list[dict]]:
     video_id = extract_youtube_video_id(link)
     if not video_id:
         logger.warning("YouTube transcript fetch failed: invalid_link=%s", link)
         raise HTTPException(status_code=400, detail="Invalid YouTube link")
 
     try:
-        content_text, strategy_used = await asyncio.to_thread(fetch_youtube_transcript, link)
+        segments, strategy_used = await asyncio.to_thread(fetch_youtube_transcript_segments, link)
+        normalized_segments = _normalize_transcript_segments(segments)
+        content_text = transcript_to_text(normalized_segments)
     except Exception as exc:
         detail = str(exc)
         if "ParseError" in detail:
@@ -112,7 +142,7 @@ async def _fetch_youtube_transcript(link: str) -> tuple[str, str]:
         len(_material_chunks(content_text)),
         len(content_text),
     )
-    return content_text, strategy_used
+    return content_text, strategy_used, normalized_segments
 
 
 @router.post("/materials/youtube/transcript-check")
@@ -122,7 +152,7 @@ async def check_youtube_transcript(data: dict):
     if not link:
         raise HTTPException(status_code=400, detail="link is required")
 
-    content_text, strategy_used = await _fetch_youtube_transcript(link)
+    content_text, strategy_used, segments = await _fetch_youtube_transcript(link)
     video_id = extract_youtube_video_id(link)
     chunks = _material_chunks(content_text)
     return {
@@ -133,6 +163,7 @@ async def check_youtube_transcript(data: dict):
         "transcript_text": content_text,
         "chunk_count": len(chunks),
         "chunks": chunks,
+        "segments": segments,
     }
 
 
@@ -179,6 +210,7 @@ async def get_material(material_id: str, db: AsyncSession = Depends(get_db)):
         "chunks": _material_chunks(material.content_text),
         "transcript_text": material.transcript_text or "",
         "transcript_chunks": _optional_chunks(material.transcript_text),
+        "transcript_segments": material.transcript_segments or [],
     }
 
 
@@ -190,6 +222,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
     source_url = (data.get("source_url") or data.get("link") or "").strip()
     content_text = (data.get("content_text") or "").strip()
     transcript_text = (data.get("transcript_text") or "").strip()
+    transcript_segments = _normalize_transcript_segments(data.get("transcript_segments") or [])
     if not project_id or not title:
         raise HTTPException(status_code=400, detail="project_id and title are required")
 
@@ -221,7 +254,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         imported_video_id = extract_youtube_video_id(source_url)
 
     if not content_text and source_url and not transcript_text:
-        transcript_text, fetch_strategy = await _fetch_youtube_transcript(source_url)
+        transcript_text, fetch_strategy, transcript_segments = await _fetch_youtube_transcript(source_url)
         content_text = transcript_text
         imported_from_youtube = True
         imported_video_id = extract_youtube_video_id(source_url)
@@ -250,6 +283,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         source_url=source_url,
         content_text=content_text,
         transcript_text=transcript_text or None,
+        transcript_segments=transcript_segments or None,
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
@@ -297,9 +331,14 @@ async def update_material(material_id: str, data: dict, db: AsyncSession = Depen
 
     if incoming_source_url is not None and not incoming_source_url:
         material.transcript_text = None
+        material.transcript_segments = None
     elif "transcript_text" in data:
         transcript_text = (data.get("transcript_text") or "").strip()
         material.transcript_text = transcript_text or None
+
+    if "transcript_segments" in data:
+        transcript_segments = _normalize_transcript_segments(data.get("transcript_segments") or [])
+        material.transcript_segments = transcript_segments or None
 
     material.updated_at = datetime.now()
 
