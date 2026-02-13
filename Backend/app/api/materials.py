@@ -577,10 +577,16 @@ async def suggest_nodes_for_material(
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
 
+    combined_parts = [
+        (material.content_text or "").strip(),
+        (material.transcript_text or "").strip(),
+    ]
+    combined_text = "\n\n".join([part for part in combined_parts if part])
+
     return await suggest_nodes_for_material_text(
         data={
             "project_id": project_id,
-            "text": material.content_text or "",
+            "text": combined_text,
             "threshold": float(data.get("threshold", settings.SUGGESTION_THRESHOLD)),
             "semantic_weight": float(data.get("semantic_weight", settings.SUGGESTION_SEMANTIC_WEIGHT)),
             "keyword_weight": float(data.get("keyword_weight", settings.SUGGESTION_KEYWORD_WEIGHT)),
