@@ -329,22 +329,28 @@ async def suggest_nodes_for_question_text(data: dict, db: AsyncSession = Depends
 
     from huggingface_hub import InferenceClient
 
-    client = InferenceClient(provider="hf-inference", api_key=hf_token)
+    hf_base_url = os.environ.get(
+        "HF_INFERENCE_BASE_URL",
+        "https://router.huggingface.co/hf-inference",
+    )
+    client = InferenceClient(token=hf_token, base_url=hf_base_url)
     embedding_service = EmbeddingService(client, expected_dim=768)
     keyword_service = KeywordExtractionService(client)
     repository = PostgresNodeSuggestionRepository(db)
     service = NodeSuggestionService(repository, embedding_service, keyword_service)
 
-    result = await service.suggest_nodes_for_text(
-        project_id=project_id,
-        text=text_value,
-        threshold=threshold,
-        semantic_weight=semantic_weight,
-        keyword_weight=keyword_weight,
-        top_k=top_k,
-        dedup_threshold=dedup_threshold,
-        material_id=None,
-    )
+    try:
+        result = await service.suggest_nodes_for_text(
+            project_id=project_id,
+            text=text_value,
+            threshold=threshold,
+            semantic_weight=semantic_weight,
+            keyword_weight=keyword_weight,
+            top_k=top_k,
+            dedup_threshold=dedup_threshold,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Node suggestion failed: {exc}") from exc
 
     return {
         "strong": [item.__dict__ for item in result.strong],

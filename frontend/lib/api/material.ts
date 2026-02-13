@@ -101,6 +101,21 @@ export async function suggestMaterialNodes(
   });
 }
 
+export async function suggestMaterialNodesByText(payload: {
+  project_id: string;
+  text: string;
+  threshold: number;
+  semantic_weight: number;
+  keyword_weight: number;
+  dedup_threshold: number;
+  top_k: number;
+}): Promise<{ strong: any[]; weak: any[] }> {
+  return apiFetch(`/materials/suggestions/raw-text`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function attachMaterialNodes(
   materialId: string,
   nodeIds: string[]
