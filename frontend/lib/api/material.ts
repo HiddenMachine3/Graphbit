@@ -19,7 +19,8 @@ export async function createMaterial(
   contentText: string,
   createdBy?: string,
   sourceUrl?: string,
-  transcriptText?: string
+  transcriptText?: string,
+  transcriptSegments?: Array<{ text: string; start?: number; duration?: number }>
 ): Promise<MaterialDTO & { imported_from_youtube?: boolean; youtube_video_id?: string | null; transcript_chunk_count?: number }> {
   return apiFetch<MaterialDTO & { imported_from_youtube?: boolean; youtube_video_id?: string | null; transcript_chunk_count?: number }>("/materials", {
     method: "POST",
@@ -28,6 +29,7 @@ export async function createMaterial(
       title,
       content_text: contentText,
       transcript_text: transcriptText,
+      transcript_segments: transcriptSegments,
       source_url: sourceUrl,
       link: sourceUrl,
       created_by: createdBy,
@@ -44,6 +46,7 @@ export async function checkYoutubeTranscript(
   transcript_text: string;
   chunk_count: number;
   chunks: string[];
+  segments: Array<{ text: string; start?: number; duration?: number }>;
 }> {
   return apiFetch<{
     link: string;
@@ -52,6 +55,7 @@ export async function checkYoutubeTranscript(
     transcript_text: string;
     chunk_count: number;
     chunks: string[];
+    segments: Array<{ text: string; start?: number; duration?: number }>;
   }>("/materials/youtube/transcript-check", {
     method: "POST",
     body: JSON.stringify({ link }),
@@ -64,7 +68,13 @@ export async function deleteMaterial(materialId: string): Promise<void> {
 
 export async function updateMaterial(
   materialId: string,
-  updates: { title?: string; content_text?: string; source_url?: string; transcript_text?: string }
+  updates: {
+    title?: string;
+    content_text?: string;
+    source_url?: string;
+    transcript_text?: string;
+    transcript_segments?: Array<{ text: string; start?: number; duration?: number }>;
+  }
 ): Promise<MaterialDTO> {
   return apiFetch<MaterialDTO>(`/materials/${materialId}`, {
     method: "PATCH",
@@ -148,6 +158,7 @@ export async function fetchMaterial(materialId: string): Promise<{
   chunks: string[];
   transcript_text?: string;
   transcript_chunks?: string[];
+  transcript_segments?: Array<{ text: string; start?: number; duration?: number }>;
 }> {
   return apiFetch<{
     id: string;
@@ -156,6 +167,7 @@ export async function fetchMaterial(materialId: string): Promise<{
     chunks: string[];
     transcript_text?: string;
     transcript_chunks?: string[];
+    transcript_segments?: Array<{ text: string; start?: number; duration?: number }>;
   }>(
     `/materials/${materialId}`
   );

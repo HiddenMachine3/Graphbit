@@ -37,6 +37,9 @@ async def lifespan(app: FastAPI):
             await conn.execute(
                 text("ALTER TABLE IF EXISTS materials ADD COLUMN IF NOT EXISTS transcript_text TEXT")
             )
+            await conn.execute(
+                text("ALTER TABLE IF EXISTS materials ADD COLUMN IF NOT EXISTS transcript_segments JSONB")
+            )
     print("✓ Database tables created/verified")
     
     yield
