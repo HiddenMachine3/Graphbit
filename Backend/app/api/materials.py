@@ -110,23 +110,21 @@ async def _fetch_youtube_transcript(link: str) -> tuple[str, str, list[dict]]:
         normalized_segments = _normalize_transcript_segments(segments)
         content_text = transcript_to_text(normalized_segments)
     except Exception as exc:
-        detail = str(exc)
-        if "ParseError" in detail:
-            detail = (
-                "Unable to fetch transcript from YouTube link "
-                "(youtube_transcript_api ParseError; this often means the installed library is outdated "
-                "or YouTube response format changed). "
-                f"{detail}"
+        raw_detail = str(exc)
+        log_detail = raw_detail
+        if "ParseError" in raw_detail:
+            log_detail = (
+                "youtube_transcript_api ParseError; this often means the installed library is outdated "
+                "or YouTube response format changed. "
+                f"{raw_detail}"
             )
-        else:
-            detail = f"Unable to fetch transcript from YouTube link. {detail}"
         logger.exception(
             "YouTube transcript fetch failed in service: video_id=%s link=%s error=%s",
             video_id,
             link,
-            detail,
+            log_detail,
         )
-        raise HTTPException(status_code=400, detail=detail) from exc
+        raise HTTPException(status_code=400, detail="Unable to fetch transcript.") from exc
 
     if not content_text.strip():
         logger.warning(

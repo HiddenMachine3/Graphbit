@@ -1012,11 +1012,11 @@ export default function ProjectsPage() {
 
   const handleCheckMaterialTranscript = async () => {
     if (!materialSourceUrl.trim()) {
-      setMaterialTranscriptStatus("Paste a YouTube link first.");
+      setMaterialTranscriptStatus("Unable to fetch transcript.");
       return;
     }
     if (!isValidYoutubeUrl(materialSourceUrl)) {
-      setMaterialTranscriptStatus("Invalid YouTube URL format.");
+      setMaterialTranscriptStatus("Unable to fetch transcript.");
       return;
     }
 
@@ -1032,7 +1032,7 @@ export default function ProjectsPage() {
     } catch (error) {
       setMaterialCheckedTranscriptText(null);
       setMaterialCheckedTranscriptSegments([]);
-      setMaterialTranscriptStatus(getErrorMessage(error, "No transcript found for this video."));
+      setMaterialTranscriptStatus("Unable to fetch transcript.");
     } finally {
       setMaterialTranscriptChecking(false);
     }
@@ -1180,9 +1180,7 @@ export default function ProjectsPage() {
       setEditMaterialCheckedTranscriptText(null);
       setEditMaterialCheckedTranscriptSegments(null);
       setEditMaterialTranscriptText("");
-      setEditMaterialTranscriptStatus(
-        getErrorMessage(error, "No transcript found for this video.")
-      );
+      setEditMaterialTranscriptStatus("Unable to fetch transcript.");
     } finally {
       setEditMaterialTranscriptChecking(false);
     }
@@ -2477,46 +2475,56 @@ export default function ProjectsPage() {
           )}
           {currentProjectId && (
             <div className="grid gap-4">
-              <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div className="grid min-w-0 gap-3 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <input
                   value={materialTitle}
                   onChange={(event) => setMaterialTitle(event.target.value)}
                   placeholder="Material title"
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
                 />
-                <input
-                  value={materialSourceUrl}
-                  onChange={(event) => {
-                    setMaterialSourceUrl(event.target.value);
-                    setMaterialCheckedTranscriptText(null);
-                    setMaterialCheckedTranscriptSegments([]);
-                    setMaterialTranscriptStatus(null);
-                  }}
-                  placeholder="YouTube link (optional if text provided)"
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-                />
+                <div className="flex w-full min-w-0 items-center gap-2">
+                  <input
+                    value={materialSourceUrl}
+                    onChange={(event) => {
+                      setMaterialSourceUrl(event.target.value);
+                      setMaterialCheckedTranscriptText(null);
+                      setMaterialCheckedTranscriptSegments([]);
+                      setMaterialTranscriptStatus(null);
+                    }}
+                    placeholder="YouTube link (optional if text provided)"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleCheckMaterialTranscript}
+                    disabled={busy || materialTranscriptChecking || !materialSourceUrl.trim() || createMaterialLinkInvalid}
+                    className="whitespace-nowrap rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {materialTranscriptChecking ? "Fetching..." : "Fetch transcript"}
+                  </button>
+                </div>
                 <div className={`text-xs ${createMaterialLinkInvalid ? "text-red-300" : "text-slate-500"}`}>
                   {createMaterialLinkInvalid
                     ? "Invalid YouTube URL format"
                     : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleCheckMaterialTranscript}
-                    disabled={busy || materialTranscriptChecking || !materialSourceUrl.trim() || createMaterialLinkInvalid}
-                    className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {materialTranscriptChecking ? "Checking..." : "Check transcript"}
-                  </button>
-                  {materialTranscriptStatus ? (
-                    <div className="text-xs text-slate-300">{materialTranscriptStatus}</div>
-                  ) : null}
-                </div>
+                {materialTranscriptStatus ? (
+                  <div className="text-xs text-slate-300">{materialTranscriptStatus}</div>
+                ) : null}
+                {Boolean(materialCheckedTranscriptText?.trim()) && (
+                  <div className="grid gap-1 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                    <div className="text-[11px] text-slate-400">Fetched transcript preview</div>
+                    <textarea
+                      value={materialCheckedTranscriptText ?? ""}
+                      readOnly
+                      className="min-h-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 focus:outline-none"
+                    />
+                  </div>
+                )}
                 <textarea
                   value={materialText}
                   onChange={(event) => setMaterialText(event.target.value)}
                   placeholder="Paste notes or study material (optional if YouTube link provided)"
-                  className="min-h-[100px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full min-h-[100px] min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -3343,6 +3351,7 @@ export default function ProjectsPage() {
           </div>
         </SectionCard>
       </div>
+
     </div>
   );
 }
