@@ -60,6 +60,7 @@ async def search_knowledge(
                   AND (
                     title ILIKE :pattern
                     OR content_text ILIKE :pattern
+                                        OR COALESCE(transcript_text, '') ILIKE :pattern
                     OR similarity(title, :q) > 0.2
                   )
                 ORDER BY score DESC
@@ -98,6 +99,7 @@ async def search_knowledge(
                 or_(
                     MaterialModel.title.ilike(pattern),
                     MaterialModel.content_text.ilike(pattern),
+                    MaterialModel.transcript_text.ilike(pattern),
                 ),
             )
             .limit(limit)

@@ -173,6 +173,7 @@ class Material(Base):
     title = Column(String, nullable=False)
     source_url = Column(Text, nullable=True)
     content_text = Column(Text, nullable=False)
+    transcript_text = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     embedding = Column(VectorType(768), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

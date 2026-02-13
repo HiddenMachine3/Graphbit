@@ -42,12 +42,19 @@ def _material_chunks(content_text: str) -> list[str]:
     return [chunk.strip() for chunk in content_text.split("\n") if chunk.strip()]
 
 
+def _optional_chunks(content_text: str | None) -> list[str]:
+    if not content_text:
+        return []
+    return _material_chunks(content_text)
+
+
 async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
     result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
     return result.scalar_one_or_none()
 
 
 def _serialize_material(material: MaterialModel) -> dict:
+    transcript_chunks = _optional_chunks(getattr(material, "transcript_text", None))
     return {
         "id": material.id,
         "project_id": material.project_id,
@@ -55,6 +62,8 @@ def _serialize_material(material: MaterialModel) -> dict:
         "title": material.title,
         "source_url": material.source_url,
         "chunk_count": len(_material_chunks(material.content_text)),
+        "transcript_chunk_count": len(transcript_chunks),
+        "has_transcript": bool(transcript_chunks),
     }
 
 
@@ -168,6 +177,8 @@ async def get_material(material_id: str, db: AsyncSession = Depends(get_db)):
         "title": material.title,
         "source_url": material.source_url,
         "chunks": _material_chunks(material.content_text),
+        "transcript_text": material.transcript_text or "",
+        "transcript_chunks": _optional_chunks(material.transcript_text),
     }
 
 
@@ -178,6 +189,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
     title = data.get("title")
     source_url = (data.get("source_url") or data.get("link") or "").strip()
     content_text = (data.get("content_text") or "").strip()
+    transcript_text = (data.get("transcript_text") or "").strip()
     if not project_id or not title:
         raise HTTPException(status_code=400, detail="project_id and title are required")
 
@@ -204,8 +216,13 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         bool(content_text),
     )
 
-    if not content_text and source_url:
-        content_text, fetch_strategy = await _fetch_youtube_transcript(source_url)
+    if source_url and transcript_text:
+        imported_from_youtube = True
+        imported_video_id = extract_youtube_video_id(source_url)
+
+    if not content_text and source_url and not transcript_text:
+        transcript_text, fetch_strategy = await _fetch_youtube_transcript(source_url)
+        content_text = transcript_text
         imported_from_youtube = True
         imported_video_id = extract_youtube_video_id(source_url)
         logger.info(
@@ -214,7 +231,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
             fetch_strategy,
         )
 
-    if not content_text:
+    if not content_text and not transcript_text:
         raise HTTPException(status_code=400, detail="content_text is required unless a valid YouTube link is provided")
 
     material_id = data.get("id") or f"material-{int(datetime.now().timestamp())}"
@@ -232,6 +249,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         title=title,
         source_url=source_url,
         content_text=content_text,
+        transcript_text=transcript_text or None,
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
@@ -244,7 +262,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         {
             "imported_from_youtube": imported_from_youtube,
             "youtube_video_id": imported_video_id,
-            "transcript_chunk_count": len(_material_chunks(content_text)) if imported_from_youtube else 0,
+            "transcript_chunk_count": len(_optional_chunks(transcript_text)) if imported_from_youtube else 0,
         }
     )
     logger.info(
@@ -266,12 +284,23 @@ async def update_material(material_id: str, data: dict, db: AsyncSession = Depen
     if not material:
         raise HTTPException(status_code=404, detail="Material not found")
 
+    incoming_source_url = None
+    if "source_url" in data or "link" in data:
+        incoming_source_url = (data.get("source_url") or data.get("link") or "").strip()
+
     if "title" in data:
         material.title = data["title"]
-    if "source_url" in data or "link" in data:
-        material.source_url = data.get("source_url") or data.get("link")
+    if incoming_source_url is not None:
+        material.source_url = incoming_source_url or None
     if "content_text" in data:
-        material.content_text = data["content_text"]
+        material.content_text = data.get("content_text") or ""
+
+    if incoming_source_url is not None and not incoming_source_url:
+        material.transcript_text = None
+    elif "transcript_text" in data:
+        transcript_text = (data.get("transcript_text") or "").strip()
+        material.transcript_text = transcript_text or None
+
     material.updated_at = datetime.now()
 
     await db.commit()

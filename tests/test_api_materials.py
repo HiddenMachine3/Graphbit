@@ -54,6 +54,86 @@ def test_material_crud(api_client):
     assert missing_resp.status_code == 404
 
 
+def test_material_persists_checked_transcript_and_allows_empty_notes(api_client):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-m-transcript-persist",
+            "name": "Material Transcript Persist",
+            "description": "Project for persisted transcript behavior",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-transcript-persist-1",
+            "project_id": "proj-m-transcript-persist",
+            "title": "Transcript + Empty Notes",
+            "content_text": "",
+            "source_url": "https://www.youtube.com/watch?v=EKOU3JWDNLI",
+            "transcript_text": "Transcript line 1\n\nTranscript line 2",
+        },
+    )
+    assert create_resp.status_code == 200
+    created = create_resp.json()
+    assert created["chunk_count"] == 0
+    assert created["transcript_chunk_count"] == 2
+    assert created["has_transcript"] is True
+
+    get_resp = api_client.get("/api/v1/materials/mat-transcript-persist-1")
+    assert get_resp.status_code == 200
+    material = get_resp.json()
+    assert material["chunks"] == []
+    assert material["transcript_chunks"] == ["Transcript line 1", "Transcript line 2"]
+
+
+def test_material_update_clears_transcript_when_url_removed(api_client):
+    project_resp = api_client.post(
+        "/api/v1/projects",
+        json={
+            "id": "proj-m-transcript-clear",
+            "name": "Material Transcript Clear",
+            "description": "Project for transcript clear behavior",
+            "visibility": "private",
+        },
+    )
+    assert project_resp.status_code == 200
+
+    create_resp = api_client.post(
+        "/api/v1/materials",
+        json={
+            "id": "mat-transcript-clear-1",
+            "project_id": "proj-m-transcript-clear",
+            "title": "Transcript Clear",
+            "content_text": "Some notes",
+            "source_url": "https://www.youtube.com/watch?v=EKOU3JWDNLI",
+            "transcript_text": "Transcript to clear",
+        },
+    )
+    assert create_resp.status_code == 200
+
+    update_resp = api_client.patch(
+        "/api/v1/materials/mat-transcript-clear-1",
+        json={
+            "source_url": "",
+            "content_text": "",
+        },
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["chunk_count"] == 0
+    assert update_resp.json()["transcript_chunk_count"] == 0
+    assert update_resp.json()["has_transcript"] is False
+
+    get_resp = api_client.get("/api/v1/materials/mat-transcript-clear-1")
+    assert get_resp.status_code == 200
+    material = get_resp.json()
+    assert material["chunks"] == []
+    assert material["transcript_chunks"] == []
+
+
 def test_material_create_from_youtube_link(api_client, monkeypatch):
     project_resp = api_client.post(
         "/api/v1/projects",
