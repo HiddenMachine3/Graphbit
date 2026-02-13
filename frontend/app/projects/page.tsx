@@ -31,6 +31,7 @@ import {
   updateMaterial,
   replaceMaterialNodes,
   suggestMaterialNodes,
+  suggestMaterialNodesByText,
 } from "@/lib/api/material";
 import {
   listCommunities,
@@ -126,6 +127,7 @@ const toEditableMcqOptions = (options?: string[] | null) => {
 
 const optionLabel = (index: number) => String.fromCharCode(65 + index);
 const DRAFT_QUESTION_ID = "__create__";
+const DRAFT_MATERIAL_ID = "__create_material__";
 
 const topNewSuggestionTitles = (weak: SuggestionItem[]) => {
   const newCandidates = weak
@@ -216,6 +218,10 @@ export default function ProjectsPage() {
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialText, setMaterialText] = useState("");
   const [materialSourceUrl, setMaterialSourceUrl] = useState("");
+  const [isCreateMaterialNodesOpen, setIsCreateMaterialNodesOpen] = useState(false);
+  const [createMaterialNodeSearch, setCreateMaterialNodeSearch] = useState("");
+  const [createMaterialNodeSelection, setCreateMaterialNodeSelection] = useState<string[]>([]);
+  const [createMaterialNewNodeSelection, setCreateMaterialNewNodeSelection] = useState<string[]>([]);
   const [materialFiles, setMaterialFiles] = useState<FileList | null>(null);
   const [materialTranscriptStatus, setMaterialTranscriptStatus] = useState<string | null>(null);
   const [materialTranscriptChecking, setMaterialTranscriptChecking] = useState(false);
@@ -234,6 +240,9 @@ export default function ProjectsPage() {
   const [suggestionTopK] = useState(20);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [createMaterialSuggestionLoading, setCreateMaterialSuggestionLoading] = useState(false);
+  const [createMaterialSuggestionError, setCreateMaterialSuggestionError] = useState<string | null>(null);
+  const createMaterialSuggestionRequestRef = useRef(0);
   const [materialSuggestions, setMaterialSuggestions] = useState<{
     materialId: string | null;
     strong: SuggestionItem[];
@@ -309,6 +318,34 @@ export default function ProjectsPage() {
       .map((item) => item.node_id as string)
   );
   const createQuestionNewSuggestions = createQuestionSuggestionData.weak.filter(
+    (item) => item.suggestion_type === "NEW"
+  );
+
+  const createMaterialSearchValue = createMaterialNodeSearch.trim().toLowerCase();
+  const createMaterialFilteredNodes = nodes.filter((node) => {
+    if (!createMaterialSearchValue) {
+      return true;
+    }
+    return (
+      node.topic_name.toLowerCase().includes(createMaterialSearchValue) ||
+      node.id.toLowerCase().includes(createMaterialSearchValue)
+    );
+  });
+  const createMaterialSuggestionData =
+    materialSuggestions.materialId === DRAFT_MATERIAL_ID
+      ? materialSuggestions
+      : { materialId: null, strong: [], weak: [] };
+  const createMaterialStrongIds = new Set(
+    createMaterialSuggestionData.strong
+      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+      .map((item) => item.node_id as string)
+  );
+  const createMaterialWeakIds = new Set(
+    createMaterialSuggestionData.weak
+      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+      .map((item) => item.node_id as string)
+  );
+  const createMaterialNewSuggestions = createMaterialSuggestionData.weak.filter(
     (item) => item.suggestion_type === "NEW"
   );
 
@@ -894,11 +931,21 @@ export default function ProjectsPage() {
         currentUser?.username ?? undefined,
         materialSourceUrl.trim() || undefined
       );
+      if (createMaterialNodeSelection.length > 0 || createMaterialNewNodeSelection.length > 0) {
+        const newNodes = createMaterialNewNodeSelection.map((title) => ({ title }));
+        await replaceMaterialNodes(created.id, createMaterialNodeSelection, newNodes);
+      }
       await refreshProjectData(currentProjectId);
       setMaterialTitle("");
       setMaterialText("");
       setMaterialSourceUrl("");
       setMaterialTranscriptStatus(null);
+      setCreateMaterialNodeSelection([]);
+      setCreateMaterialNewNodeSelection([]);
+      setCreateMaterialNodeSearch("");
+      setCreateMaterialSuggestionError(null);
+      setMaterialSuggestions({ materialId: null, strong: [], weak: [] });
+      setIsCreateMaterialNodesOpen(false);
       if (created.imported_from_youtube) {
         setStatus({
           type: "success",
@@ -938,6 +985,109 @@ export default function ProjectsPage() {
       setMaterialTranscriptStatus(getErrorMessage(error, "No transcript found for this video."));
     } finally {
       setMaterialTranscriptChecking(false);
+    }
+  };
+
+  const handleAddNodeFromCreateMaterialSearch = async () => {
+    if (!currentProjectId) {
+      return;
+    }
+    const value = createMaterialNodeSearch.trim();
+    if (!value) {
+      return;
+    }
+    setBusy(true);
+    setCreateMaterialSuggestionError(null);
+    try {
+      const created = await createNode(currentProjectId, value, 0, 0.6);
+      setNodes((prev) => [created, ...prev]);
+      setCreateMaterialNodeSelection((prev) =>
+        prev.includes(created.id) ? prev : [...prev, created.id]
+      );
+      setCreateMaterialNodeSearch("");
+    } catch {
+      setCreateMaterialSuggestionError("Failed to add node");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSuggestDraftMaterialNodes = async () => {
+    if (!currentProjectId) {
+      return;
+    }
+
+    const notesText = materialText.trim();
+    const sourceUrl = materialSourceUrl.trim();
+    const textParts: string[] = [];
+
+    if (notesText) {
+      textParts.push(notesText);
+    }
+
+    if (sourceUrl && isValidYoutubeUrl(sourceUrl)) {
+      try {
+        const transcriptResult = await checkYoutubeTranscript(sourceUrl);
+        if (transcriptResult.transcript_text?.trim()) {
+          textParts.push(transcriptResult.transcript_text.trim());
+        }
+      } catch {
+        if (!notesText) {
+          setCreateMaterialSuggestionError("Transcript unavailable and notes are empty.");
+          return;
+        }
+      }
+    }
+
+    const text = textParts.join("\n\n").trim();
+    if (!text) {
+      setCreateMaterialSuggestionError("Enter notes and/or a valid YouTube link with transcript before suggesting nodes");
+      return;
+    }
+
+    const requestId = createMaterialSuggestionRequestRef.current + 1;
+    createMaterialSuggestionRequestRef.current = requestId;
+
+    setCreateMaterialSuggestionError(null);
+    setCreateMaterialSuggestionLoading(true);
+    setMaterialSuggestions({ materialId: DRAFT_MATERIAL_ID, strong: [], weak: [] });
+
+    try {
+      const response = await suggestMaterialNodesByText({
+        project_id: currentProjectId,
+        text,
+        threshold: suggestionThreshold,
+        semantic_weight: semanticWeight,
+        keyword_weight: keywordWeight,
+        dedup_threshold: dedupThreshold,
+        top_k: suggestionTopK,
+      });
+      if (requestId !== createMaterialSuggestionRequestRef.current) {
+        return;
+      }
+
+      setMaterialSuggestions({ materialId: DRAFT_MATERIAL_ID, strong: response.strong, weak: response.weak });
+
+      const existingSuggestions = [...response.strong, ...response.weak]
+        .filter((item: SuggestionItem) => item.suggestion_type === "EXISTING" && item.node_id)
+        .sort((a: SuggestionItem, b: SuggestionItem) => b.confidence - a.confidence);
+      const topCount = Math.ceil(existingSuggestions.length * 0.5);
+      const topNodeIds = existingSuggestions
+        .slice(0, topCount)
+        .map((item: SuggestionItem) => item.node_id as string);
+      setCreateMaterialNodeSelection(Array.from(new Set(topNodeIds)));
+      setCreateMaterialNewNodeSelection(topNewSuggestionTitles(response.weak));
+    } catch (error) {
+      if (requestId !== createMaterialSuggestionRequestRef.current) {
+        return;
+      }
+      setCreateMaterialSuggestionError(
+        getErrorMessage(error, "Failed to suggest nodes for new material")
+      );
+    } finally {
+      if (requestId === createMaterialSuggestionRequestRef.current) {
+        setCreateMaterialSuggestionLoading(false);
+      }
     }
   };
 
@@ -2183,6 +2333,221 @@ export default function ProjectsPage() {
                   placeholder="Paste notes or study material (optional if YouTube link provided)"
                   className="min-h-[100px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
                 />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMaterialNodesId(null);
+                      setCreateMaterialSuggestionError(null);
+                      setMaterialSuggestions({ materialId: null, strong: [], weak: [] });
+                      setIsCreateMaterialNodesOpen((prev) => !prev);
+                    }}
+                    disabled={busy}
+                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCreateMaterialNodesOpen ? "Hide node picker" : "Add nodes"}
+                  </button>
+                  <div className="text-xs text-slate-400">
+                    {createMaterialNodeSelection.length} node{createMaterialNodeSelection.length === 1 ? "" : "s"} selected
+                  </div>
+                </div>
+                {isCreateMaterialNodesOpen && (
+                  <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={handleSuggestDraftMaterialNodes}
+                        disabled={busy || createMaterialSuggestionLoading}
+                        className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {createMaterialSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                      </button>
+                      <div className="text-[11px] text-slate-400">
+                        Uses notes + optional valid YouTube transcript.
+                      </div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="grid gap-1 text-[11px] text-slate-400">
+                        Threshold: {suggestionThreshold.toFixed(2)}
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          value={suggestionThreshold}
+                          onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-[11px] text-slate-400">
+                        Semantic weight: {semanticWeight.toFixed(2)}
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={semanticWeight}
+                          onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-[11px] text-slate-400">
+                        Keyword weight: {keywordWeight.toFixed(2)}
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={keywordWeight}
+                          onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-[11px] text-slate-400">
+                        Dedup threshold: {dedupThreshold.toFixed(2)}
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.01}
+                          value={dedupThreshold}
+                          onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                        />
+                      </label>
+                    </div>
+                    {createMaterialSuggestionError && (
+                      <div className="text-xs text-red-300">{createMaterialSuggestionError}</div>
+                    )}
+                    {createMaterialSuggestionData.strong.length > 0 && (
+                      <div className="text-[11px] text-slate-400">
+                        Strong suggestions preselected: {createMaterialSuggestionData.strong.length}
+                      </div>
+                    )}
+                    {createMaterialNewSuggestions.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                        New candidates (click to add):
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const titles = createMaterialNewSuggestions
+                              .map((item) => item.suggested_title?.trim())
+                              .filter((title): title is string => Boolean(title));
+                            setCreateMaterialNewNodeSelection(Array.from(new Set(titles)));
+                          }}
+                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                        >
+                          Select all
+                        </button>
+                        {createMaterialNewSuggestions.map((item, index) => {
+                          const title = item.suggested_title?.trim();
+                          if (!title) {
+                            return null;
+                          }
+                          const isSelected = createMaterialNewNodeSelection.includes(title);
+                          return (
+                            <button
+                              key={`create-material-${title}-${index}`}
+                              type="button"
+                              onClick={() => {
+                                setCreateMaterialNewNodeSelection((prev) =>
+                                  prev.includes(title)
+                                    ? prev.filter((entry) => entry !== title)
+                                    : [...prev, title]
+                                );
+                              }}
+                              className={`rounded-full border px-2 py-0.5 transition ${
+                                isSelected
+                                  ? "border-amber-400 bg-amber-500/20 text-amber-100"
+                                  : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                              }`}
+                            >
+                              {title}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                      Selected nodes (click to toggle):
+                      {createMaterialNodeSelection.map((nodeId) => {
+                        const node = nodeLookup.get(nodeId);
+                        const label = node?.topic_name ?? nodeId;
+                        return (
+                          <button
+                            key={`create-material-selected-${nodeId}`}
+                            type="button"
+                            onClick={() => {
+                              setCreateMaterialNodeSelection((prev) => prev.filter((id) => id !== nodeId));
+                            }}
+                            className="rounded-full border border-rose-400 bg-rose-500/20 px-2 py-0.5 text-rose-100 transition"
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                      {createMaterialNodeSelection.length === 0 && (
+                        <span className="text-[11px] text-slate-500">None selected</span>
+                      )}
+                    </div>
+                    <input
+                      value={createMaterialNodeSearch}
+                      onChange={(event) => setCreateMaterialNodeSearch(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && event.shiftKey) {
+                          event.preventDefault();
+                          handleAddNodeFromCreateMaterialSearch();
+                        }
+                      }}
+                      placeholder="Search nodes"
+                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                    />
+                    {createMaterialNodeSearch.trim() &&
+                      !nodes.some(
+                        (node) => node.topic_name.toLowerCase() === createMaterialNodeSearch.trim().toLowerCase()
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={handleAddNodeFromCreateMaterialSearch}
+                          disabled={busy}
+                          className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <span>Add "{createMaterialNodeSearch.trim()}"</span>
+                          <span className="text-[10px] text-slate-400">Shift + Enter</span>
+                        </button>
+                      )}
+                    <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                      {createMaterialFilteredNodes.map((node) => {
+                        const isSelected = createMaterialNodeSelection.includes(node.id);
+                        const isStrongSuggested = createMaterialStrongIds.has(node.id);
+                        const isWeakSuggested = createMaterialWeakIds.has(node.id);
+                        return (
+                          <button
+                            key={`create-material-node-${node.id}`}
+                            type="button"
+                            onClick={() => {
+                              setCreateMaterialNodeSelection((prev) =>
+                                prev.includes(node.id)
+                                  ? prev.filter((id) => id !== node.id)
+                                  : [...prev, node.id]
+                              );
+                            }}
+                            className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                              isSelected
+                                ? "bg-rose-600/20 text-rose-100"
+                                : isStrongSuggested
+                                  ? "bg-rose-500/10 text-rose-100"
+                                  : isWeakSuggested
+                                    ? "bg-slate-800/60 text-slate-200"
+                                    : "text-slate-200 hover:bg-slate-800/60"
+                            }`}
+                          >
+                            <span className="font-medium">{node.topic_name}</span>
+                            <span className="text-[10px] text-slate-500">{node.id}</span>
+                          </button>
+                        );
+                      })}
+                      {createMaterialFilteredNodes.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-500">No matching nodes.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <button
                   onClick={handleCreateMaterial}
                   disabled={busy || createMaterialLinkInvalid}
