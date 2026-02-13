@@ -132,7 +132,7 @@ export default function GraphPage() {
           nodes={visibleNodes}
           edges={visibleEdges}
           projectId={currentProjectId}
-          selectedNodeId={clickModeActive ? undefined : selectedNodeId}
+          selectedNodeId={clickModeActive ? null : selectedNodeId}
           onSelectNode={handleNodeClick}
           highlightedNodeIds={clickModeActive ? selectedNodesForEdge : undefined}
           brightnessAttribute={brightnessAttribute}

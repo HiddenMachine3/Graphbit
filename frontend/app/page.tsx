@@ -53,6 +53,7 @@ export default function HomePage() {
         <KnowledgeGraphView
           nodes={graphData.nodes}
           edges={graphData.edges}
+          projectId={currentProjectId}
           selectedNodeId={selectedNodeId}
           onSelectNode={setSelectedNodeId}
         />

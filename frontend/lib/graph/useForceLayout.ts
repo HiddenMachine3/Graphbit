@@ -7,6 +7,7 @@ import {
   forceY,
   forceRadial,
   forceSimulation,
+  type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
 import type { Edge, Node } from "reactflow";
@@ -51,6 +52,18 @@ type Repulsor = {
   y: number;
 };
 
+type LayoutNode = SimulationNodeDatum & {
+  id: string;
+  data: Node["data"];
+  x: number;
+  y: number;
+};
+
+type LayoutLink = SimulationLinkDatum<LayoutNode> & {
+  source: string | LayoutNode;
+  target: string | LayoutNode;
+};
+
 export default function useForceLayout(
   nodes: Node[],
   edges: Edge[],
@@ -63,15 +76,19 @@ export default function useForceLayout(
       return undefined;
     }
 
-    const simulationNodes = nodes.map((node) => ({
+    const simulationNodes: LayoutNode[] = nodes.map((node) => ({
       ...node,
       x: node.position.x,
       y: node.position.y,
     }));
 
-    const linkForce = forceLink(simulationNodes)
-      .id((d: SimulationNodeDatum) => (d as Node).id)
-      .links(edges.map((edge) => ({ ...edge })))
+    const linkData: LayoutLink[] = edges.map((edge) => ({
+      source: edge.source,
+      target: edge.target,
+    }));
+
+    const linkForce = forceLink<LayoutNode, LayoutLink>(linkData)
+      .id((d) => d.id)
       .distance(120)
       .strength(0.8);
 
@@ -94,7 +111,7 @@ export default function useForceLayout(
     const seed = createSeed(nodes, edges);
 
     const materialRepulsion = () => {
-      let nodeList: (SimulationNodeDatum & Node)[] = [];
+      let nodeList: LayoutNode[] = [];
 
       const strength = 0.22;
       const maxDistance = 280;
@@ -120,7 +137,7 @@ export default function useForceLayout(
       }
 
       force.initialize = (nodesInput: SimulationNodeDatum[]) => {
-        nodeList = nodesInput as (SimulationNodeDatum & Node)[];
+        nodeList = nodesInput as LayoutNode[];
       };
 
       return force;

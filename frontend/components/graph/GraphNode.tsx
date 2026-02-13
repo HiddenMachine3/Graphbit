@@ -11,6 +11,19 @@ function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
 
+function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
 function normalizeValue(value: any, attribute: keyof GraphNodeDTO): number {
   // Some attributes like view_frequency can be large integers, so we normalize them
   if (attribute === 'view_frequency') {
@@ -22,7 +35,7 @@ function normalizeValue(value: any, attribute: keyof GraphNodeDTO): number {
 
 export default function GraphNode({ data, selected }: GraphNodeProps) {
   const brightnessAttribute = data.brightnessAttribute || 'proven_knowledge_rating';
-  const brightnessValue = data[brightnessAttribute];
+  const brightnessValue = toNumber(data[brightnessAttribute], 0);
   const brightness = normalizeValue(brightnessValue, brightnessAttribute);
   const borderIntensity = clamp(data.forgetting_score);
   const importance = clamp(data.importance);

@@ -1,4 +1,4 @@
-import { BaseEdge, EdgeLabelRenderer, getStraightPath } from "reactflow";
+import { BaseEdge, getStraightPath } from "reactflow";
 
 import type { EdgeProps } from "reactflow";
 
@@ -25,7 +25,6 @@ export default function GraphEdge({ id, sourceX, sourceY, targetX, targetY, data
           strokeDasharray: isMaterialEdge ? "6 4" : undefined,
         }}
       />
-      <EdgeLabelRenderer />
     </>
   );
 }
