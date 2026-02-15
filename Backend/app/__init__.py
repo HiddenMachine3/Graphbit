@@ -1,2 +1,2 @@
-"""NoCodeML Backend Application Package."""
+"""GraphBit Backend Application Package."""
 __version__ = "1.0.0"

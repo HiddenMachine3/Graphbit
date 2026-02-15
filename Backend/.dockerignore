@@ -24,3 +24,8 @@ README.md
 .pytest_cache
 .coverage
 htmlcov/
+tests/
+docs/
+scripts/
+seed_materials/
+seed_data.py
