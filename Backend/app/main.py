@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     lifespan=lifespan,
-    description="NoCodeML API - Build ML models without code, powered by custom JWT authentication",
+    description="GraphBit - Interactive knowledge graph platform for learning and collaboration",
     version="2.0.0"
 )
 
@@ -83,7 +83,7 @@ def read_root():
 @app.get("/health")
 def health_check():
     """Health check endpoint for monitoring and container orchestration."""
-    return {"status": "healthy", "service": "NoCodeML API"}
+    return {"status": "healthy", "service": "GraphBit"}
 
 # Include all API routes with /api/v1 prefix
 # Available endpoints:
