@@ -152,7 +152,6 @@ SECRET_KEY=dev-secret-key-change-for-production
 ```
 
 **File: `Backend/.dockerignore`**
-
 ```
 __pycache__
 *.pyc
@@ -161,17 +160,20 @@ __pycache__
 *.egg-info
 .env
 .venv
-venv/
 .git
 *.md
 .vscode
 .idea
 *.log
 .pytest_cache
+venv/
+.tmp/
 tests/
 docs/
 scripts/
 seed_materials/
+.conda_pg/
+.local_pgvector_db/
 ```
 
 ---
