@@ -1,5 +1,6 @@
 """Question-answer pair generation endpoint backed by Hugging Face Space API."""
 
+import asyncio
 import json
 
 import httpx
@@ -30,23 +31,66 @@ async def _extract_gradio_queue_data(
     call_url: str,
     event_id: str,
 ) -> object:
-    stream_url = f"{call_url.rstrip('/')}/{event_id}"
-    async with client.stream("GET", stream_url) as response:
-        response.raise_for_status()
-        async for line in response.aiter_lines():
-            if not line or not line.startswith("data:"):
-                continue
-            raw_data = line[len("data:") :].strip()
-            if not raw_data:
-                continue
-            try:
-                payload = json.loads(raw_data)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, list) and payload:
-                return payload[0]
+    def _extract_output(payload: object) -> object | None:
+        if payload is None:
+            return None
 
-    raise HTTPException(status_code=502, detail="Failed to read queued Hugging Face response")
+        if isinstance(payload, list) and payload:
+            return payload[0]
+
+        if isinstance(payload, dict):
+            direct_data = payload.get("data")
+            if isinstance(direct_data, list) and direct_data:
+                return direct_data[0]
+
+            output = payload.get("output")
+            if isinstance(output, dict):
+                nested_data = output.get("data")
+                if isinstance(nested_data, list) and nested_data:
+                    return nested_data[0]
+
+        return None
+
+    stream_url = f"{call_url.rstrip('/')}/{event_id}"
+    last_payload_sample: str | None = None
+
+    for attempt in range(6):
+        collected_payloads: list[object] = []
+
+        async with client.stream("GET", stream_url) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                raw_data = line[len("data:") :].strip()
+                if not raw_data:
+                    continue
+                try:
+                    payload = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    continue
+
+                extracted = _extract_output(payload)
+                if extracted is not None:
+                    return extracted
+
+                collected_payloads.append(payload)
+
+        for payload in reversed(collected_payloads):
+            extracted = _extract_output(payload)
+            if extracted is not None:
+                return extracted
+
+        if collected_payloads:
+            last_payload_sample = json.dumps(collected_payloads[-1])[:240]
+
+        if attempt < 5:
+            await asyncio.sleep(1.0)
+
+    detail = "Failed to read queued Hugging Face response"
+    if last_payload_sample:
+        detail = f"{detail}. Last payload: {last_payload_sample}"
+    raise HTTPException(status_code=502, detail=detail)
 
 
 def _coerce_qa_output(raw_payload: object) -> QAGenerationResponse:
@@ -88,7 +132,7 @@ async def generate_qa_pairs(request: QAGenerationRequest) -> QAGenerationRespons
         headers["Authorization"] = f"Bearer {settings.HF_TOKEN}"
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.post(
                 settings.HF_QA_SPACE_API_URL,
                 json=payload,

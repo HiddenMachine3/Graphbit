@@ -1,6 +1,19 @@
 import { apiFetch } from "./client";
 import type { QuestionDTO } from "../types";
 
+export async function generateQuestionsFromText(payload: {
+  text: string;
+  n: number;
+}): Promise<{ qa_pairs: Array<{ question: string; answer: string }> }> {
+  return apiFetch<{ qa_pairs: Array<{ question: string; answer: string }> }>(
+    "/qa/generate",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
 export async function listQuestions(projectId: string): Promise<QuestionDTO[]> {
   return apiFetch<QuestionDTO[]>(
     `/questions?project_id=${encodeURIComponent(projectId)}`
