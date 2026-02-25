@@ -654,7 +654,12 @@ async def suggest_nodes_for_material_text(data: dict, db: AsyncSession = Depends
 
     hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
     if not hf_token:
-        raise HTTPException(status_code=400, detail="HF_TOKEN is required")
+        logger.warning(
+            "Material suggestion skipped due to missing HF_TOKEN: project_id=%s material_id=%s",
+            project_id,
+            material_id,
+        )
+        return {"strong": [], "weak": []}
 
     from huggingface_hub import InferenceClient
 
@@ -679,7 +684,12 @@ async def suggest_nodes_for_material_text(data: dict, db: AsyncSession = Depends
             material_id=material_id,
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Node suggestion failed: {exc}") from exc
+        logger.exception(
+            "Material suggestion failed, returning empty suggestions: project_id=%s material_id=%s",
+            project_id,
+            material_id,
+        )
+        return {"strong": [], "weak": []}
 
     return {
         "strong": [item.__dict__ for item in result.strong],

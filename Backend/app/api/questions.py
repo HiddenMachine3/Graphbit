@@ -637,7 +637,11 @@ async def suggest_nodes_for_question_text(data: dict, db: AsyncSession = Depends
 
     hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
     if not hf_token:
-        raise HTTPException(status_code=400, detail="HF_TOKEN is required")
+        logger.warning(
+            "Question suggestion skipped due to missing HF_TOKEN: project_id=%s",
+            project_id,
+        )
+        return {"strong": [], "weak": []}
 
     from huggingface_hub import InferenceClient
 
@@ -662,7 +666,11 @@ async def suggest_nodes_for_question_text(data: dict, db: AsyncSession = Depends
             dedup_threshold=dedup_threshold,
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Node suggestion failed: {exc}") from exc
+        logger.exception(
+            "Question suggestion failed, returning empty suggestions: project_id=%s",
+            project_id,
+        )
+        return {"strong": [], "weak": []}
 
     return {
         "strong": [item.__dict__ for item in result.strong],
