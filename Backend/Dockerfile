@@ -1,7 +1,7 @@
 # ============================================
 # Builder Stage: Compile dependencies
 # ============================================
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -25,6 +25,9 @@ RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements
 FROM python:3.11-slim
 
 WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 # Install only runtime dependencies (smaller image)
 RUN apt-get update && \
