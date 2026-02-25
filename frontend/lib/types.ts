@@ -98,6 +98,7 @@ export interface RevisionFeedbackDTO {
   correct: boolean;
   correct_answer?: string | null;
   explanation?: string | null;
+  performance?: "bad" | "ok" | "good" | "great";
 }
 
 export interface CommunityDTO {

@@ -1,6 +1,8 @@
 import { apiFetch } from "./client";
 import type { QuestionDTO } from "../types";
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
 export async function generateQuestionsFromText(payload: {
   text: string;
   n: number;
@@ -12,6 +14,73 @@ export async function generateQuestionsFromText(payload: {
       body: JSON.stringify(payload),
     }
   );
+}
+
+export async function importQuestionsFromFile(payload: {
+  projectId: string;
+  file: File;
+  createdBy?: string;
+}): Promise<{ imported_count: number; question_ids: string[] }> {
+  const formData = new FormData();
+  formData.append("project_id", payload.projectId);
+  formData.append("file", payload.file);
+  if (payload.createdBy) {
+    formData.append("created_by", payload.createdBy);
+  }
+
+  const response = await fetch(`${BASE_URL}/questions/import`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    const message = data?.detail || data?.message || "Failed to import questions";
+    throw new Error(message);
+  }
+  return data;
+}
+
+export async function previewQuestionsFromFile(payload: {
+  file: File;
+  offset?: number;
+  limit?: number;
+}): Promise<{
+  total_count: number;
+  preview_count: number;
+  offset?: number;
+  limit?: number;
+  has_more?: boolean;
+  questions: Array<{
+    text: string;
+    answer: string;
+    question_type: string;
+    difficulty: number;
+    tags: string[];
+  }>;
+}> {
+  const formData = new FormData();
+  formData.append("file", payload.file);
+  if (typeof payload.offset === "number") {
+    formData.append("offset", String(payload.offset));
+  }
+  if (typeof payload.limit === "number") {
+    formData.append("limit", String(payload.limit));
+  }
+
+  const response = await fetch(`${BASE_URL}/questions/import/preview`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!response.ok) {
+    const message = data?.detail || data?.message || "Failed to preview questions";
+    throw new Error(message);
+  }
+  return data;
 }
 
 export async function listQuestions(projectId: string): Promise<QuestionDTO[]> {

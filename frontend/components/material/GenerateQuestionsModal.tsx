@@ -152,6 +152,7 @@ export default function GenerateQuestionsModal({
   const [count, setCount] = useState(3);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [hasGeneratedOnce, setHasGeneratedOnce] = useState(false);
   const [draftQuestions, setDraftQuestions] = useState<DraftQuestion[]>([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [suggestionThreshold, setSuggestionThreshold] = useState(0.75);
@@ -230,6 +231,7 @@ export default function GenerateQuestionsModal({
         toDraftQuestion(item.question ?? "", item.answer ?? "", index)
       );
       setDraftQuestions(drafts);
+      setHasGeneratedOnce(true);
     } catch (error) {
       const message =
         error && typeof error === "object" && "message" in error
@@ -393,8 +395,8 @@ export default function GenerateQuestionsModal({
     setCount(3);
     setLocalError(null);
     setShowBulkSuggestSettings(false);
+    setHasGeneratedOnce(false);
     setDraftQuestions([]);
-    void loadGeneratedQuestions(3);
   }, [isOpen, material?.id]);
 
   useEffect(() => {
@@ -554,7 +556,7 @@ export default function GenerateQuestionsModal({
                 disabled={loading || submitting}
                 className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Generating..." : "Regenerate"}
+                {loading ? "Generating..." : hasGeneratedOnce ? "Redo" : "Generate"}
               </button>
               <button
                 type="button"
@@ -914,7 +916,7 @@ export default function GenerateQuestionsModal({
 
           {!loading && draftQuestions.length === 0 && (
             <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-              No generated questions yet.
+              No generated questions yet. Click Generate to start.
             </div>
           )}
         </div>

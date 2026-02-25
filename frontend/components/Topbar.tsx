@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Search } from "lucide-react";
 import ActiveCommunityBadge from "./communities/ActiveCommunityBadge";
@@ -21,6 +21,7 @@ export default function Topbar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
   const pathname = usePathname();
 
@@ -86,6 +87,36 @@ export default function Topbar() {
       )
     : false;
 
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.key !== "/") {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      const tagName = target.tagName.toLowerCase();
+      if (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        (target as HTMLElement).isContentEditable
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    };
+
+    document.addEventListener("keydown", handleShortcut);
+    return () => {
+      document.removeEventListener("keydown", handleShortcut);
+    };
+  }, []);
+
   return (
     <header className="border-b border-slate-800 bg-slate-950 px-4 py-4">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
@@ -120,6 +151,7 @@ export default function Topbar() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search knowledge..."
               value={searchQuery}
@@ -145,7 +177,7 @@ export default function Topbar() {
               className="w-48 rounded-lg border border-slate-700 bg-slate-800 py-2 pl-9 pr-4 text-sm text-slate-200 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 lg:w-64"
             />
             <kbd className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-slate-600 bg-slate-700 px-1.5 py-0.5 text-xs text-slate-400 lg:block">
-              ⌘K
+              /
             </kbd>
             {searchOpen && (
               <div className="absolute left-0 right-0 z-20 mt-2 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl">

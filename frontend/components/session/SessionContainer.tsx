@@ -19,6 +19,7 @@ import AnswerInput from "./AnswerInput";
 import FeedbackPanel from "./FeedbackPanel";
 import SessionProgress from "./SessionProgress";
 import { useAppStore } from "../../lib/store";
+import RichContent from "./RichContent";
 
 export default function SessionContainer() {
   const [session, setSession] = useState<RevisionSessionDTO | null>(null);
@@ -29,6 +30,7 @@ export default function SessionContainer() {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [showFlashcardAnswer, setShowFlashcardAnswer] = useState(false);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
 
   const handleStartSession = useCallback(async () => {
@@ -36,6 +38,7 @@ export default function SessionContainer() {
     setError(null);
     setFeedback(null);
     setAnswer("");
+    setShowFlashcardAnswer(false);
     setCompleted(false);
     try {
       if (!currentProjectId) {
@@ -87,6 +90,7 @@ export default function SessionContainer() {
     setError(null);
     setFeedback(null);
     setAnswer("");
+    setShowFlashcardAnswer(false);
     try {
       const next = await getNextQuestion(session.session_id);
       setCurrentQuestion(next);
@@ -122,6 +126,32 @@ export default function SessionContainer() {
       setLoading(false);
     }
   }, [answer, currentQuestion, session, handleNextQuestion]);
+
+  const handleFlashcardPerformance = useCallback(
+    async (performance: "bad" | "ok" | "good" | "great") => {
+      if (!session || !currentQuestion) {
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await submitAnswer(
+          session.session_id,
+          currentQuestion.id,
+          "",
+          performance
+        );
+        setFeedback(result);
+        setAnsweredCount((count) => count + 1);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to submit flashcard rating";
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentQuestion, session]
+  );
 
   useEffect(() => {
     if (!feedback || !currentQuestion || currentQuestion.question_type !== "OPEN") {
@@ -217,28 +247,99 @@ export default function SessionContainer() {
                 />
               </>
             )}
+            {currentQuestion.question_type === "FLASHCARD" && (
+              <>
+                {!showFlashcardAnswer && (
+                  <button
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                    onClick={() => setShowFlashcardAnswer(true)}
+                    disabled={loading}
+                  >
+                    Show answer
+                  </button>
+                )}
+                {showFlashcardAnswer && (
+                  <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 p-4">
+                    <div className="text-xs uppercase tracking-wide text-slate-400">Answer</div>
+                    <RichContent content={currentQuestion.answer} className="mt-2" />
+                  </div>
+                )}
+              </>
+            )}
             {!feedback && (
               <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
-                  onClick={handleSubmitAnswer}
-                  disabled={loading || !answer.trim()}
-                >
-                  Submit Answer
-                </button>
-                <button
-                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:opacity-60"
-                  onClick={handleIDontKnow}
-                  disabled={loading}
-                >
-                  I don't know
-                </button>
+                {currentQuestion.question_type !== "FLASHCARD" ? (
+                  <>
+                    <button
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                      onClick={handleSubmitAnswer}
+                      disabled={loading || !answer.trim()}
+                    >
+                      Submit Answer
+                    </button>
+                    <button
+                      className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:opacity-60"
+                      onClick={handleIDontKnow}
+                      disabled={loading}
+                    >
+                      I don't know
+                    </button>
+                  </>
+                ) : (
+                  showFlashcardAnswer && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="rounded-lg border border-rose-500/60 px-3 py-2 text-sm text-rose-100 transition hover:border-rose-400 disabled:opacity-60"
+                        onClick={() => void handleFlashcardPerformance("bad")}
+                        disabled={loading}
+                      >
+                        Bad
+                      </button>
+                      <button
+                        className="rounded-lg border border-amber-500/60 px-3 py-2 text-sm text-amber-100 transition hover:border-amber-400 disabled:opacity-60"
+                        onClick={() => void handleFlashcardPerformance("ok")}
+                        disabled={loading}
+                      >
+                        Ok
+                      </button>
+                      <button
+                        className="rounded-lg border border-emerald-500/60 px-3 py-2 text-sm text-emerald-100 transition hover:border-emerald-400 disabled:opacity-60"
+                        onClick={() => void handleFlashcardPerformance("good")}
+                        disabled={loading}
+                      >
+                        Good
+                      </button>
+                      <button
+                        className="rounded-lg border border-blue-500/60 px-3 py-2 text-sm text-blue-100 transition hover:border-blue-400 disabled:opacity-60"
+                        onClick={() => void handleFlashcardPerformance("great")}
+                        disabled={loading}
+                      >
+                        Great
+                      </button>
+                    </div>
+                  )
+                )}
               </div>
             )}
           </div>
 
           {feedback && currentQuestion.question_type === "MCQ" && (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <button
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                onClick={handleNextQuestion}
+                disabled={loading}
+              >
+                Next Question
+              </button>
+            </div>
+          )}
+
+          {feedback && currentQuestion.question_type === "FLASHCARD" && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+              <div className="mb-3 text-sm text-slate-300">
+                Performance recorded: <span className="font-semibold text-white">{feedback.performance ?? "ok"}</span>
+              </div>
               <button
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
                 onClick={handleNextQuestion}
