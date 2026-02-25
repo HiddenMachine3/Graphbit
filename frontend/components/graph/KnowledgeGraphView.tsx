@@ -78,20 +78,19 @@ export default function KnowledgeGraphView({
     [nodes, brightnessAttribute]
   );
   const baseEdges = useMemo(() => buildFlowEdges(edges), [edges]);
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
+  const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState(baseEdges);
   const layoutNodes = useMemo(
-    () => baseNodes.filter((node) => node.type !== "materialNode"),
-    [baseNodes]
+    () => flowNodes.filter((node) => node.type !== "materialNode"),
+    [flowNodes]
   );
   const layoutEdges = useMemo(
     () =>
-      baseEdges.filter(
+      flowEdges.filter(
         (edge) => (edge.data as { edgeType?: string } | undefined)?.edgeType !== "MATERIAL"
       ),
-    [baseEdges]
+    [flowEdges]
   );
-  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
-  const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState(baseEdges);
-  const emptyRepulsors = useMemo(() => [] as { id: string; x: number; y: number }[], []);
   const initialRepulsionDoneRef = useRef(false);
   useEffect(() => {
     setFlowNodes((current) => {
@@ -133,7 +132,11 @@ export default function KnowledgeGraphView({
     initialRepulsionDoneRef.current = false;
   }, [baseNodes.length]);
 
-  useForceLayout(layoutNodes, layoutEdges, emptyRepulsors, 0, setFlowNodes);
+  const { onNodeDrag, onNodeDragEnd } = useForceLayout(
+    layoutNodes,
+    layoutEdges,
+    setFlowNodes
+  );
 
   const applyMaterialRepulsion = useCallback((current: Node[]) => {
     const repulsors = current.filter((node) => node.type === "materialNode");
@@ -329,19 +332,24 @@ export default function KnowledgeGraphView({
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof onFlowNodesChange>[0]) => {
       onFlowNodesChange(changes);
-      let triggerLayout = false;
+      let finishedDragging = false;
 
       changes.forEach((change) => {
-        if (change.type === "position" && !change.dragging) {
-          triggerLayout = true;
+        if (change.type === "position") {
+          if (change.dragging === true && change.position) {
+            onNodeDrag(change.id, change.position.x, change.position.y);
+          } else if (change.dragging === false) {
+            onNodeDragEnd(change.id);
+            finishedDragging = true;
+          }
         }
       });
 
-      if (triggerLayout) {
+      if (finishedDragging) {
         setFlowNodes((current) => applyMaterialRepulsion(current));
       }
     },
-    [applyMaterialRepulsion, onFlowNodesChange, setFlowNodes]
+    [applyMaterialRepulsion, onFlowNodesChange, onNodeDrag, onNodeDragEnd, setFlowNodes]
   );
 
   return (
@@ -418,7 +426,7 @@ function GraphFlowCanvas({
         window.clearTimeout(fitTimeoutRef.current);
       }
     };
-  }, [nodes, fitView]);
+  }, [nodes.length, fitView]);
 
   return (
     <ReactFlow

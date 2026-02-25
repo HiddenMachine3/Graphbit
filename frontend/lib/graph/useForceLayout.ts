@@ -1,56 +1,20 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   forceCenter,
+  forceCollide,
   forceLink,
   forceManyBody,
+  forceSimulation,
   forceX,
   forceY,
-  forceRadial,
-  forceSimulation,
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
 import type { Edge, Node } from "reactflow";
 
-const MIN_RADIUS = 60;
-const MAX_RADIUS = 280;
-
-function clamp(value: number, min = 0, max = 1) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function mulberry32(seed: number) {
-  return function () {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function hashString(input: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < input.length; i += 1) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function createSeed(nodes: Node[], edges: Edge[]) {
-  const nodeKey = nodes.map((node) => node.id).sort().join("|");
-  const edgeKey = edges
-    .map((edge) => `${edge.source}->${edge.target}`)
-    .sort()
-    .join("|");
-  return hashString(`${nodeKey}::${edgeKey}`) || 1;
-}
-
-type Repulsor = {
-  id: string;
-  x: number;
-  y: number;
-};
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
 
 type LayoutNode = SimulationNodeDatum & {
   id: string;
@@ -64,117 +28,250 @@ type LayoutLink = SimulationLinkDatum<LayoutNode> & {
   target: string | LayoutNode;
 };
 
+export type ForceLayoutHandlers = {
+  onNodeDrag: (nodeId: string, x: number, y: number) => void;
+  onNodeDragEnd: (nodeId: string) => void;
+};
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function buildAdjacency(edges: Edge[]) {
+  const adj = new Map<string, Set<string>>();
+  for (const e of edges) {
+    if (!adj.has(e.source)) adj.set(e.source, new Set());
+    if (!adj.has(e.target)) adj.set(e.target, new Set());
+    adj.get(e.source)!.add(e.target);
+    adj.get(e.target)!.add(e.source);
+  }
+  return adj;
+}
+
+function pickRootNode(nodes: Node[], edges: Edge[]) {
+  if (nodes.length === 0) return null;
+  const deg = new Map<string, number>();
+  for (const e of edges) {
+    deg.set(e.source, (deg.get(e.source) ?? 0) + 1);
+    deg.set(e.target, (deg.get(e.target) ?? 0) + 1);
+  }
+  let best: Node | null = null;
+  let bestScore = -1;
+  for (const n of nodes) {
+    const imp = (n.data as { importance?: number } | undefined)?.importance ?? 0.5;
+    const score = (deg.get(n.id) ?? 0) * 2 + imp * 5;
+    if (score > bestScore) {
+      bestScore = score;
+      best = n;
+    }
+  }
+  return best;
+}
+
+/**
+ * BFS from root to assign hop levels, then place nodes
+ * in concentric rings for a clean initial layout.
+ */
+function computeInitialPositions(nodes: Node[], edges: Edge[]) {
+  const positions = new Map<string, { x: number; y: number }>();
+  const root = pickRootNode(nodes, edges);
+  if (!root) return positions;
+
+  const adj = buildAdjacency(edges);
+  const hopMap = new Map<string, number>();
+  const queue = [root.id];
+  hopMap.set(root.id, 0);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const hop = hopMap.get(current)!;
+    for (const nbr of adj.get(current) ?? []) {
+      if (!hopMap.has(nbr)) {
+        hopMap.set(nbr, hop + 1);
+        queue.push(nbr);
+      }
+    }
+  }
+
+  for (const n of nodes) {
+    if (!hopMap.has(n.id)) hopMap.set(n.id, 3);
+  }
+
+  const levels = new Map<number, Node[]>();
+  let maxHop = 0;
+  for (const n of nodes) {
+    const h = hopMap.get(n.id)!;
+    maxHop = Math.max(maxHop, h);
+    if (!levels.has(h)) levels.set(h, []);
+    levels.get(h)!.push(n);
+  }
+
+  positions.set(root.id, { x: 0, y: 0 });
+
+  const ringSpacing = 140;
+  for (let h = 1; h <= maxHop; h++) {
+    const lvl = (levels.get(h) ?? []).filter((n) => n.id !== root.id);
+    if (lvl.length === 0) continue;
+    const radius = ringSpacing * h;
+    const step = (2 * Math.PI) / lvl.length;
+    lvl.forEach((n, i) => {
+      const angle = -Math.PI / 2 + i * step;
+      positions.set(n.id, {
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+      });
+    });
+  }
+
+  return positions;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Hook                                                               */
+/* ------------------------------------------------------------------ */
+
 export default function useForceLayout(
   nodes: Node[],
   edges: Edge[],
-  repulsors: Repulsor[],
-  layoutTrigger: number,
   setNodes: (payload: Node[] | ((nodes: Node[]) => Node[])) => void
-) {
+): ForceLayoutHandlers {
+  /* Keep latest setter in a ref so the tick callback never goes stale */
+  const setNodesRef = useRef(setNodes);
+  setNodesRef.current = setNodes;
+
+  /* Simulation + its internal node array survive across renders */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const simRef = useRef<any>(null);
+  const simNodesRef = useRef<LayoutNode[]>([]);
+
+  /**
+   * Stable structural key – only changes when the set of node-ids
+   * or edge-pairs changes, NOT on every position update.
+   */
+  const graphKey = useMemo(() => {
+    const nk = nodes
+      .map((n) => n.id)
+      .sort()
+      .join(",");
+    const ek = edges
+      .map((e) => `${e.source}-${e.target}`)
+      .sort()
+      .join(",");
+    return `${nk}||${ek}`;
+  }, [nodes, edges]);
+
+  /* ---- create / destroy simulation ---- */
   useEffect(() => {
     if (nodes.length === 0) {
+      simRef.current = null;
+      simNodesRef.current = [];
       return undefined;
     }
 
-    const simulationNodes: LayoutNode[] = nodes.map((node) => ({
-      ...node,
-      x: node.position.x,
-      y: node.position.y,
+    const initPos = computeInitialPositions(nodes, edges);
+
+    const simulationNodes: LayoutNode[] = nodes.map((node) => {
+      /* Reuse existing position when available (non-zero) */
+      const hasPos = node.position.x !== 0 || node.position.y !== 0;
+      const fallback = initPos.get(node.id);
+      return {
+        ...node,
+        x: hasPos
+          ? node.position.x
+          : (fallback?.x ?? (Math.random() - 0.5) * 200),
+        y: hasPos
+          ? node.position.y
+          : (fallback?.y ?? (Math.random() - 0.5) * 200),
+      };
+    });
+
+    const linkData: LayoutLink[] = edges.map((e) => ({
+      source: e.source,
+      target: e.target,
     }));
 
-    const linkData: LayoutLink[] = edges.map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-    }));
+    /* ---------- forces (Vis-Network-like) ---------- */
 
     const linkForce = forceLink<LayoutNode, LayoutLink>(linkData)
       .id((d) => d.id)
       .distance(120)
-      .strength(0.8);
+      .strength(0.25);
 
-    const chargeForce = forceManyBody().strength((d: SimulationNodeDatum) => {
-      const node = d as Node;
-      const importance = clamp((node.data as { importance?: number })?.importance ?? 0.5);
-      return importance > 0.7 ? -600 : -260;
-    });
+    const chargeForce = forceManyBody<LayoutNode>()
+      .strength(-250)
+      .distanceMax(500);
 
-    const centerForce = forceCenter(0, 0);
-    const centerPullX = forceX(0).strength(0.08);
-    const centerPullY = forceY(0).strength(0.08);
+    const centerForce = forceCenter(0, 0).strength(0.04);
 
-    const radialForce = forceRadial((d: SimulationNodeDatum) => {
-      const node = d as Node;
-      const importance = clamp((node.data as { importance?: number })?.importance ?? 0.5);
-      return MAX_RADIUS - (MAX_RADIUS - MIN_RADIUS) * importance;
-    }, 0, 0).strength(0.05);
+    /* Mild gravity so disconnected nodes don't fly away */
+    const gravityX = forceX<LayoutNode>(0).strength(0.02);
+    const gravityY = forceY<LayoutNode>(0).strength(0.02);
 
-    const seed = createSeed(nodes, edges);
-
-    const materialRepulsion = () => {
-      let nodeList: LayoutNode[] = [];
-
-      const strength = 0.22;
-      const maxDistance = 280;
-
-      function force(alpha: number) {
-        if (repulsors.length === 0) {
-          return;
-        }
-
-        for (const node of nodeList) {
-          for (const repulsor of repulsors) {
-            const dx = (node.x ?? 0) - repulsor.x;
-            const dy = (node.y ?? 0) - repulsor.y;
-            const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-            if (distance > maxDistance) {
-              continue;
-            }
-            const factor = ((maxDistance - distance) / maxDistance) * strength * alpha;
-            node.vx = (node.vx ?? 0) + (dx / distance) * factor;
-            node.vy = (node.vy ?? 0) + (dy / distance) * factor;
-          }
-        }
-      }
-
-      force.initialize = (nodesInput: SimulationNodeDatum[]) => {
-        nodeList = nodesInput as LayoutNode[];
-      };
-
-      return force;
-    };
+    const collideForce = forceCollide<LayoutNode>(30).strength(0.7);
 
     const simulation = forceSimulation(simulationNodes)
       .force("link", linkForce)
       .force("charge", chargeForce)
       .force("center", centerForce)
-      .force("centerX", centerPullX)
-      .force("centerY", centerPullY)
-      .force("radial", radialForce)
-      .force("materialRepulsion", materialRepulsion())
+      .force("gravityX", gravityX)
+      .force("gravityY", gravityY)
+      .force("collide", collideForce)
       .alpha(1)
-      .alphaDecay(0.04)
-      .randomSource(mulberry32(seed));
+      .alphaDecay(0.012)
+      .velocityDecay(0.35)
+      .alphaTarget(0.015); /* persistent subtle jiggle */
 
-    // Run the layout to completion immediately to avoid a visible "settling" delay.
-    simulation.tick(180);
-    simulation.stop();
+    simRef.current = simulation;
+    simNodesRef.current = simulationNodes;
 
-    setNodes((current) =>
-      current.map((node) => {
-        const simNode = simulationNodes.find((item) => item.id === node.id);
-        if (!simNode) {
-          return node;
-        }
-        return {
-          ...node,
-          position: {
-            x: simNode.x ?? 0,
-            y: simNode.y ?? 0,
-          },
-        };
-      })
-    );
+    let tickCount = 0;
+    simulation.on("tick", () => {
+      tickCount += 1;
+      if (tickCount % 3 !== 0) return; /* update every 3rd tick for perf */
 
-    return undefined;
-  }, [nodes, edges, repulsors, layoutTrigger, setNodes]);
+      setNodesRef.current((current) =>
+        current.map((node) => {
+          const sim = simulationNodes.find((n) => n.id === node.id);
+          if (!sim) return node;
+          /* Don't override nodes currently pinned (being dragged) */
+          if (sim.fx != null) return node;
+          return {
+            ...node,
+            position: { x: sim.x ?? 0, y: sim.y ?? 0 },
+          };
+        })
+      );
+    });
+
+    return () => {
+      simulation.stop();
+      simRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphKey]);
+
+  /* ---- drag handlers (fx/fy pinning, standard D3 pattern) ---- */
+
+  const onNodeDrag = useCallback((nodeId: string, x: number, y: number) => {
+    const sim = simNodesRef.current.find((n) => n.id === nodeId);
+    if (sim) {
+      sim.fx = x;
+      sim.fy = y;
+    }
+    /* Re-heat so connected nodes follow the drag */
+    const s = simRef.current;
+    if (s && s.alpha() < 0.15) {
+      s.alpha(0.15).restart();
+    }
+  }, []);
+
+  const onNodeDragEnd = useCallback((nodeId: string) => {
+    const sim = simNodesRef.current.find((n) => n.id === nodeId);
+    if (sim) {
+      sim.fx = null;
+      sim.fy = null;
+    }
+  }, []);
+
+  return { onNodeDrag, onNodeDragEnd };
 }
