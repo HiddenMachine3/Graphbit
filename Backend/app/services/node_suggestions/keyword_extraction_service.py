@@ -1,6 +1,10 @@
+import logging
 import os
 
 from app.core.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class KeywordExtractionService:
@@ -18,10 +22,19 @@ class KeywordExtractionService:
         model_target = model_name
         if model_name and isinstance(model_name, str) and not model_name.startswith(("http://", "https://")):
             model_target = f"{base_url}/models/{model_name}"
-        results = self.client.token_classification(
-            text,
-            model=model_target,
-        )
+        try:
+            results = self.client.token_classification(
+                text,
+                model=model_target,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Keyword extraction model call failed. model=%s target=%s",
+                model_name,
+                model_target,
+            )
+            raise RuntimeError(f"HF keyword extraction failed for model '{model_name}': {exc}") from exc
+
         phrases: list[str] = []
         current = ""
         for item in results or []:
@@ -45,4 +58,5 @@ class KeywordExtractionService:
                 continue
             seen.add(cleaned)
             normalized.append(cleaned)
+
         return normalized
