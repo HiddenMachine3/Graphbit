@@ -1,11 +1,20 @@
 """Question management API endpoints."""
 
 from datetime import datetime
+import base64
+import csv
+import io
+import json
 import logging
+import mimetypes
 import os
+import re
+import sqlite3
+import tempfile
 import uuid
+import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +28,9 @@ from app.services.node_suggestions.postgres_repository import PostgresNodeSugges
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+ANKI_PACKAGE_EXTENSIONS = {".apkg", ".colpkg"}
+PERFORMANCE_LEVELS = {"bad", "ok", "good", "great"}
 
 
 def _serialize_question(question: QuestionModel) -> dict:
@@ -70,6 +82,306 @@ def _question_text(question: QuestionModel) -> str:
     return "\n\n".join([part for part in parts if part.strip()])
 
 
+def _normalize_import_row(row: dict, default_type: str = "OPEN") -> dict | None:
+    question_text = (
+        row.get("question")
+        or row.get("text")
+        or row.get("front")
+        or row.get("prompt")
+        or ""
+    ).strip()
+    answer_text = (
+        row.get("answer")
+        or row.get("back")
+        or row.get("response")
+        or ""
+    ).strip()
+
+    if not question_text or not answer_text:
+        return None
+
+    question_type = (row.get("question_type") or row.get("type") or default_type or "OPEN").upper()
+    if question_type not in {"OPEN", "FLASHCARD", "CLOZE", "MCQ"}:
+        question_type = default_type
+
+    tags_raw = row.get("tags") or []
+    if isinstance(tags_raw, str):
+        tags = [tag.strip() for tag in re.split(r"[,;]", tags_raw) if tag.strip()]
+    elif isinstance(tags_raw, list):
+        tags = [str(tag).strip() for tag in tags_raw if str(tag).strip()]
+    else:
+        tags = []
+
+    options = row.get("options") if isinstance(row.get("options"), list) else None
+
+    difficulty = row.get("difficulty", 1)
+    try:
+        difficulty = int(difficulty)
+    except (TypeError, ValueError):
+        difficulty = 1
+    difficulty = max(1, min(5, difficulty))
+
+    source_material_ids = row.get("source_material_ids") if isinstance(row.get("source_material_ids"), list) else []
+
+    return {
+        "text": question_text,
+        "answer": answer_text,
+        "question_type": question_type,
+        "knowledge_type": (row.get("knowledge_type") or "CONCEPT").upper(),
+        "difficulty": difficulty,
+        "tags": tags,
+        "options": options,
+        "source_material_ids": source_material_ids,
+    }
+
+
+def _parse_json_questions(file_bytes: bytes) -> list[dict]:
+    payload = json.loads(file_bytes.decode("utf-8"))
+    if isinstance(payload, dict):
+        payload = payload.get("questions") or payload.get("qa_pairs") or []
+    if not isinstance(payload, list):
+        raise ValueError("JSON import must be a list of questions or include a 'questions' field")
+
+    parsed: list[dict] = []
+    for item in payload:
+        if isinstance(item, dict):
+            normalized = _normalize_import_row(item, default_type="OPEN")
+            if normalized:
+                parsed.append(normalized)
+    return parsed
+
+
+def _parse_csv_questions(file_bytes: bytes) -> list[dict]:
+    text = file_bytes.decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(text))
+    parsed: list[dict] = []
+    for row in reader:
+        normalized = _normalize_import_row({k.lower(): v for k, v in row.items() if k}, default_type="OPEN")
+        if normalized:
+            parsed.append(normalized)
+    return parsed
+
+
+def _parse_txt_questions(file_bytes: bytes) -> list[dict]:
+    text = file_bytes.decode("utf-8", errors="ignore")
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    parsed: list[dict] = []
+
+    for line in lines:
+        if "\t" in line:
+            front, back = line.split("\t", 1)
+            normalized = _normalize_import_row({"front": front, "back": back}, default_type="FLASHCARD")
+            if normalized:
+                parsed.append(normalized)
+            continue
+
+        qa_match = re.match(r"^Q\s*:\s*(.+?)\s+A\s*:\s*(.+)$", line, flags=re.IGNORECASE)
+        if qa_match:
+            normalized = _normalize_import_row(
+                {"question": qa_match.group(1), "answer": qa_match.group(2)},
+                default_type="OPEN",
+            )
+            if normalized:
+                parsed.append(normalized)
+    return parsed
+
+
+def _media_to_data_uri(filename: str, media_bytes: bytes) -> str:
+    mime_type, _ = mimetypes.guess_type(filename)
+    mime_type = mime_type or "application/octet-stream"
+    b64 = base64.b64encode(media_bytes).decode("ascii")
+    return f"data:{mime_type};base64,{b64}"
+
+
+def _embed_anki_media(html: str, media_lookup: dict[str, bytes]) -> str:
+    if not html:
+        return html
+
+    def replace_src(match: re.Match) -> str:
+        quote = match.group(1)
+        raw_src = match.group(2)
+        src = raw_src.strip()
+
+        if src.startswith("http://") or src.startswith("https://") or src.startswith("data:"):
+            return match.group(0)
+
+        media_bytes = media_lookup.get(src)
+        if media_bytes is None:
+            return match.group(0)
+
+        data_uri = _media_to_data_uri(src, media_bytes)
+        return f'src={quote}{data_uri}{quote}'
+
+    return re.sub(r"src\s*=\s*(['\"])([^'\"]+)\1", replace_src, html, flags=re.IGNORECASE)
+
+
+def _parse_anki_questions(file_bytes: bytes) -> list[dict]:
+    logger.info("Anki import parse started: bytes=%s", len(file_bytes))
+    with zipfile.ZipFile(io.BytesIO(file_bytes), "r") as archive:
+        names = set(archive.namelist())
+        logger.info("Anki archive entries detected: count=%s", len(names))
+        collection_name = None
+        for candidate in ("collection.anki21", "collection.anki2"):
+            if candidate in names:
+                collection_name = candidate
+                break
+        if not collection_name:
+            logger.error("Anki package missing collection database. entries=%s", sorted(list(names))[:20])
+            raise ValueError("Anki package missing collection database")
+
+        media_map: dict[str, str] = {}
+        if "media" in names:
+            try:
+                media_map = json.loads(archive.read("media").decode("utf-8"))
+            except Exception:
+                media_map = {}
+
+        media_lookup: dict[str, bytes] = {}
+        for key, filename in media_map.items():
+            if key in names:
+                media_lookup[str(filename)] = archive.read(key)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".anki2") as temp_db:
+            temp_db.write(archive.read(collection_name))
+            temp_db_path = temp_db.name
+
+    connection = None
+    try:
+        connection = sqlite3.connect(temp_db_path)
+        cursor = connection.cursor()
+        model_field_names_by_mid: dict[str, list[str]] = {}
+        try:
+            cursor.execute("SELECT models FROM col LIMIT 1")
+            models_row = cursor.fetchone()
+            if models_row and models_row[0]:
+                models_payload = json.loads(models_row[0])
+                if isinstance(models_payload, dict):
+                    for mid_key, model in models_payload.items():
+                        if not isinstance(model, dict):
+                            continue
+                        fields = model.get("flds")
+                        if not isinstance(fields, list):
+                            continue
+                        names: list[str] = []
+                        for field in fields:
+                            if isinstance(field, dict) and field.get("name"):
+                                names.append(str(field["name"]).strip().lower())
+                        model_field_names_by_mid[str(mid_key)] = names
+        except Exception:
+            model_field_names_by_mid = {}
+
+        cursor.execute(
+            "SELECT DISTINCT n.id, n.flds, n.tags, n.mid FROM notes n "
+            "INNER JOIN cards c ON c.nid = n.id"
+        )
+        rows = cursor.fetchall()
+        logger.info("Anki notes fetched for parsing: rows=%s models=%s", len(rows), len(model_field_names_by_mid))
+    finally:
+        if connection:
+            connection.close()
+        try:
+            os.remove(temp_db_path)
+        except Exception:
+            pass
+
+    def select_front_back(raw_fields: list[str], field_names: list[str]) -> tuple[str, str] | None:
+        cleaned_fields = [field.strip() for field in raw_fields]
+        named_pairs = [
+            (field_names[idx] if idx < len(field_names) else "", cleaned_fields[idx])
+            for idx in range(len(cleaned_fields))
+        ]
+
+        front_priority = {"front", "question", "prompt", "term", "title", "q"}
+        back_priority = {"back", "answer", "definition", "explanation", "a"}
+
+        front = ""
+        back = ""
+
+        for name, value in named_pairs:
+            if name in front_priority and value:
+                front = value
+                break
+        for name, value in named_pairs:
+            if name in back_priority and value:
+                back = value
+                break
+
+        if front and back:
+            return front, back
+
+        non_empty = [value for value in cleaned_fields if value]
+        if len(non_empty) >= 2:
+            return non_empty[0], non_empty[-1]
+
+        if len(non_empty) == 1:
+            one = non_empty[0]
+            separator_match = re.split(r"<hr\s+id=['\"]?answer['\"]?\s*/?>", one, maxsplit=1, flags=re.IGNORECASE)
+            if len(separator_match) == 2:
+                lhs = separator_match[0].strip()
+                rhs = separator_match[1].strip()
+                if lhs and rhs:
+                    return lhs, rhs
+
+        return None
+
+    parsed: list[dict] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    unmatched_rows = 0
+    for _note_id, fields_raw, tags_raw, mid_raw in rows:
+        fields = (fields_raw or "").split("\x1f")
+        field_names = model_field_names_by_mid.get(str(mid_raw), [])
+        selected = select_front_back(fields, field_names)
+        if not selected:
+            unmatched_rows += 1
+            continue
+
+        front_raw, back_raw = selected
+        front = _embed_anki_media(front_raw, media_lookup)
+        back = _embed_anki_media(back_raw, media_lookup)
+        pair_key = (front.strip(), back.strip())
+        if not pair_key[0] or not pair_key[1] or pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
+
+        tags = [tag.strip() for tag in (tags_raw or "").split() if tag.strip()]
+
+        normalized = _normalize_import_row(
+            {
+                "front": front,
+                "back": back,
+                "tags": tags,
+                "question_type": "FLASHCARD",
+            },
+            default_type="FLASHCARD",
+        )
+        if normalized:
+            parsed.append(normalized)
+
+    logger.info(
+        "Anki parse complete: parsed=%s unmatched=%s deduped=%s",
+        len(parsed),
+        unmatched_rows,
+        max(len(rows) - unmatched_rows - len(parsed), 0),
+    )
+
+    return parsed
+
+
+def _parse_import_file(filename: str, file_bytes: bytes) -> list[dict]:
+    extension = os.path.splitext(filename.lower())[1]
+
+    if extension == ".json":
+        return _parse_json_questions(file_bytes)
+    if extension == ".csv":
+        return _parse_csv_questions(file_bytes)
+    if extension in {".txt", ".tsv"}:
+        return _parse_txt_questions(file_bytes)
+    if extension in ANKI_PACKAGE_EXTENSIONS:
+        return _parse_anki_questions(file_bytes)
+
+    raise ValueError(f"Unsupported import file type: {extension}")
+
+
 @router.get("/questions")
 async def list_questions(
     project_id: str = Query(..., min_length=1),
@@ -107,7 +419,7 @@ async def create_question(data: dict, db: AsyncSession = Depends(get_db)):
     if not text or not answer:
         raise HTTPException(status_code=400, detail="text and answer are required")
 
-    question_id = data.get("id") or f"question-{int(datetime.now().timestamp())}"
+    question_id = data.get("id") or f"question-{uuid.uuid4().hex}"
     existing = await db.execute(
         select(QuestionModel).where(QuestionModel.id == question_id)
     )
@@ -371,3 +683,148 @@ async def delete_question(question_id: str, db: AsyncSession = Depends(get_db)):
     await db.delete(question)
     await db.commit()
     return {"status": "deleted"}
+
+
+@router.post("/questions/import")
+async def import_questions(
+    project_id: str = Form(...),
+    file: UploadFile = File(...),
+    created_by: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import questions from JSON/CSV/TXT or Anki package files."""
+    if not project_id.strip():
+        raise HTTPException(status_code=400, detail="project_id is required")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="file is required")
+
+    logger.info("Question import requested: project_id=%s filename=%s", project_id, file.filename)
+
+    try:
+        file_bytes = await file.read()
+        imported_rows = _parse_import_file(file.filename, file_bytes)
+    except ValueError as exc:
+        logger.warning("Question import parse validation failed: filename=%s error=%s", file.filename, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except zipfile.BadZipFile as exc:
+        logger.warning("Question import invalid zip: filename=%s", file.filename)
+        raise HTTPException(status_code=400, detail="Invalid Anki package") from exc
+    except Exception as exc:
+        logger.exception("Question import failed while parsing: filename=%s", file.filename)
+        raise HTTPException(status_code=400, detail=f"Failed to parse import file: {exc}") from exc
+
+    if not imported_rows:
+        logger.warning("Question import parsed zero rows: project_id=%s filename=%s", project_id, file.filename)
+        raise HTTPException(status_code=400, detail="No valid questions found in import file")
+
+    default_user = await _get_default_user(db)
+    actor = created_by or (default_user.username if default_user else "")
+
+    created_ids: list[str] = []
+    for row in imported_rows:
+        question_id = f"question-{uuid.uuid4().hex[:12]}"
+        question = QuestionModel(
+            id=question_id,
+            project_id=project_id,
+            created_by=actor,
+            text=row["text"],
+            answer=row["answer"],
+            options=row.get("options"),
+            option_explanations=None,
+            question_type=row.get("question_type", "OPEN"),
+            knowledge_type=row.get("knowledge_type", "CONCEPT"),
+            covered_node_ids=[],
+            difficulty=row.get("difficulty", 1),
+            tags=row.get("tags", []),
+            question_metadata={
+                "created_by": actor,
+                "created_at": datetime.now().isoformat(),
+                "importance": 0.2,
+                "hits": 0,
+                "misses": 0,
+                "flashcard_ratings": {level: 0 for level in PERFORMANCE_LEVELS},
+            },
+            last_attempted_at=None,
+            source_material_ids=row.get("source_material_ids", []),
+        )
+        db.add(question)
+        created_ids.append(question_id)
+
+    await db.commit()
+
+    logger.info(
+        "Question import completed: project_id=%s filename=%s imported=%s",
+        project_id,
+        file.filename,
+        len(created_ids),
+    )
+
+    return {
+        "imported_count": len(created_ids),
+        "question_ids": created_ids,
+    }
+
+
+@router.post("/questions/import/preview")
+async def preview_import_questions(
+    file: UploadFile = File(...),
+    offset: int = Form(0),
+    limit: int = Form(50),
+):
+    """Preview parsed questions from import file without persisting them."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="file is required")
+
+    logger.info("Question import preview requested: filename=%s", file.filename)
+
+    try:
+        file_bytes = await file.read()
+        imported_rows = _parse_import_file(file.filename, file_bytes)
+    except ValueError as exc:
+        logger.warning("Question preview parse validation failed: filename=%s error=%s", file.filename, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except zipfile.BadZipFile as exc:
+        logger.warning("Question preview invalid zip: filename=%s", file.filename)
+        raise HTTPException(status_code=400, detail="Invalid Anki package") from exc
+    except Exception as exc:
+        logger.exception("Question preview failed while parsing: filename=%s", file.filename)
+        raise HTTPException(status_code=400, detail=f"Failed to parse import file: {exc}") from exc
+
+    if not imported_rows:
+        logger.warning("Question preview parsed zero rows: filename=%s", file.filename)
+        raise HTTPException(status_code=400, detail="No valid questions found in import file")
+
+    safe_offset = max(0, int(offset))
+    safe_limit = max(1, min(500, int(limit)))
+    paged_rows = imported_rows[safe_offset : safe_offset + safe_limit]
+
+    previews = []
+    for row in paged_rows:
+        previews.append(
+            {
+                "text": row["text"],
+                "answer": row["answer"],
+                "question_type": row.get("question_type", "OPEN"),
+                "difficulty": row.get("difficulty", 1),
+                "tags": row.get("tags", []),
+            }
+        )
+
+    logger.info(
+        "Question preview completed: filename=%s total=%s preview=%s offset=%s limit=%s",
+        file.filename,
+        len(imported_rows),
+        len(previews),
+        safe_offset,
+        safe_limit,
+    )
+
+    return {
+        "total_count": len(imported_rows),
+        "preview_count": len(previews),
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "has_more": safe_offset + len(previews) < len(imported_rows),
+        "questions": previews,
+    }

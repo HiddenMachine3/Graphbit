@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, Eye, EyeOff, Import } from "lucide-react";
 
 import { useAppStore } from "@/lib/store";
 import type {
@@ -43,6 +44,8 @@ import { getCurrentUser } from "@/lib/api/user";
 import GenerateQuestionsModal, {
   GenerateQuestionsButton,
 } from "@/components/material/GenerateQuestionsModal";
+import ImportQuestionsModal from "@/components/material/ImportQuestionsModal";
+import RichContent from "@/components/session/RichContent";
 
 type StatusState = {
   type: "idle" | "success" | "error";
@@ -221,6 +224,8 @@ export default function ProjectsPage() {
     type: "idle",
     message: "",
   });
+  const [showImportedToast, setShowImportedToast] = useState(false);
+  const [importedToastVisible, setImportedToastVisible] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [projectName, setProjectName] = useState("");
@@ -253,13 +258,19 @@ export default function ProjectsPage() {
   const [editQuestionDifficulty, setEditQuestionDifficulty] = useState(1);
   const [editQuestionTags, setEditQuestionTags] = useState("");
   const [editingQuestionNodesId, setEditingQuestionNodesId] = useState<string | null>(null);
+  const [isImportQuestionsOpen, setIsImportQuestionsOpen] = useState(false);
+  const [questionPreviewIds, setQuestionPreviewIds] = useState<string[]>([]);
   const [questionNodeSearch, setQuestionNodeSearch] = useState("");
   const [questionNodeSelection, setQuestionNodeSelection] = useState<string[]>([]);
   const [questionNewNodeSelection, setQuestionNewNodeSelection] = useState<string[]>([]);
   const [questionSuggestionLoading, setQuestionSuggestionLoading] = useState(false);
   const [questionSuggestionError, setQuestionSuggestionError] = useState<string | null>(null);
+  const [showCreateQuestionSuggestSettings, setShowCreateQuestionSuggestSettings] = useState(false);
+  const [showEditQuestionSuggestSettings, setShowEditQuestionSuggestSettings] = useState(false);
   const createQuestionTextRef = useRef<HTMLTextAreaElement | null>(null);
   const createQuestionAnswerRef = useRef<HTMLTextAreaElement | null>(null);
+  const createQuestionSuggestSettingsRef = useRef<HTMLDivElement | null>(null);
+  const editQuestionSuggestSettingsRef = useRef<HTMLDivElement | null>(null);
   const draftSuggestionRequestRef = useRef(0);
   const editSuggestionRequestRef = useRef(0);
   const [questionSuggestions, setQuestionSuggestions] = useState<{
@@ -304,7 +315,11 @@ export default function ProjectsPage() {
   const [suggestionError, setSuggestionError] = useState<string | null>(null);
   const [createMaterialSuggestionLoading, setCreateMaterialSuggestionLoading] = useState(false);
   const [createMaterialSuggestionError, setCreateMaterialSuggestionError] = useState<string | null>(null);
+  const [showCreateMaterialSuggestSettings, setShowCreateMaterialSuggestSettings] = useState(false);
+  const [showEditMaterialSuggestSettings, setShowEditMaterialSuggestSettings] = useState(false);
   const createMaterialSuggestionRequestRef = useRef(0);
+  const createMaterialSuggestSettingsRef = useRef<HTMLDivElement | null>(null);
+  const editMaterialSuggestSettingsRef = useRef<HTMLDivElement | null>(null);
   const [materialSuggestions, setMaterialSuggestions] = useState<{
     materialId: string | null;
     strong: SuggestionItem[];
@@ -323,6 +338,58 @@ export default function ProjectsPage() {
     editMaterialCheckedTranscriptSegments,
     editMaterialTranscriptText
   );
+
+  useEffect(() => {
+    if (
+      !showCreateQuestionSuggestSettings &&
+      !showEditQuestionSuggestSettings &&
+      !showCreateMaterialSuggestSettings &&
+      !showEditMaterialSuggestSettings
+    ) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        return;
+      }
+      if (
+        createQuestionSuggestSettingsRef.current?.contains(target) ||
+        editQuestionSuggestSettingsRef.current?.contains(target) ||
+        createMaterialSuggestSettingsRef.current?.contains(target) ||
+        editMaterialSuggestSettingsRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowCreateQuestionSuggestSettings(false);
+      setShowEditQuestionSuggestSettings(false);
+      setShowCreateMaterialSuggestSettings(false);
+      setShowEditMaterialSuggestSettings(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      setShowCreateQuestionSuggestSettings(false);
+      setShowEditQuestionSuggestSettings(false);
+      setShowCreateMaterialSuggestSettings(false);
+      setShowEditMaterialSuggestSettings(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [
+    showCreateQuestionSuggestSettings,
+    showEditQuestionSuggestSettings,
+    showCreateMaterialSuggestSettings,
+    showEditMaterialSuggestSettings,
+  ]);
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error && typeof error === "object") {
@@ -1564,6 +1631,33 @@ export default function ProjectsPage() {
     }
   };
 
+  useEffect(() => {
+    if (!(status.type === "success" && status.message === "Imported!")) {
+      return;
+    }
+
+    setShowImportedToast(true);
+    setImportedToastVisible(true);
+
+    const fadeTimer = window.setTimeout(() => {
+      setImportedToastVisible(false);
+    }, 50);
+
+    const hideTimer = window.setTimeout(() => {
+      setShowImportedToast(false);
+      setStatus((prev) =>
+        prev.type === "success" && prev.message === "Imported!"
+          ? { type: "idle", message: "" }
+          : prev
+      );
+    }, 2050);
+
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [status]);
+
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top_left,rgba(178,38,76,0.18),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(120,24,46,0.2),transparent_40%)] p-6 text-slate-200">
       <div className="mb-6 flex flex-col gap-2">
@@ -1578,7 +1672,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      {status.type !== "idle" && (
+      {status.type !== "idle" && status.message !== "Imported!" && (
         <div
           className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
             status.type === "error"
@@ -1587,6 +1681,18 @@ export default function ProjectsPage() {
           }`}
         >
           {status.message}
+        </div>
+      )}
+
+      {showImportedToast && (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-[70]">
+          <div
+            className={`rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 transition-opacity duration-[2000ms] ${
+              importedToastVisible ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            Imported!
+          </div>
         </div>
       )}
 
@@ -1743,6 +1849,17 @@ export default function ProjectsPage() {
           )}
           {currentProjectId && (
             <div className="grid gap-4">
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsImportQuestionsOpen(true)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Import className="h-3.5 w-3.5" />
+                  Import questions
+                </button>
+              </div>
               <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
                 <textarea
                   ref={createQuestionTextRef}
@@ -1850,82 +1967,94 @@ export default function ProjectsPage() {
                 {isCreateQuestionNodesOpen && (
                   <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={handleSuggestDraftQuestionNodes}
-                        disabled={busy || questionSuggestionLoading}
-                        className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      <div
+                        ref={createQuestionSuggestSettingsRef}
+                        className="relative inline-flex rounded-lg border border-rose-500/60"
                       >
-                        {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                      </button>
+                        <button
+                          onClick={handleSuggestDraftQuestionNodes}
+                          disabled={busy || questionSuggestionLoading}
+                          className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowCreateQuestionSuggestSettings((prev) => !prev)
+                          }
+                          disabled={busy || questionSuggestionLoading}
+                          className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label="Toggle suggestion settings"
+                        >
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 transition ${
+                              showCreateQuestionSuggestSettings ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        {showCreateQuestionSuggestSettings && (
+                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                            <div className="grid gap-3">
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                                Threshold: {suggestionThreshold.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.01}
+                                  value={suggestionThreshold}
+                                  onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.threshold}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                                Semantic weight: {semanticWeight.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={semanticWeight}
+                                  onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.semantic}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                                Keyword weight: {keywordWeight.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={keywordWeight}
+                                  onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.keyword}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                                Dedup threshold: {dedupThreshold.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.01}
+                                  value={dedupThreshold}
+                                  onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.dedup}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-400">
                         Adjust threshold + weights before suggesting.
                       </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.threshold}
-                      >
-                        Threshold: {suggestionThreshold.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={suggestionThreshold}
-                          onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.threshold}
-                        />
-                      </label>
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.semantic}
-                      >
-                        Semantic weight: {semanticWeight.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={semanticWeight}
-                          onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.semantic}
-                        />
-                      </label>
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.keyword}
-                      >
-                        Keyword weight: {keywordWeight.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={keywordWeight}
-                          onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.keyword}
-                        />
-                      </label>
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.dedup}
-                      >
-                        Dedup threshold: {dedupThreshold.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={dedupThreshold}
-                          onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.dedup}
-                        />
-                      </label>
                     </div>
                     {questionSuggestionError && (
                       <div className="text-xs text-red-300">{questionSuggestionError}</div>
@@ -2076,6 +2205,7 @@ export default function ProjectsPage() {
                 {questions.map((question) => {
                   const isEditing = editingQuestionId === question.id;
                   const isEditingNodes = editingQuestionNodesId === question.id;
+                  const isQuestionPreviewOpen = questionPreviewIds.includes(question.id);
                   const linkedNodes = nodes.filter((node) =>
                     (question.covered_node_ids ?? []).includes(node.id)
                   );
@@ -2207,8 +2337,26 @@ export default function ProjectsPage() {
                         </div>
                       ) : (
                         <>
-                          <div className="text-sm font-semibold text-white">{question.text}</div>
-                          <div className="text-xs text-slate-400">Answer: {question.answer}</div>
+                          <div className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold text-white">
+                            {question.text}
+                          </div>
+                          {!isQuestionPreviewOpen && (
+                            <div className="min-w-0 whitespace-pre-wrap break-words text-xs text-slate-400">
+                              Answer: {question.answer}
+                            </div>
+                          )}
+                          {isQuestionPreviewOpen && (
+                            <div className="mt-2 grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                              <div>
+                                <div className="text-[11px] text-slate-400">Prompt</div>
+                                <RichContent content={question.text} className="mt-1" />
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-slate-400">Answer</div>
+                                <RichContent content={question.answer} className="mt-1" />
+                              </div>
+                            </div>
+                          )}
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <div className="text-xs text-slate-500">Linked nodes:</div>
                             {linkedNodes.length === 0 && (
@@ -2233,6 +2381,25 @@ export default function ProjectsPage() {
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <button
+                              type="button"
+                              onClick={() => {
+                                setQuestionPreviewIds((prev) =>
+                                  prev.includes(question.id)
+                                    ? prev.filter((id) => id !== question.id)
+                                    : [...prev, question.id]
+                                );
+                              }}
+                              className="inline-flex items-center rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-200 transition hover:border-slate-500"
+                              title={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
+                              aria-label={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
+                            >
+                              {isQuestionPreviewOpen ? (
+                                <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                            <button
                               onClick={() => beginEditQuestion(question)}
                               disabled={busy}
                               className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2250,82 +2417,92 @@ export default function ProjectsPage() {
                           {isEditingNodes && (
                             <div className="mt-3 grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
                               <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                  onClick={() => handleSuggestQuestionNodes(question.id)}
-                                  disabled={busy || questionSuggestionLoading}
-                                  className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                <div
+                                  ref={editQuestionSuggestSettingsRef}
+                                  className="relative inline-flex rounded-lg border border-rose-500/60"
                                 >
-                                  {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                                </button>
+                                  <button
+                                    onClick={() => handleSuggestQuestionNodes(question.id)}
+                                    disabled={busy || questionSuggestionLoading}
+                                    className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowEditQuestionSuggestSettings((prev) => !prev)}
+                                    disabled={busy || questionSuggestionLoading}
+                                    className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    aria-label="Toggle suggestion settings"
+                                  >
+                                    <ChevronDown
+                                      className={`h-3.5 w-3.5 transition ${
+                                        showEditQuestionSuggestSettings ? "rotate-180" : ""
+                                      }`}
+                                    />
+                                  </button>
+                                  {showEditQuestionSuggestSettings && (
+                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                                      <div className="grid gap-3">
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                                          Threshold: {suggestionThreshold.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.01}
+                                            value={suggestionThreshold}
+                                            onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.threshold}
+                                          />
+                                        </label>
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                                          Semantic weight: {semanticWeight.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={semanticWeight}
+                                            onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.semantic}
+                                          />
+                                        </label>
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                                          Keyword weight: {keywordWeight.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={keywordWeight}
+                                            onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.keyword}
+                                          />
+                                        </label>
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                                          Dedup threshold: {dedupThreshold.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.01}
+                                            value={dedupThreshold}
+                                            onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.dedup}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="text-[11px] text-slate-400">
                                   Adjust threshold + weights before suggesting.
                                 </div>
-                              </div>
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.threshold}
-                                >
-                                  Threshold: {suggestionThreshold.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.01}
-                                    value={suggestionThreshold}
-                                    onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.threshold}
-                                  />
-                                </label>
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.semantic}
-                                >
-                                  Semantic weight: {semanticWeight.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={semanticWeight}
-                                    onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.semantic}
-                                  />
-                                </label>
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.keyword}
-                                >
-                                  Keyword weight: {keywordWeight.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={keywordWeight}
-                                    onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.keyword}
-                                  />
-                                </label>
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.dedup}
-                                >
-                                  Dedup threshold: {dedupThreshold.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.01}
-                                    value={dedupThreshold}
-                                    onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.dedup}
-                                  />
-                                </label>
                               </div>
                               {questionSuggestionError && (
                                 <div className="text-xs text-red-300">{questionSuggestionError}</div>
@@ -2588,82 +2765,92 @@ export default function ProjectsPage() {
                 {isCreateMaterialNodesOpen && (
                   <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={handleSuggestDraftMaterialNodes}
-                        disabled={busy || createMaterialSuggestionLoading}
-                        className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      <div
+                        ref={createMaterialSuggestSettingsRef}
+                        className="relative inline-flex rounded-lg border border-rose-500/60"
                       >
-                        {createMaterialSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                      </button>
+                        <button
+                          onClick={handleSuggestDraftMaterialNodes}
+                          disabled={busy || createMaterialSuggestionLoading}
+                          className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {createMaterialSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateMaterialSuggestSettings((prev) => !prev)}
+                          disabled={busy || createMaterialSuggestionLoading}
+                          className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          aria-label="Toggle suggestion settings"
+                        >
+                          <ChevronDown
+                            className={`h-3.5 w-3.5 transition ${
+                              showCreateMaterialSuggestSettings ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+                        {showCreateMaterialSuggestSettings && (
+                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                            <div className="grid gap-3">
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                                Threshold: {suggestionThreshold.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.01}
+                                  value={suggestionThreshold}
+                                  onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.threshold}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                                Semantic weight: {semanticWeight.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={semanticWeight}
+                                  onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.semantic}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                                Keyword weight: {keywordWeight.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={keywordWeight}
+                                  onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.keyword}
+                                />
+                              </label>
+                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                                Dedup threshold: {dedupThreshold.toFixed(2)}
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.01}
+                                  value={dedupThreshold}
+                                  onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                  className="w-full"
+                                  title={SLIDER_HELP.dedup}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-400">
                         Uses notes + optional valid YouTube transcript.
                       </div>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.threshold}
-                      >
-                        Threshold: {suggestionThreshold.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={suggestionThreshold}
-                          onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.threshold}
-                        />
-                      </label>
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.semantic}
-                      >
-                        Semantic weight: {semanticWeight.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={semanticWeight}
-                          onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.semantic}
-                        />
-                      </label>
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.keyword}
-                      >
-                        Keyword weight: {keywordWeight.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={keywordWeight}
-                          onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.keyword}
-                        />
-                      </label>
-                      <label
-                        className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                        title={SLIDER_HELP.dedup}
-                      >
-                        Dedup threshold: {dedupThreshold.toFixed(2)}
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.01}
-                          value={dedupThreshold}
-                          onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                          className="w-[calc(100%-8px)] max-w-full"
-                          title={SLIDER_HELP.dedup}
-                        />
-                      </label>
                     </div>
                     {createMaterialSuggestionError && (
                       <div className="text-xs text-red-300">{createMaterialSuggestionError}</div>
@@ -3025,82 +3212,92 @@ export default function ProjectsPage() {
                           {isEditingNodes && (
                             <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
                               <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                  onClick={() => handleSuggestMaterialNodes(material.id)}
-                                  disabled={busy || suggestionLoading}
-                                  className="rounded-lg bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                <div
+                                  ref={editMaterialSuggestSettingsRef}
+                                  className="relative inline-flex rounded-lg border border-rose-500/60"
                                 >
-                                  {suggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                                </button>
+                                  <button
+                                    onClick={() => handleSuggestMaterialNodes(material.id)}
+                                    disabled={busy || suggestionLoading}
+                                    className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {suggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowEditMaterialSuggestSettings((prev) => !prev)}
+                                    disabled={busy || suggestionLoading}
+                                    className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    aria-label="Toggle suggestion settings"
+                                  >
+                                    <ChevronDown
+                                      className={`h-3.5 w-3.5 transition ${
+                                        showEditMaterialSuggestSettings ? "rotate-180" : ""
+                                      }`}
+                                    />
+                                  </button>
+                                  {showEditMaterialSuggestSettings && (
+                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                                      <div className="grid gap-3">
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                                          Threshold: {suggestionThreshold.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.01}
+                                            value={suggestionThreshold}
+                                            onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.threshold}
+                                          />
+                                        </label>
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                                          Semantic weight: {semanticWeight.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={semanticWeight}
+                                            onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.semantic}
+                                          />
+                                        </label>
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                                          Keyword weight: {keywordWeight.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.05}
+                                            value={keywordWeight}
+                                            onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.keyword}
+                                          />
+                                        </label>
+                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                                          Dedup threshold: {dedupThreshold.toFixed(2)}
+                                          <input
+                                            type="range"
+                                            min={0}
+                                            max={1}
+                                            step={0.01}
+                                            value={dedupThreshold}
+                                            onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                            className="w-full"
+                                            title={SLIDER_HELP.dedup}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="text-[11px] text-slate-400">
                                   Adjust threshold + weights before suggesting.
                                 </div>
-                              </div>
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.threshold}
-                                >
-                                  Threshold: {suggestionThreshold.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.01}
-                                    value={suggestionThreshold}
-                                    onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.threshold}
-                                  />
-                                </label>
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.semantic}
-                                >
-                                  Semantic weight: {semanticWeight.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={semanticWeight}
-                                    onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.semantic}
-                                  />
-                                </label>
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.keyword}
-                                >
-                                  Keyword weight: {keywordWeight.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.05}
-                                    value={keywordWeight}
-                                    onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.keyword}
-                                  />
-                                </label>
-                                <label
-                                  className="grid gap-1 pr-2 text-[11px] text-slate-400"
-                                  title={SLIDER_HELP.dedup}
-                                >
-                                  Dedup threshold: {dedupThreshold.toFixed(2)}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.01}
-                                    value={dedupThreshold}
-                                    onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                                    className="w-[calc(100%-8px)] max-w-full"
-                                    title={SLIDER_HELP.dedup}
-                                  />
-                                </label>
                               </div>
                               {suggestionError && (
                                 <div className="text-xs text-red-300">{suggestionError}</div>
@@ -3416,6 +3613,25 @@ export default function ProjectsPage() {
         onError={(message) => {
           setStatus({ type: "error", message });
         }}
+      />
+
+      <ImportQuestionsModal
+        isOpen={isImportQuestionsOpen}
+        projectId={currentProjectId}
+        nodes={nodes}
+        createdBy={currentUser?.username}
+        onClose={() => setIsImportQuestionsOpen(false)}
+        onImported={async () => {
+          if (!currentProjectId) {
+            return;
+          }
+          await refreshProjectData(currentProjectId);
+          setStatus({
+            type: "success",
+            message: "Imported!",
+          });
+        }}
+        onError={(message) => setStatus({ type: "error", message })}
       />
 
     </div>

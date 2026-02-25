@@ -1,4 +1,5 @@
 import type { RevisionFeedbackDTO } from "../../lib/types";
+import RichContent from "./RichContent";
 
 type FeedbackPanelProps = {
   feedback: RevisionFeedbackDTO;
@@ -22,12 +23,13 @@ export default function FeedbackPanel({
       </div>
       {feedback.correct_answer && !feedback.correct && (
         <div className="mt-2 text-sm text-slate-300">
-          Correct answer: {feedback.correct_answer}
+          <div>Correct answer:</div>
+          <RichContent content={feedback.correct_answer} className="mt-1" />
         </div>
       )}
       {!feedback.correct && feedback.explanation && (
         <div className="mt-2 text-sm text-slate-300">
-          {feedback.explanation}
+          <RichContent content={feedback.explanation} />
         </div>
       )}
       <button

@@ -1,4 +1,5 @@
 import type { QuestionDTO, RevisionFeedbackDTO } from "../../lib/types";
+import RichContent from "./RichContent";
 
 type QuestionCardProps = {
   question: QuestionDTO;
@@ -22,9 +23,9 @@ export default function QuestionCard({
       <div className="text-xs uppercase tracking-wide text-slate-400">
         {question.question_type}
       </div>
-      <h2 className="mt-2 text-lg font-semibold text-white">
-        {question.text}
-      </h2>
+      <div className="mt-2 text-lg font-semibold text-white">
+        <RichContent content={question.text} className="text-lg font-semibold text-white" />
+      </div>
 
       {isMCQ && question.options && (
         <div className="mt-4 space-y-2">

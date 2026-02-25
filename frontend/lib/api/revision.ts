@@ -24,13 +24,14 @@ export async function getNextQuestion(
 export async function submitAnswer(
   sessionId: string,
   questionId: string,
-  answer: string
+  answer: string,
+  performance?: "bad" | "ok" | "good" | "great"
 ): Promise<RevisionFeedbackDTO> {
   if (!sessionId || !questionId) {
     return { correct: false, correct_answer: null };
   }
   return apiFetch<RevisionFeedbackDTO>(`/revision/sessions/${sessionId}/submit-answer`, {
     method: "POST",
-    body: JSON.stringify({ question_id: questionId, answer }),
+    body: JSON.stringify({ question_id: questionId, answer, performance }),
   });
 }

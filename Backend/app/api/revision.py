@@ -11,6 +11,8 @@ import uuid
 
 router = APIRouter()
 
+PERFORMANCE_LEVELS = {"bad", "ok", "good", "great"}
+
 
 @router.post("/revision/sessions")
 async def start_revision_session(data: dict, db: AsyncSession = Depends(get_db)):
@@ -78,7 +80,7 @@ async def get_next_question(session_id: str, db: AsyncSession = Depends(get_db))
     await db.commit()
     
     # Return question without the answer
-    return {
+    payload = {
         "id": db_question.id,
         "text": db_question.text,
         "options": db_question.options,
@@ -88,6 +90,9 @@ async def get_next_question(session_id: str, db: AsyncSession = Depends(get_db))
         "difficulty": db_question.difficulty,
         "tags": db_question.tags,
     }
+    if db_question.question_type == "FLASHCARD":
+        payload["answer"] = db_question.answer
+    return payload
 
 
 @router.post("/revision/sessions/{session_id}/submit-answer")
@@ -104,6 +109,7 @@ async def submit_revision_answer(session_id: str, data: dict, db: AsyncSession =
     
     question_id = data.get("question_id")
     user_answer = data.get("answer", "").strip()
+    performance = (data.get("performance") or "").strip().lower()
     
     # Increment question counter
     await db.execute(
@@ -112,11 +118,11 @@ async def submit_revision_answer(session_id: str, data: dict, db: AsyncSession =
         .values(questions_answered=session.questions_answered + 1)
     )
     
-    if not user_answer:
+    if not user_answer and performance not in PERFORMANCE_LEVELS:
         await db.commit()
         return {
             "correct": False,
-            "correct_answer": "Please provide an answer.",
+            "correct_answer": "Please provide an answer or flashcard performance rating.",
         }
     
     # Find the question in database
@@ -130,6 +136,33 @@ async def submit_revision_answer(session_id: str, data: dict, db: AsyncSession =
         return {
             "correct": False,
             "correct_answer": "Question not found.",
+        }
+
+    if question.question_type == "FLASHCARD":
+        if performance not in PERFORMANCE_LEVELS:
+            await db.commit()
+            return {
+                "correct": False,
+                "correct_answer": "Performance rating is required for flashcards (bad/ok/good/great).",
+            }
+
+        metadata = question.question_metadata or {}
+        ratings = metadata.get("flashcard_ratings") if isinstance(metadata, dict) else None
+        if not isinstance(ratings, dict):
+            ratings = {level: 0 for level in PERFORMANCE_LEVELS}
+
+        ratings[performance] = int(ratings.get(performance, 0)) + 1
+        metadata["flashcard_ratings"] = ratings
+        metadata["last_flashcard_rating"] = performance
+        question.question_metadata = metadata
+        question.last_attempted_at = datetime.now()
+
+        await db.commit()
+        return {
+            "correct": True,
+            "correct_answer": question.answer,
+            "performance": performance,
+            "explanation": "Flashcard performance recorded.",
         }
     
     # For MCQ questions, check if the answer matches exactly
