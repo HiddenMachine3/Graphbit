@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     HF_TOKEN: str | None = None
     HF_EMBED_MODEL: str = "BAAI/bge-base-en-v1.5"
     HF_KEYPHRASE_MODEL: str = "ml6team/keyphrase-extraction-distilbert-inspec"
+    HF_QA_SPACE_API_URL: str = "https://hiddenmachine-qaendpoint.hf.space/gradio_api/call/generate_qa"
 
     # Suggestion pipeline defaults
     SUGGESTION_THRESHOLD: float = 0.75

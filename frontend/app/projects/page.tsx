@@ -40,6 +40,9 @@ import {
   updateCommunity,
 } from "@/lib/api/community";
 import { getCurrentUser } from "@/lib/api/user";
+import GenerateQuestionsModal, {
+  GenerateQuestionsButton,
+} from "@/components/material/GenerateQuestionsModal";
 
 type StatusState = {
   type: "idle" | "success" | "error";
@@ -268,6 +271,7 @@ export default function ProjectsPage() {
   const [materialTitle, setMaterialTitle] = useState("");
   const [materialText, setMaterialText] = useState("");
   const [materialSourceUrl, setMaterialSourceUrl] = useState("");
+  const [questionGeneratorMaterial, setQuestionGeneratorMaterial] = useState<MaterialDTO | null>(null);
   const [materialCheckedTranscriptText, setMaterialCheckedTranscriptText] = useState<string | null>(null);
   const [materialCheckedTranscriptSegments, setMaterialCheckedTranscriptSegments] = useState<TranscriptSegment[]>([]);
   const [isCreateMaterialNodesOpen, setIsCreateMaterialNodesOpen] = useState(false);
@@ -1711,7 +1715,7 @@ export default function ProjectsPage() {
                   Add node
                 </button>
               </div>
-              <div className="grid gap-2">
+              <div className="grid min-w-0 gap-2">
                 {nodes.map((node) => (
                   <div
                     key={node.id}
@@ -2862,7 +2866,7 @@ export default function ProjectsPage() {
                   return (
                     <div
                       key={material.id}
-                      className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2"
+                      className="min-w-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 px-3 py-2"
                     >
                       {isEditing ? (
                         <div className="grid gap-2">
@@ -2955,10 +2959,10 @@ export default function ProjectsPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="grid gap-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <div className="text-sm font-semibold text-white">{material.title}</div>
+                        <div className="grid min-w-0 gap-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="break-words text-sm font-semibold text-white">{material.title}</div>
                               <div className="text-xs text-slate-400">
                                 {material.chunk_count} chunks
                               </div>
@@ -2967,13 +2971,13 @@ export default function ProjectsPage() {
                                   href={material.source_url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-xs text-blue-300 hover:text-blue-200"
+                                  className="break-all text-xs text-blue-300 hover:text-blue-200"
                                 >
                                   Source link
                                 </a>
                               ) : null}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
                               <button
                                 onClick={() => beginEditMaterial(material)}
                                 disabled={busy}
@@ -2981,6 +2985,10 @@ export default function ProjectsPage() {
                               >
                                 Edit
                               </button>
+                              <GenerateQuestionsButton
+                                onClick={() => setQuestionGeneratorMaterial(material)}
+                                disabled={busy}
+                              />
                               <button
                                 onClick={() => handleDeleteMaterial(material.id)}
                                 disabled={busy}
@@ -2999,7 +3007,7 @@ export default function ProjectsPage() {
                             {linkedNodes.map((node) => (
                               <span
                                 key={node.id}
-                                className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-200"
+                                className="max-w-full break-all rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-200"
                               >
                                 {node.topic_name}
                               </span>
@@ -3388,6 +3396,27 @@ export default function ProjectsPage() {
           </div>
         </SectionCard>
       </div>
+
+      <GenerateQuestionsModal
+        isOpen={Boolean(questionGeneratorMaterial)}
+        material={questionGeneratorMaterial}
+        projectId={currentProjectId}
+        nodes={nodes}
+        onClose={() => setQuestionGeneratorMaterial(null)}
+        onCompleted={async (count) => {
+          if (!currentProjectId) {
+            return;
+          }
+          await refreshProjectData(currentProjectId);
+          setStatus({
+            type: "success",
+            message: `${count} question${count === 1 ? "" : "s"} added from material`,
+          });
+        }}
+        onError={(message) => {
+          setStatus({ type: "error", message });
+        }}
+      />
 
     </div>
   );
