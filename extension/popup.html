@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Graphbit Material Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="popup-header">
+        <div>
+          <h1>Graphbit Capture</h1>
+          <p class="subtitle">Capture this tab into your learning graph</p>
+        </div>
+        <span id="pageTypeBadge" class="badge">Detecting page…</span>
+      </header>
+
+      <section class="card">
+        <div class="row row-between">
+          <label for="projectSelect">Project</label>
+          <button id="refreshProjectsBtn" class="btn btn-ghost btn-inline" type="button">Refresh</button>
+        </div>
+        <select id="projectSelect"></select>
+      </section>
+
+      <button id="captureBtn" class="btn btn-primary" type="button">Add Current Page as Material</button>
+
+      <section id="lastAddedCard" class="card subtle hidden" aria-live="polite">
+        <p class="meta-title">Last Added</p>
+        <p id="lastAddedText" class="meta-value">No materials added yet.</p>
+      </section>
+
+      <details class="advanced" id="advancedSettings">
+        <summary>Advanced Settings</summary>
+        <section class="card card-advanced">
+          <label for="backendUrl">Backend URL</label>
+          <input id="backendUrl" type="text" placeholder="http://localhost:8000/api/v1" />
+
+          <label for="createdBy">Created By (optional)</label>
+          <input id="createdBy" type="text" placeholder="browser-extension" />
+
+          <button id="saveBtn" class="btn btn-secondary" type="button">Save Defaults</button>
+        </section>
+      </details>
+
+      <p id="status" class="status" role="status" aria-live="polite">Ready.</p>
+      <small class="hint">
+        YouTube sends URL only. Other tabs (including local HTML) send page text.
+      </small>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
