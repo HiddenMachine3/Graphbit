@@ -81,6 +81,11 @@ cmd /c npm run dev
 
 The frontend will typically be available at: `http://localhost:3000`
 
+
+
+> **Note:** For setting up and starting the extension, follow the instructions in `extension/README.md`.
+
+
 ## Troubleshooting
 
 ### Backend won't start
