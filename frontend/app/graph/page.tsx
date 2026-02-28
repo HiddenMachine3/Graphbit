@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 
-import { fetchGraphSummary } from "../../lib/api/graph";
+import { fetchGraphSummary, deleteNode, bulkDeleteNodes } from "../../lib/api/graph";
 import type { GraphSummaryDTO, GraphNodeDTO } from "../../lib/types";
 import { useAppStore } from "../../lib/store";
 import Loading from "../../components/Loading";
@@ -21,6 +21,10 @@ export default function GraphPage() {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [clickModeActive, setClickModeActive] = useState(false);
   const [selectedNodesForEdge, setSelectedNodesForEdge] = useState<string[]>([]);
+  const [deleteModeActive, setDeleteModeActive] = useState(false);
+  const [selectedNodesForDelete, setSelectedNodesForDelete] = useState<string[]>([]);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [brightnessAttribute, setBrightnessAttribute] = useState<keyof GraphNodeDTO>('proven_knowledge_rating');
   const [showMaterials, setShowMaterials] = useState(true);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
@@ -90,6 +94,21 @@ export default function GraphPage() {
   };
 
   const handleNodeClick = (nodeId: string) => {
+    if (deleteModeActive) {
+      setDeleteError(null);
+      const clickedNode = visibleNodes.find((node) => node.id === nodeId);
+      if (!clickedNode || clickedNode.node_type === "material" || nodeId.startsWith("material:")) {
+        setDeleteError("Material nodes cannot be deleted");
+        return;
+      }
+      setSelectedNodesForDelete((prev) => {
+        if (prev.includes(nodeId)) {
+          return prev.filter((id) => id !== nodeId);
+        }
+        return [...prev, nodeId];
+      });
+      return;
+    }
     if (clickModeActive) {
       setSelectedNodesForEdge((prev) => {
         if (prev.includes(nodeId)) {
@@ -101,6 +120,56 @@ export default function GraphPage() {
       });
     } else {
       setSelectedNodeId(nodeId);
+    }
+  };
+
+  const handleDeleteSingleNode = async (nodeId: string) => {
+    if (!currentProjectId) {
+      setDeleteError("Select a project first");
+      return;
+    }
+    if (!window.confirm("Delete this node? This will remove its edges and references.")) {
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await deleteNode(currentProjectId, nodeId);
+      setSelectedNodeId(null);
+      setSelectedNodesForDelete((prev) => prev.filter((id) => id !== nodeId));
+      await loadGraph();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete node");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!currentProjectId) {
+      setDeleteError("Select a project first");
+      return;
+    }
+    if (selectedNodesForDelete.length === 0) {
+      setDeleteError("Select at least one node to delete");
+      return;
+    }
+    const message = `Delete ${selectedNodesForDelete.length} node(s)? This will remove their edges and references.`;
+    if (!window.confirm(message)) {
+      return;
+    }
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      await bulkDeleteNodes(currentProjectId, selectedNodesForDelete);
+      setSelectedNodeId(null);
+      setSelectedNodesForDelete([]);
+      setDeleteModeActive(false);
+      await loadGraph();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete nodes");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -132,9 +201,15 @@ export default function GraphPage() {
           nodes={visibleNodes}
           edges={visibleEdges}
           projectId={currentProjectId}
-          selectedNodeId={clickModeActive ? null : selectedNodeId}
+          selectedNodeId={clickModeActive || deleteModeActive ? null : selectedNodeId}
           onSelectNode={handleNodeClick}
-          highlightedNodeIds={clickModeActive ? selectedNodesForEdge : undefined}
+          highlightedNodeIds={
+            deleteModeActive
+              ? selectedNodesForDelete
+              : clickModeActive
+                ? selectedNodesForEdge
+                : undefined
+          }
           brightnessAttribute={brightnessAttribute}
           onGraphUpdated={loadGraph}
         />
@@ -142,6 +217,7 @@ export default function GraphPage() {
           <NodeDetailPanel 
             node={selectedNode} 
             onEdit={handleEditClick}
+            onDelete={handleDeleteSingleNode}
           />
           {editingNodeId === selectedNodeId && (
             <NodeManagementPanel
@@ -175,10 +251,70 @@ export default function GraphPage() {
               loadGraph();
             }}
             clickModeActive={clickModeActive}
-            onClickModeChange={setClickModeActive}
+            onClickModeChange={(value) => {
+              setClickModeActive(value);
+              if (value) {
+                setDeleteModeActive(false);
+                setSelectedNodesForDelete([]);
+              }
+            }}
             selectedNodesForEdge={selectedNodesForEdge}
             onNodesChange={setSelectedNodesForEdge}
           />
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold font-heading text-text-primary">Delete Nodes</h3>
+                <p className="text-xs font-normal font-body text-text-muted">
+                  Select multiple nodes in the graph, then delete them
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteModeActive((value) => {
+                    const next = !value;
+                    if (next) {
+                      setClickModeActive(false);
+                      setSelectedNodesForEdge([]);
+                    } else {
+                      setSelectedNodesForDelete([]);
+                    }
+                    return next;
+                  });
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                  deleteModeActive
+                    ? "border-pkr-low/70 bg-pkr-low/20"
+                    : "border-border-default bg-bg-elevated"
+                }`}
+                aria-pressed={deleteModeActive}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white/90 transition ${
+                    deleteModeActive ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-xs font-body text-text-secondary">
+              <span>{selectedNodesForDelete.length} selected</span>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={deleteLoading || selectedNodesForDelete.length === 0}
+                className="rounded border border-border-default bg-bg-elevated px-3 py-1 font-semibold text-text-primary hover:bg-bg-hover disabled:opacity-60"
+              >
+                Delete selected
+              </button>
+            </div>
+            {deleteError && (
+              <div className="mt-2 rounded border border-pkr-low/30 bg-pkr-low/10 p-2 text-xs font-body text-pkr-low">
+                {deleteError}
+              </div>
+            )}
+          </div>
           <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
             <div className="flex items-center justify-between">
               <div>

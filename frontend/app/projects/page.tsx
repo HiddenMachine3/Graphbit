@@ -2433,7 +2433,10 @@ export default function ProjectsPage() {
                               className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                               title="Edit linked nodes"
                             >
-                              âœŽ
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
+                              </svg>
                             </button>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -3265,7 +3268,10 @@ export default function ProjectsPage() {
                               className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                               title="Edit linked nodes"
                             >
-                              âœŽ
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
+                              </svg>
                             </button>
                           </div>
 
