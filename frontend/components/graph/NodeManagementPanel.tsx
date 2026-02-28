@@ -29,6 +29,12 @@ export default function NodeManagementPanel({
   const [error, setError] = useState<string | null>(null);
 
   const handleCreateNode = useCallback(async () => {
+    console.debug('[NodeManagementPanel] handleCreateNode', {
+      projectId,
+      newTopicName,
+      newImportance,
+      newRelevance,
+    });
     if (!projectId) {
       setError('Select a project first');
       return;
@@ -47,12 +53,14 @@ export default function NodeManagementPanel({
       setNewRelevance(0.5);
       setShowCreateForm(false);
       onNodeCreated();
+      console.debug('[NodeManagementPanel] node created');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create node');
+      console.error('[NodeManagementPanel] create node failed', err);
     } finally {
       setLoading(false);
     }
-  }, [newTopicName, newImportance, newRelevance, onNodeCreated]);
+  }, [projectId, newTopicName, newImportance, newRelevance, onNodeCreated]);
 
   const handleUpdateNode = useCallback(async () => {
     if (!selectedNode || !projectId) return;
@@ -100,6 +108,14 @@ export default function NodeManagementPanel({
           <button
             className='w-full rounded bg-accent px-3 py-2 text-xs font-semibold font-body text-white hover:bg-accent-hover disabled:opacity-60'
             disabled={loading || !projectId}
+            onClick={() => {
+              console.debug('[NodeManagementPanel] Add New Node clicked', {
+                projectId,
+                loading,
+              });
+              setShowCreateForm(true);
+              setShowEditForm(false);
+            }}
           >
             + Add New Node
           </button>

@@ -31,7 +31,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${syne.variable} ${dmSans.variable}`}>
+    <html
+      lang="en"
+      className={`${syne.variable} ${dmSans.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-transparent overflow-hidden font-body">
         <div className="flex h-screen flex-col">
           <Topbar />
