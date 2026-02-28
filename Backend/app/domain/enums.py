@@ -9,6 +9,7 @@ class EdgeType(str, Enum):
     DEPENDS_ON = "DEPENDS_ON"
     APPLIED_WITH = "APPLIED_WITH"
     SUBCONCEPT_OF = "SUBCONCEPT_OF"
+    VIDEO_SEQUENCE = "VIDEO_SEQUENCE"
 
 
 class QuestionType(str, Enum):

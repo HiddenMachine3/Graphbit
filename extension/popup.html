@@ -25,6 +25,14 @@
       </section>
 
       <button id="captureBtn" class="btn btn-primary" type="button">Add Current Page as Material</button>
+      <button id="ingestBtn" class="btn btn-youtube hidden" type="button">Add to Graph</button>
+
+      <section id="ingestResultCard" class="card subtle hidden" aria-live="polite">
+        <p class="meta-title">Topics Extracted</p>
+        <div id="topicsGrid" class="topics-grid"></div>
+        <p id="ingestSummary" class="meta-value"></p>
+        <a id="openInGraphbit" href="#" target="_blank" class="btn btn-secondary open-link hidden">Open in Graphbit →</a>
+      </section>
 
       <section id="lastAddedCard" class="card subtle hidden" aria-live="polite">
         <p class="meta-title">Last Added</p>
@@ -36,6 +44,9 @@
         <section class="card card-advanced">
           <label for="backendUrl">Backend URL</label>
           <input id="backendUrl" type="text" placeholder="http://localhost:8000/api/v1" />
+
+          <label for="frontendUrl">Frontend URL</label>
+          <input id="frontendUrl" type="text" placeholder="http://localhost:3000" />
 
           <label for="createdBy">Created By (optional)</label>
           <input id="createdBy" type="text" placeholder="browser-extension" />
