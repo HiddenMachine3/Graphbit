@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from app.core.config import settings
@@ -52,7 +53,15 @@ class NodeSuggestionService:
                 logger.warning("Material %s has empty content; skipping suggestions", material_id)
             return SuggestionResult(strong=[], weak=[])
 
-        material_embedding = self.embedding_service.embed_texts([text])[0]
+        # ── Phase 1: embed material text + extract keyphrases concurrently ──
+        # These are independent blocking I/O calls (HF API + Gemini API).
+        material_embedding_list, candidate_phrases = await asyncio.gather(
+            asyncio.to_thread(self.embedding_service.embed_texts, [text]),
+            asyncio.to_thread(self.keyword_service.extract_phrases, text),
+        )
+        material_embedding = material_embedding_list[0]
+
+        # ── Phase 2: DB lookups (sequential — same async session) ──
         if material_id:
             await self.repository.save_material_embedding(material_id, material_embedding)
 
@@ -67,6 +76,7 @@ class NodeSuggestionService:
             top_k,
         )
 
+        # ── Phase 3: rank existing nodes ──
         semantic_scores = {match.node_id: match.score for match in vector_matches}
         keyword_scores = {match.node_id: match.score for match in keyword_matches}
 
@@ -92,13 +102,15 @@ class NodeSuggestionService:
             else:
                 weak.append(item)
 
-        candidate_phrases = self.keyword_service.extract_phrases(text)
+        # ── Phase 4: embed candidate phrases (parallelised inside embed_texts) ──
         chunks = chunk_text(text)
         total_chunks = max(len(chunks), 1)
 
         candidate_embeddings = []
         if candidate_phrases:
-            candidate_embeddings = self.embedding_service.embed_texts(candidate_phrases)
+            candidate_embeddings = await asyncio.to_thread(
+                self.embedding_service.embed_texts, candidate_phrases
+            )
 
         candidates: list[CandidatePhrase] = [
             CandidatePhrase(phrase=phrase, embedding=embedding)
