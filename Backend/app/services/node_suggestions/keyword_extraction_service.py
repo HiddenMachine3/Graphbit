@@ -3,6 +3,7 @@ import os
 import json
 from typing import Any
 
+import certifi
 import requests
 
 from app.core.config import settings
@@ -57,9 +58,9 @@ class KeywordExtractionService:
 
 
     def _extract_with_gemini(self, text: str, api_key: str) -> list[str]:
-        # New Gemini v1 generateContent shape (gemini-1.5-flash)
-        model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
-        endpoint = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}"
+        # v1beta is required for structured output (response_mime_type / response_schema)
+        model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
         schema = {
             "type": "object",
@@ -82,13 +83,14 @@ class KeywordExtractionService:
             ],
             "generationConfig": {
                 "temperature": 0.0,
-                "maxOutputTokens": 256,
+                "maxOutputTokens": 1024,
                 "response_mime_type": "application/json",
                 "response_schema": schema,
+                "thinkingConfig": {"thinkingBudget": 0},
             },
         }
 
-        resp = requests.post(endpoint, json=body, timeout=20)
+        resp = requests.post(endpoint, json=body, timeout=20, verify=certifi.where())
         resp.raise_for_status()
         data = resp.json()
 
