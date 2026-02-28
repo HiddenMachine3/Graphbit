@@ -244,3 +244,46 @@ select {
 .card-advanced {
   margin-top: 8px;
 }
+
+/* ── YouTube graph ingest ── */
+
+.btn-youtube {
+  background: linear-gradient(180deg, #ef4444, #dc2626);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.btn-youtube:hover {
+  filter: brightness(1.06);
+}
+
+.topics-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.topic-chip {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+
+.topic-chip-new {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.open-link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  margin-top: 2px;
+}
