@@ -303,6 +303,30 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
         imported_from_youtube,
         imported_video_id,
     )
+
+    # Auto-trigger graph ingest for YouTube materials so nodes appear on the graph
+    if imported_from_youtube and source_url:
+        try:
+            from app.api.graph import ingest_video as _ingest_video, VideoIngestRequest
+            ingest_request = VideoIngestRequest(
+                project_id=project_id,
+                video_url=source_url,
+                title=title,
+                transcript=content_text or transcript_text,
+            )
+            await _ingest_video(ingest_request, db)
+            logger.info(
+                "Material auto-ingest to graph success: material_id=%s project_id=%s",
+                material.id,
+                project_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Material auto-ingest to graph failed (non-blocking): material_id=%s error=%s",
+                material.id,
+                exc,
+            )
+
     return payload
 
 
