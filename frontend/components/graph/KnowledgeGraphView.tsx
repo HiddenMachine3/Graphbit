@@ -353,7 +353,7 @@ export default function KnowledgeGraphView({
   );
 
   return (
-    <div className="h-full w-full rounded-lg border border-slate-700 bg-slate-900 overflow-hidden">
+    <div className="h-full w-full rounded-lg border border-border-default bg-bg-base overflow-hidden">
       <ReactFlowProvider>
         <GraphFlowCanvas
           nodes={flowNodes}

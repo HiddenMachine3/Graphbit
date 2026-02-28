@@ -1,6 +1,7 @@
 import { Handle, Position } from "reactflow";
 
 import type { GraphNodeDTO } from "../../lib/types";
+import { getPKRRgba } from "../../lib/colors";
 
 type GraphNodeProps = {
   data: GraphNodeDTO & { brightnessAttribute?: keyof GraphNodeDTO };
@@ -44,20 +45,21 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
   const maxSize = 110;
   const size = minSize + (maxSize - minSize) * importance;
 
+  const pkr = clamp(toNumber(data.proven_knowledge_rating, 0));
   const boostedBrightness = clamp(brightness * 1.6);
-  const backgroundColor = `rgba(178, 38, 76, ${0.1 + boostedBrightness * 0.85})`;
-  const borderColor = `rgba(120, 24, 46, ${0.2 + borderIntensity * 0.7})`;
+  const backgroundColor = getPKRRgba(pkr, 0.1 + boostedBrightness * 0.85);
+  const borderColor = getPKRRgba(pkr, 0.2 + borderIntensity * 0.7);
   const glowStrength = 8 + boostedBrightness * 28;
   const glowOpacity = 0.15 + boostedBrightness * 0.45;
-  const glowColor = `rgba(178, 38, 76, ${glowOpacity})`;
+  const glowColor = getPKRRgba(pkr, glowOpacity);
 
   return (
     <div
       title={`${brightnessAttribute.replace(/_/g, ' ')}: ${brightnessValue.toFixed(2)} | Importance: ${data.importance.toFixed(
         2
       )} | Forgetting: ${data.forgetting_score.toFixed(2)}`}
-      className={`flex flex-col items-center justify-center rounded-full border-2 text-center text-[11px] shadow-sm transition ${
-        selected ? "ring-2 ring-slate-900" : ""
+      className={`flex flex-col items-center justify-center rounded-full border-2 text-center text-xs shadow-sm transition ${
+        selected ? "ring-2 ring-border-accent" : ""
       }`}
       style={{
         backgroundColor,
@@ -67,8 +69,8 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
         boxShadow: `0 0 ${glowStrength}px ${glowColor}, 0 0 ${glowStrength * 1.8}px ${glowColor}`,
       }}
     >
-      <div className="px-2 font-semibold text-white">{data.topic_name}</div>
-      <div className="mt-1 text-[10px] text-slate-200/80">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
+      <div className="px-2 text-xs font-semibold font-heading text-white">{data.topic_name}</div>
+      <div className="mt-1 text-xs font-normal font-body text-text-secondary">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
       <Handle
         type="target"
         position={Position.Left}

@@ -115,20 +115,20 @@ export default function MaterialViewer({ materialId, userId, content }: Material
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold">Material Viewer</h1>
-        <p className="text-sm text-slate-500">Consume content and receive interjections.</p>
+        <h1 className="text-2xl font-semibold font-heading">Material Viewer</h1>
+        <p className="text-sm font-body text-text-muted">Consume content and receive interjections.</p>
       </div>
 
       {error && <ErrorState message={error} />}
 
       <ConsumeProgressBar consumed={currentChunkIndex} total={totalChunks} />
 
-      <div className="rounded border border-slate-200 bg-white p-6 text-sm text-slate-700">
+      <div className="rounded border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
         {chunks[currentChunkIndex] ?? "You have reached the end of this material."}
       </div>
 
       <button
-        className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-60"
+        className="rounded bg-accent px-4 py-2 text-sm font-body text-white disabled:opacity-60 hover:bg-accent-hover transition"
         onClick={handleConsume}
         disabled={loading || currentChunkIndex >= totalChunks}
       >

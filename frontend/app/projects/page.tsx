@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Eye, EyeOff, Import } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, Import, MoreVertical } from "lucide-react";
+
+import { getPKRColor } from "@/lib/colors";
 
 import { useAppStore } from "@/lib/store";
 import type {
@@ -114,10 +116,10 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-[0_0_30px_rgba(107,24,44,0.35)]">
+    <div className="rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_0_30px_rgba(107,24,44,0.35)]">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-        {subtitle && <p className="text-xs text-slate-400">{subtitle}</p>}
+        <h3 className="text-lg font-semibold font-heading text-text-primary">{title}</h3>
+        {subtitle && <p className="text-xs font-body text-text-secondary">{subtitle}</p>}
       </div>
       {children}
     </div>
@@ -317,6 +319,8 @@ export default function ProjectsPage() {
   const [createMaterialSuggestionError, setCreateMaterialSuggestionError] = useState<string | null>(null);
   const [showCreateMaterialSuggestSettings, setShowCreateMaterialSuggestSettings] = useState(false);
   const [showEditMaterialSuggestSettings, setShowEditMaterialSuggestSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState<'nodes' | 'questions' | 'materials' | 'communities'>('nodes');
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
   const createMaterialSuggestionRequestRef = useRef(0);
   const createMaterialSuggestSettingsRef = useRef<HTMLDivElement | null>(null);
   const editMaterialSuggestSettingsRef = useRef<HTMLDivElement | null>(null);
@@ -1659,24 +1663,20 @@ export default function ProjectsPage() {
   }, [status]);
 
   return (
-    <div className="min-h-full bg-[radial-gradient(circle_at_top_left,rgba(178,38,76,0.18),transparent_45%),radial-gradient(circle_at_bottom_right,rgba(120,24,46,0.2),transparent_40%)] p-6 text-slate-200">
-      <div className="mb-6 flex flex-col gap-2">
-        <h2 className="text-2xl font-semibold text-white">Projects</h2>
-        <p className="text-sm text-slate-400">
-          Create projects, add nodes, attach materials, and manage questions and communities.
+    <div className="flex h-[calc(100vh-64px)] flex-col text-text-primary">
+      {/* Page Header */}
+      <div className="border-b border-border-default bg-bg-surface px-6 py-4">
+        <h2 className="text-2xl font-semibold font-heading text-text-primary">Projects</h2>
+        <p className="text-sm font-body text-text-secondary">
+          Create projects, manage nodes and materials
         </p>
-        {currentProject && (
-          <div className="text-xs uppercase tracking-[0.24em] text-slate-500">
-            Active project: {currentProject.name}
-          </div>
-        )}
       </div>
 
       {status.type !== "idle" && status.message !== "Imported!" && (
         <div
-          className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
+          className={`mx-6 mt-4 rounded-lg border px-4 py-3 text-sm ${
             status.type === "error"
-              ? "border-red-500/50 bg-red-500/10 text-red-200"
+              ? "border-pkr-low/50 bg-pkr-low/10 text-pkr-low"
               : "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
           }`}
         >
@@ -1696,156 +1696,213 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-        <SectionCard title="Projects" subtitle="Create, switch, and prune projects">
-          <div className="grid gap-4">
-            <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <div className="grid gap-3 sm:grid-cols-2">
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── LEFT PANEL ── */}
+        <div className="w-[380px] flex-shrink-0 overflow-y-auto border-r border-border-default bg-bg-surface p-4">
+          <div className="mb-3 text-xs font-semibold font-body text-text-muted uppercase tracking-wider">Projects</div>
+
+          <button
+            onClick={() => setShowNewProjectForm((prev) => !prev)}
+            className="mb-4 w-full rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm font-medium font-body text-text-primary transition hover:bg-bg-hover"
+          >
+            + New Project
+          </button>
+
+          {/* Collapsible New Project Form */}
+          <div className={`overflow-hidden transition-all duration-200 ${showNewProjectForm ? 'max-h-96 mb-4' : 'max-h-0'}`}>
+            <div className="rounded-xl border border-border-default bg-bg-elevated p-4">
+              <div className="grid gap-3">
                 <input
                   value={projectName}
                   onChange={(event) => setProjectName(event.target.value)}
                   placeholder="Project name"
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                />
+                <textarea
+                  value={projectDescription}
+                  onChange={(event) => setProjectDescription(event.target.value)}
+                  placeholder="Short project description"
+                  className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                 />
                 <select
                   value={projectVisibility}
                   onChange={(event) =>
                     setProjectVisibility(event.target.value as "private" | "shared" | "public")
                   }
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                 >
                   <option value="private">Private</option>
                   <option value="shared">Shared</option>
                   <option value="public">Public</option>
                 </select>
-              </div>
-              <textarea
-                value={projectDescription}
-                onChange={(event) => setProjectDescription(event.target.value)}
-                placeholder="Short project description"
-                className="min-h-[80px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-              />
-              <button
-                onClick={handleCreateProject}
-                disabled={busy}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Add project
-              </button>
-            </div>
-
-            <div className="grid gap-3">
-              {projects.map((project) => (
-                <div
-                  key={project.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm transition ${
-                    project.id === currentProjectId
-                      ? "border-blue-500/60 bg-blue-500/10"
-                      : "border-slate-800 bg-slate-950"
-                  }`}
+                <button
+                  onClick={() => {
+                    handleCreateProject();
+                    setShowNewProjectForm(false);
+                  }}
+                  disabled={busy}
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <div>
-                    <div className="font-semibold text-white">{project.name}</div>
-                    <div className="text-xs text-slate-400">{project.description || "No description"}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  Add project
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Project Cards */}
+          <div className="grid gap-2">
+            {projects.map((project) => (
+              <div
+                key={project.id}
+                onClick={() => {
+                  setCurrentProjectId(project.id);
+                  setCurrentProjectName(project.name);
+                }}
+                className={`group relative w-full cursor-pointer rounded-xl border p-3 text-left transition ${
+                  project.id === currentProjectId
+                    ? "border-border-accent bg-bg-elevated"
+                    : "border-border-default bg-transparent hover:bg-bg-hover"
+                }`}
+                style={{ borderLeft: project.id === currentProjectId ? `3px solid ${getPKRColor(nodes.reduce((sum, n) => sum + (n.proven_knowledge_rating ?? 0), 0) / Math.max(nodes.length, 1))}` : '3px solid var(--border-default)' }}
+              >
+                <div className="text-sm font-semibold font-body text-text-primary">{project.name}</div>
+                <div className="mt-0.5 text-xs font-body text-text-muted truncate">
+                  {project.description || "No description"}
+                </div>
+
+                {/* Kebab menu — appears on hover */}
+                <div className="absolute right-2 top-2 hidden group-hover:block">
+                  <div className="relative">
                     <button
-                      onClick={() => {
-                        setCurrentProjectId(project.id);
-                        setCurrentProjectName(project.name);
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProject(project.id);
                       }}
-                      className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-500"
-                    >
-                      Use
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProject(project.id)}
                       disabled={busy}
-                      className="rounded-lg border border-red-500/60 px-3 py-1.5 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded p-1 text-text-muted transition hover:bg-bg-hover hover:text-pkr-low disabled:opacity-60"
+                      title="Delete project"
                     >
-                      Delete
+                      <MoreVertical className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
-              ))}
-              {projects.length === 0 && (
-                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
-                  No projects yet. Create one to begin.
+              </div>
+            ))}
+            {projects.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
+                No projects yet. Create one to begin.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── RIGHT PANEL ── */}
+        <div className="flex-1 overflow-y-auto bg-bg-base p-6">
+          {!currentProjectId && (
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <div className="mb-4 text-text-muted">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/>
+                  <circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>
+                  <line x1="12" y1="9" x2="6" y2="7"/><line x1="12" y1="9" x2="18" y2="7"/>
+                  <line x1="12" y1="15" x2="6" y2="17"/><line x1="12" y1="15" x2="18" y2="17"/>
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold font-heading text-text-primary">Select a project</h3>
+              <p className="mt-2 text-sm font-body text-text-muted">
+                Choose one from the list on the left, or create a new one.
+              </p>
+            </div>
+          )}
+          {currentProjectId && (
+            <>
+          {/* Tab Bar */}
+          <div className="border-b border-border-default mb-6 flex gap-0">
+            {(['nodes', 'questions', 'materials', 'communities'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-3 text-sm font-medium font-body capitalize cursor-pointer transition-colors ${
+                  activeTab === tab
+                    ? 'text-text-primary border-b-2 border-accent'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* ── Tab: Nodes ── */}
+          {activeTab === 'nodes' && (
+            <div>
+              {!currentProjectId && (
+                <div className="text-sm text-text-secondary">Select a project to add nodes.</div>
+              )}
+              {currentProjectId && (
+                <div className="grid gap-4">
+                  <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
+                    <input
+                      value={nodeTopic}
+                      onChange={(event) => setNodeTopic(event.target.value)}
+                      placeholder="Node topic"
+                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={nodeImportance}
+                        onChange={(event) => setNodeImportance(Number(event.target.value))}
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={nodeRelevance}
+                        onChange={(event) => setNodeRelevance(Number(event.target.value))}
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      onClick={handleCreateNode}
+                      disabled={busy}
+                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Add node
+                    </button>
+                  </div>
+                  <div className="grid min-w-0 gap-2">
+                    {nodes.map((node) => (
+                      <div
+                        key={node.id}
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary"
+                        style={{ borderLeft: `3px solid ${getPKRColor(node.importance ?? 0)}` }}
+                      >
+                        <div className="font-semibold font-heading text-sm text-text-primary">{node.topic_name}</div>
+                        <div className="text-text-secondary">Importance: {node.importance.toFixed(2)}</div>
+                      </div>
+                    ))}
+                    {nodes.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
+                        No nodes yet for this project.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="Nodes"
-          subtitle="Add and review knowledge nodes in the active project"
-        >
-          {!currentProjectId && (
-            <div className="text-sm text-slate-400">Select a project to add nodes.</div>
           )}
-          {currentProjectId && (
-            <div className="grid gap-4">
-              <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <input
-                  value={nodeTopic}
-                  onChange={(event) => setNodeTopic(event.target.value)}
-                  placeholder="Node topic"
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    value={nodeImportance}
-                    onChange={(event) => setNodeImportance(Number(event.target.value))}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    value={nodeRelevance}
-                    onChange={(event) => setNodeRelevance(Number(event.target.value))}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <button
-                  onClick={handleCreateNode}
-                  disabled={busy}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Add node
-                </button>
-              </div>
-              <div className="grid min-w-0 gap-2">
-                {nodes.map((node) => (
-                  <div
-                    key={node.id}
-                    className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200"
-                  >
-                    <div className="font-semibold text-sm text-white">{node.topic_name}</div>
-                    <div className="text-slate-400">Importance: {node.importance.toFixed(2)}</div>
-                  </div>
-                ))}
-                {nodes.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
-                    No nodes yet for this project.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </SectionCard>
-      </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <SectionCard title="Questions" subtitle="Build a question bank for recall">
+          {/* ── Tab: Questions ── */}
+          {activeTab === 'questions' && (
+            <div>
           {!currentProjectId && (
-            <div className="text-sm text-slate-400">Select a project to manage questions.</div>
+            <div className="text-sm text-text-secondary">Select a project to manage questions.</div>
           )}
           {currentProjectId && (
             <div className="grid gap-4">
@@ -1854,19 +1911,19 @@ export default function ProjectsPage() {
                   type="button"
                   onClick={() => setIsImportQuestionsOpen(true)}
                   disabled={busy}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Import className="h-3.5 w-3.5" />
                   Import questions
                 </button>
               </div>
-              <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
                 <textarea
                   ref={createQuestionTextRef}
                   value={questionText}
                   onChange={(event) => setQuestionText(event.target.value)}
                   placeholder="Question prompt"
-                  className="min-h-[80px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="min-h-[80px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                 />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <select
@@ -1875,7 +1932,7 @@ export default function ProjectsPage() {
                       setQuestionType(event.target.value);
                       setQuestionCorrectOptionIndex(0);
                     }}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                   >
                     <option value="OPEN">Open</option>
                     <option value="FLASHCARD">Flashcard</option>
@@ -1888,16 +1945,16 @@ export default function ProjectsPage() {
                     max={5}
                     value={questionDifficulty}
                     onChange={(event) => setQuestionDifficulty(Number(event.target.value))}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                     placeholder="Difficulty"
                   />
                 </div>
                 {isQuestionMcq ? (
-                  <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-                    <div className="text-xs font-semibold text-slate-200">Multiple choice options</div>
+                  <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                    <div className="text-xs font-semibold font-heading text-text-primary">Multiple choice options</div>
                     {questionMcqOptions.map((option, index) => (
                       <div key={`create-option-${index}`} className="grid grid-cols-[auto_1fr] items-center gap-2">
-                        <label className="flex items-center gap-1 text-xs text-slate-300">
+                        <label className="flex items-center gap-1 text-xs text-text-secondary">
                           <input
                             type="radio"
                             name="create-correct-option"
@@ -1917,11 +1974,11 @@ export default function ProjectsPage() {
                             })
                           }
                           placeholder={`Option ${optionLabel(index)}`}
-                          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                         />
                       </div>
                     ))}
-                    <div className="text-[11px] text-slate-400">
+                    <div className="text-xs font-body text-text-secondary">
                       Select the radio button for the correct option.
                     </div>
                   </div>
@@ -1937,14 +1994,14 @@ export default function ProjectsPage() {
                           ? "Expected completion"
                           : "Answer"
                     }
-                    className="min-h-[60px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                    className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                   />
                 )}
                 <input
                   value={questionTags}
                   onChange={(event) => setQuestionTags(event.target.value)}
                   placeholder="Tags (comma separated)"
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -1956,25 +2013,25 @@ export default function ProjectsPage() {
                       setIsCreateQuestionNodesOpen((prev) => !prev);
                     }}
                     disabled={busy}
-                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isCreateQuestionNodesOpen ? "Hide node picker" : "Add nodes"}
                   </button>
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-text-secondary">
                     {createQuestionNodeSelection.length} node{createQuestionNodeSelection.length === 1 ? "" : "s"} selected
                   </div>
                 </div>
                 {isCreateQuestionNodesOpen && (
-                  <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div
                         ref={createQuestionSuggestSettingsRef}
-                        className="relative inline-flex rounded-lg border border-rose-500/60"
+                        className="relative inline-flex rounded-lg border border-accent/60"
                       >
                         <button
                           onClick={handleSuggestDraftQuestionNodes}
                           disabled={busy || questionSuggestionLoading}
-                          className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
                         </button>
@@ -1984,7 +2041,7 @@ export default function ProjectsPage() {
                             setShowCreateQuestionSuggestSettings((prev) => !prev)
                           }
                           disabled={busy || questionSuggestionLoading}
-                          className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                           aria-label="Toggle suggestion settings"
                         >
                           <ChevronDown
@@ -1994,9 +2051,9 @@ export default function ProjectsPage() {
                           />
                         </button>
                         {showCreateQuestionSuggestSettings && (
-                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
                             <div className="grid gap-3">
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
                                 Threshold: {suggestionThreshold.toFixed(2)}
                                 <input
                                   type="range"
@@ -2009,7 +2066,7 @@ export default function ProjectsPage() {
                                   title={SLIDER_HELP.threshold}
                                 />
                               </label>
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
                                 Semantic weight: {semanticWeight.toFixed(2)}
                                 <input
                                   type="range"
@@ -2022,7 +2079,7 @@ export default function ProjectsPage() {
                                   title={SLIDER_HELP.semantic}
                                 />
                               </label>
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
                                 Keyword weight: {keywordWeight.toFixed(2)}
                                 <input
                                   type="range"
@@ -2035,7 +2092,7 @@ export default function ProjectsPage() {
                                   title={SLIDER_HELP.keyword}
                                 />
                               </label>
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
                                 Dedup threshold: {dedupThreshold.toFixed(2)}
                                 <input
                                   type="range"
@@ -2052,20 +2109,20 @@ export default function ProjectsPage() {
                           </div>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-xs font-body text-text-secondary">
                         Adjust threshold + weights before suggesting.
                       </div>
                     </div>
                     {questionSuggestionError && (
-                      <div className="text-xs text-red-300">{questionSuggestionError}</div>
+                      <div className="text-xs text-pkr-low">{questionSuggestionError}</div>
                     )}
                     {createQuestionSuggestionData.strong.length > 0 && (
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-xs font-body text-text-secondary">
                         Strong suggestions preselected: {createQuestionSuggestionData.strong.length}
                       </div>
                     )}
                     {createQuestionNewSuggestions.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                         New candidates (click to add):
                         <button
                           type="button"
@@ -2075,7 +2132,7 @@ export default function ProjectsPage() {
                               .filter((title): title is string => Boolean(title));
                             setCreateQuestionNewNodeSelection(Array.from(new Set(titles)));
                           }}
-                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
                         >
                           Select all
                         </button>
@@ -2099,7 +2156,7 @@ export default function ProjectsPage() {
                               className={`rounded-full border px-2 py-0.5 transition ${
                                 isSelected
                                   ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                  : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
                               }`}
                             >
                               {title}
@@ -2108,7 +2165,7 @@ export default function ProjectsPage() {
                         })}
                       </div>
                     )}
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                       Selected nodes (click to toggle):
                       {createQuestionNodeSelection.map((nodeId) => {
                         const node = nodeLookup.get(nodeId);
@@ -2120,14 +2177,14 @@ export default function ProjectsPage() {
                             onClick={() => {
                               setCreateQuestionNodeSelection((prev) => prev.filter((id) => id !== nodeId));
                             }}
-                            className="rounded-full border border-rose-400 bg-rose-500/20 px-2 py-0.5 text-rose-100 transition"
+                            className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
                           >
                             {label}
                           </button>
                         );
                       })}
                       {createQuestionNodeSelection.length === 0 && (
-                        <span className="text-[11px] text-slate-500">None selected</span>
+                        <span className="text-xs font-body text-text-muted">None selected</span>
                       )}
                     </div>
                     <input
@@ -2140,7 +2197,7 @@ export default function ProjectsPage() {
                         }
                       }}
                       placeholder="Search nodes"
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                     />
                     {createQuestionNodeSearch.trim() &&
                       !nodes.some(
@@ -2150,13 +2207,13 @@ export default function ProjectsPage() {
                           type="button"
                           onClick={handleAddNodeFromCreateQuestionSearch}
                           disabled={busy}
-                          className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span>Add "{createQuestionNodeSearch.trim()}"</span>
-                          <span className="text-[10px] text-slate-400">Shift + Enter</span>
+                          <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
                         </button>
                       )}
-                    <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                    <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
                       {createQuestionFilteredNodes.map((node) => {
                         const isSelected = createQuestionNodeSelection.includes(node.id);
                         const isStrongSuggested = createQuestionStrongIds.has(node.id);
@@ -2172,23 +2229,23 @@ export default function ProjectsPage() {
                                   : [...prev, node.id]
                               );
                             }}
-                            className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                            className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
                               isSelected
-                                ? "bg-rose-600/20 text-rose-100"
+                                ? "bg-accent/20 text-text-primary"
                                 : isStrongSuggested
-                                  ? "bg-rose-500/10 text-rose-100"
+                                  ? "bg-accent/10 text-text-primary"
                                   : isWeakSuggested
-                                    ? "bg-slate-800/60 text-slate-200"
-                                    : "text-slate-200 hover:bg-slate-800/60"
+                                    ? "bg-bg-hover text-text-primary"
+                                    : "text-text-primary hover:bg-bg-hover"
                             }`}
                           >
                             <span className="font-medium">{node.topic_name}</span>
-                            <span className="text-[10px] text-slate-500">{node.id}</span>
+                            <span className="text-xs font-body text-text-muted">{node.id}</span>
                           </button>
                         );
                       })}
                       {createQuestionFilteredNodes.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-slate-500">No matching nodes.</div>
+                        <div className="px-3 py-2 text-xs text-text-muted">No matching nodes.</div>
                       )}
                     </div>
                   </div>
@@ -2196,7 +2253,7 @@ export default function ProjectsPage() {
                 <button
                   onClick={handleCreateQuestion}
                   disabled={busy}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Add question
                 </button>
@@ -2229,14 +2286,14 @@ export default function ProjectsPage() {
                   return (
                     <div
                       key={question.id}
-                      className="rounded-lg border border-slate-800 bg-slate-950 p-3"
+                      className="rounded-lg border border-border-default bg-bg-elevated p-3"
                     >
                       {isEditing ? (
                         <div className="grid gap-2">
                           <textarea
                             value={editQuestionText}
                             onChange={(event) => setEditQuestionText(event.target.value)}
-                            className="min-h-[70px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                           />
                           <textarea
                             value={editQuestionAnswer}
@@ -2248,7 +2305,7 @@ export default function ProjectsPage() {
                                   ? "Expected completion"
                                   : "Answer"
                             }
-                            className="min-h-[60px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                           />
                           <div className="grid gap-2 sm:grid-cols-2">
                             <select
@@ -2257,7 +2314,7 @@ export default function ProjectsPage() {
                                 setEditQuestionType(event.target.value);
                                 setEditQuestionCorrectOptionIndex(0);
                               }}
-                              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                             >
                               <option value="OPEN">Open</option>
                               <option value="FLASHCARD">Flashcard</option>
@@ -2270,12 +2327,12 @@ export default function ProjectsPage() {
                               max={5}
                               value={editQuestionDifficulty}
                               onChange={(event) => setEditQuestionDifficulty(Number(event.target.value))}
-                              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                             />
                           </div>
                           {isEditQuestionMcq && (
-                            <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-                              <div className="text-[11px] font-semibold text-slate-200">
+                            <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                              <div className="text-xs font-body font-semibold text-text-primary">
                                 Multiple choice options
                               </div>
                               {editQuestionMcqOptions.map((option, index) => (
@@ -2283,7 +2340,7 @@ export default function ProjectsPage() {
                                   key={`edit-option-${index}`}
                                   className="grid grid-cols-[auto_1fr] items-center gap-2"
                                 >
-                                  <label className="flex items-center gap-1 text-[11px] text-slate-300">
+                                  <label className="flex items-center gap-1 text-xs font-body text-text-secondary">
                                     <input
                                       type="radio"
                                       name={`edit-correct-option-${question.id}`}
@@ -2303,11 +2360,11 @@ export default function ProjectsPage() {
                                       })
                                     }
                                     placeholder={`Option ${optionLabel(index)}`}
-                                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                                   />
                                 </div>
                               ))}
-                              <div className="text-[10px] text-slate-400">
+                              <div className="text-xs font-body text-text-secondary">
                                 Select the radio button for the correct option.
                               </div>
                             </div>
@@ -2316,20 +2373,20 @@ export default function ProjectsPage() {
                             value={editQuestionTags}
                             onChange={(event) => setEditQuestionTags(event.target.value)}
                             placeholder="Tags (comma separated)"
-                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                           />
                           <div className="flex flex-wrap gap-2">
                             <button
                               onClick={() => handleUpdateQuestion(question.id)}
                               disabled={busy}
-                              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Save
                             </button>
                             <button
                               onClick={cancelEditQuestion}
                               disabled={busy}
-                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Cancel
                             </button>
@@ -2337,35 +2394,35 @@ export default function ProjectsPage() {
                         </div>
                       ) : (
                         <>
-                          <div className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold text-white">
+                          <div className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold font-heading text-text-primary">
                             {question.text}
                           </div>
                           {!isQuestionPreviewOpen && (
-                            <div className="min-w-0 whitespace-pre-wrap break-words text-xs text-slate-400">
+                            <div className="min-w-0 whitespace-pre-wrap break-words text-xs text-text-secondary">
                               Answer: {question.answer}
                             </div>
                           )}
                           {isQuestionPreviewOpen && (
-                            <div className="mt-2 grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                            <div className="mt-2 grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
                               <div>
-                                <div className="text-[11px] text-slate-400">Prompt</div>
+                                <div className="text-xs font-body text-text-secondary">Prompt</div>
                                 <RichContent content={question.text} className="mt-1" />
                               </div>
                               <div>
-                                <div className="text-[11px] text-slate-400">Answer</div>
+                                <div className="text-xs font-body text-text-secondary">Answer</div>
                                 <RichContent content={question.answer} className="mt-1" />
                               </div>
                             </div>
                           )}
                           <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <div className="text-xs text-slate-500">Linked nodes:</div>
+                            <div className="text-xs text-text-muted">Linked nodes:</div>
                             {linkedNodes.length === 0 && (
-                              <div className="text-xs text-slate-400">None</div>
+                              <div className="text-xs text-text-secondary">None</div>
                             )}
                             {linkedNodes.map((node) => (
                               <span
                                 key={node.id}
-                                className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-200"
+                                className="rounded-full border border-border-default bg-bg-elevated px-2 py-0.5 text-xs font-body text-text-primary"
                               >
                                 {node.topic_name}
                               </span>
@@ -2373,10 +2430,10 @@ export default function ProjectsPage() {
                             <button
                               onClick={() => beginEditQuestionNodes(question)}
                               disabled={busy}
-                              className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                               title="Edit linked nodes"
                             >
-                              ✎
+                              âœŽ
                             </button>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -2389,7 +2446,7 @@ export default function ProjectsPage() {
                                     : [...prev, question.id]
                                 );
                               }}
-                              className="inline-flex items-center rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-200 transition hover:border-slate-500"
+                              className="inline-flex items-center rounded-lg border border-border-default px-2 py-1 text-xs text-text-primary transition hover:border-border-accent"
                               title={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
                               aria-label={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
                             >
@@ -2402,29 +2459,29 @@ export default function ProjectsPage() {
                             <button
                               onClick={() => beginEditQuestion(question)}
                               disabled={busy}
-                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => handleDeleteQuestion(question.id)}
                               disabled={busy}
-                              className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Delete
                             </button>
                           </div>
                           {isEditingNodes && (
-                            <div className="mt-3 grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                            <div className="mt-3 grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div
                                   ref={editQuestionSuggestSettingsRef}
-                                  className="relative inline-flex rounded-lg border border-rose-500/60"
+                                  className="relative inline-flex rounded-lg border border-accent/60"
                                 >
                                   <button
                                     onClick={() => handleSuggestQuestionNodes(question.id)}
                                     disabled={busy || questionSuggestionLoading}
-                                    className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
                                   </button>
@@ -2432,7 +2489,7 @@ export default function ProjectsPage() {
                                     type="button"
                                     onClick={() => setShowEditQuestionSuggestSettings((prev) => !prev)}
                                     disabled={busy || questionSuggestionLoading}
-                                    className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                     aria-label="Toggle suggestion settings"
                                   >
                                     <ChevronDown
@@ -2442,9 +2499,9 @@ export default function ProjectsPage() {
                                     />
                                   </button>
                                   {showEditQuestionSuggestSettings && (
-                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
                                       <div className="grid gap-3">
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
                                           Threshold: {suggestionThreshold.toFixed(2)}
                                           <input
                                             type="range"
@@ -2457,7 +2514,7 @@ export default function ProjectsPage() {
                                             title={SLIDER_HELP.threshold}
                                           />
                                         </label>
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
                                           Semantic weight: {semanticWeight.toFixed(2)}
                                           <input
                                             type="range"
@@ -2470,7 +2527,7 @@ export default function ProjectsPage() {
                                             title={SLIDER_HELP.semantic}
                                           />
                                         </label>
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
                                           Keyword weight: {keywordWeight.toFixed(2)}
                                           <input
                                             type="range"
@@ -2483,7 +2540,7 @@ export default function ProjectsPage() {
                                             title={SLIDER_HELP.keyword}
                                           />
                                         </label>
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
                                           Dedup threshold: {dedupThreshold.toFixed(2)}
                                           <input
                                             type="range"
@@ -2500,20 +2557,20 @@ export default function ProjectsPage() {
                                     </div>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-slate-400">
+                                <div className="text-xs font-body text-text-secondary">
                                   Adjust threshold + weights before suggesting.
                                 </div>
                               </div>
                               {questionSuggestionError && (
-                                <div className="text-xs text-red-300">{questionSuggestionError}</div>
+                                <div className="text-xs text-pkr-low">{questionSuggestionError}</div>
                               )}
                               {questionSuggestionData.strong.length > 0 && (
-                                <div className="text-[11px] text-slate-400">
+                                <div className="text-xs font-body text-text-secondary">
                                   Strong suggestions preselected: {questionSuggestionData.strong.length}
                                 </div>
                               )}
                               {questionNewSuggestions.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                                <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                                   New candidates (click to add):
                                   <button
                                     type="button"
@@ -2523,7 +2580,7 @@ export default function ProjectsPage() {
                                         .filter((title): title is string => Boolean(title));
                                       setQuestionNewNodeSelection(Array.from(new Set(titles)));
                                     }}
-                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
                                   >
                                     Select all
                                   </button>
@@ -2547,7 +2604,7 @@ export default function ProjectsPage() {
                                         className={`rounded-full border px-2 py-0.5 transition ${
                                           isSelected
                                             ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                            : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                            : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
                                         }`}
                                       >
                                         {title}
@@ -2556,7 +2613,7 @@ export default function ProjectsPage() {
                                   })}
                                 </div>
                               )}
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                                 Selected nodes (click to toggle):
                                 {Array.from(
                                   new Set([
@@ -2580,8 +2637,8 @@ export default function ProjectsPage() {
                                       }}
                                       className={`rounded-full border px-2 py-0.5 transition ${
                                         isSelected
-                                          ? "border-rose-400 bg-rose-500/20 text-rose-100"
-                                          : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500"
+                                          ? "border-accent bg-accent/20 text-text-primary"
+                                          : "border-border-default bg-bg-elevated text-text-secondary hover:border-border-accent"
                                       }`}
                                     >
                                       {label}
@@ -2599,7 +2656,7 @@ export default function ProjectsPage() {
                                   }
                                 }}
                                 placeholder="Search nodes"
-                                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                               />
                               {questionNodeSearch.trim() &&
                                 !nodes.some(
@@ -2611,13 +2668,13 @@ export default function ProjectsPage() {
                                     type="button"
                                     onClick={handleAddNodeFromQuestionSearch}
                                     disabled={busy}
-                                    className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     <span>Add "{questionNodeSearch.trim()}"</span>
-                                    <span className="text-[10px] text-slate-400">Shift + Enter</span>
+                                    <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
                                   </button>
                                 )}
-                              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                              <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
                                 {questionFilteredNodes.map((node) => {
                                   const isSelected = questionNodeSelection.includes(node.id);
                                   const isStrongSuggested = questionStrongIds.has(node.id);
@@ -2633,23 +2690,23 @@ export default function ProjectsPage() {
                                             : [...prev, node.id]
                                         );
                                       }}
-                                      className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                                      className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
                                         isSelected
-                                          ? "bg-rose-600/20 text-rose-100"
+                                          ? "bg-accent/20 text-text-primary"
                                           : isStrongSuggested
-                                            ? "bg-rose-500/10 text-rose-100"
+                                            ? "bg-accent/10 text-text-primary"
                                             : isWeakSuggested
-                                              ? "bg-slate-800/60 text-slate-200"
-                                              : "text-slate-200 hover:bg-slate-800/60"
+                                              ? "bg-bg-hover text-text-primary"
+                                              : "text-text-primary hover:bg-bg-hover"
                                       }`}
                                     >
                                       <span className="font-medium">{node.topic_name}</span>
-                                      <span className="text-[10px] text-slate-500">{node.id}</span>
+                                      <span className="text-xs font-body text-text-muted">{node.id}</span>
                                     </button>
                                   );
                                 })}
                                 {questionFilteredNodes.length === 0 && (
-                                  <div className="px-3 py-2 text-xs text-slate-500">
+                                  <div className="px-3 py-2 text-xs text-text-muted">
                                     No matching nodes.
                                   </div>
                                 )}
@@ -2658,14 +2715,14 @@ export default function ProjectsPage() {
                                 <button
                                   onClick={() => handleSaveQuestionNodes(question.id)}
                                   disabled={busy}
-                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   Save links
                                 </button>
                                 <button
                                   onClick={cancelEditQuestionNodes}
                                   disabled={busy}
-                                  className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   Cancel
                                 </button>
@@ -2678,27 +2735,30 @@ export default function ProjectsPage() {
                   );
                 })}
                 {questions.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
+                  <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
                     No questions yet for this project.
                   </div>
                 )}
               </div>
             </div>
           )}
-        </SectionCard>
+            </div>
+          )}
 
-        <SectionCard title="Materials" subtitle="Upload .txt notes or paste content">
+          {/* ── Tab: Materials ── */}
+          {activeTab === 'materials' && (
+            <div>
           {!currentProjectId && (
-            <div className="text-sm text-slate-400">Select a project to manage materials.</div>
+            <div className="text-sm text-text-secondary">Select a project to manage materials.</div>
           )}
           {currentProjectId && (
             <div className="grid gap-4">
-              <div className="grid min-w-0 gap-3 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 p-4">
+              <div className="grid min-w-0 gap-3 overflow-hidden rounded-xl border border-border-default bg-bg-elevated p-4">
                 <input
                   value={materialTitle}
                   onChange={(event) => setMaterialTitle(event.target.value)}
                   placeholder="Material title"
-                  className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full min-w-0 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                 />
                 <div className="flex w-full min-w-0 items-center gap-2">
                   <input
@@ -2710,31 +2770,31 @@ export default function ProjectsPage() {
                       setMaterialTranscriptStatus(null);
                     }}
                     placeholder="YouTube link (optional if text provided)"
-                    className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                    className="min-w-0 flex-1 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                   />
                   <button
                     onClick={handleCheckMaterialTranscript}
                     disabled={busy || materialTranscriptChecking || !materialSourceUrl.trim() || createMaterialLinkInvalid}
-                    className="whitespace-nowrap rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="whitespace-nowrap rounded-lg border border-border-default px-3 py-2 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {materialTranscriptChecking ? "Fetching..." : "Fetch transcript"}
                   </button>
                 </div>
-                <div className={`text-xs ${createMaterialLinkInvalid ? "text-red-300" : "text-slate-500"}`}>
+                <div className={`text-xs ${createMaterialLinkInvalid ? "text-pkr-low" : "text-text-muted"}`}>
                   {createMaterialLinkInvalid
                     ? "Invalid YouTube URL format"
                     : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
                 </div>
                 {materialTranscriptStatus ? (
-                  <div className="text-xs text-slate-300">{materialTranscriptStatus}</div>
+                  <div className="text-xs text-text-secondary">{materialTranscriptStatus}</div>
                 ) : null}
                 {Boolean(createTranscriptPreview.trim()) && (
-                  <div className="grid gap-1 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-                    <div className="text-[11px] text-slate-400">Fetched transcript preview</div>
+                  <div className="grid gap-1 rounded-lg border border-border-default bg-bg-elevated p-3">
+                    <div className="text-xs font-body text-text-secondary">Fetched transcript preview</div>
                     <textarea
                       value={createTranscriptPreview}
                       readOnly
-                      className="min-h-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 focus:outline-none"
+                      className="min-h-[180px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary focus:outline-none"
                     />
                   </div>
                 )}
@@ -2742,7 +2802,7 @@ export default function ProjectsPage() {
                   value={materialText}
                   onChange={(event) => setMaterialText(event.target.value)}
                   placeholder="Paste notes or study material (optional if YouTube link provided)"
-                  className="w-full min-h-[100px] min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full min-h-[100px] min-w-0 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                 />
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -2754,25 +2814,25 @@ export default function ProjectsPage() {
                       setIsCreateMaterialNodesOpen((prev) => !prev);
                     }}
                     disabled={busy}
-                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isCreateMaterialNodesOpen ? "Hide node picker" : "Add nodes"}
                   </button>
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-text-secondary">
                     {createMaterialNodeSelection.length} node{createMaterialNodeSelection.length === 1 ? "" : "s"} selected
                   </div>
                 </div>
                 {isCreateMaterialNodesOpen && (
-                  <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div
                         ref={createMaterialSuggestSettingsRef}
-                        className="relative inline-flex rounded-lg border border-rose-500/60"
+                        className="relative inline-flex rounded-lg border border-accent/60"
                       >
                         <button
                           onClick={handleSuggestDraftMaterialNodes}
                           disabled={busy || createMaterialSuggestionLoading}
-                          className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {createMaterialSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
                         </button>
@@ -2780,7 +2840,7 @@ export default function ProjectsPage() {
                           type="button"
                           onClick={() => setShowCreateMaterialSuggestSettings((prev) => !prev)}
                           disabled={busy || createMaterialSuggestionLoading}
-                          className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                           aria-label="Toggle suggestion settings"
                         >
                           <ChevronDown
@@ -2790,9 +2850,9 @@ export default function ProjectsPage() {
                           />
                         </button>
                         {showCreateMaterialSuggestSettings && (
-                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
                             <div className="grid gap-3">
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
                                 Threshold: {suggestionThreshold.toFixed(2)}
                                 <input
                                   type="range"
@@ -2805,7 +2865,7 @@ export default function ProjectsPage() {
                                   title={SLIDER_HELP.threshold}
                                 />
                               </label>
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
                                 Semantic weight: {semanticWeight.toFixed(2)}
                                 <input
                                   type="range"
@@ -2818,7 +2878,7 @@ export default function ProjectsPage() {
                                   title={SLIDER_HELP.semantic}
                                 />
                               </label>
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
                                 Keyword weight: {keywordWeight.toFixed(2)}
                                 <input
                                   type="range"
@@ -2831,7 +2891,7 @@ export default function ProjectsPage() {
                                   title={SLIDER_HELP.keyword}
                                 />
                               </label>
-                              <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
                                 Dedup threshold: {dedupThreshold.toFixed(2)}
                                 <input
                                   type="range"
@@ -2848,20 +2908,20 @@ export default function ProjectsPage() {
                           </div>
                         )}
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-xs font-body text-text-secondary">
                         Uses notes + optional valid YouTube transcript.
                       </div>
                     </div>
                     {createMaterialSuggestionError && (
-                      <div className="text-xs text-red-300">{createMaterialSuggestionError}</div>
+                      <div className="text-xs text-pkr-low">{createMaterialSuggestionError}</div>
                     )}
                     {createMaterialSuggestionData.strong.length > 0 && (
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-xs font-body text-text-secondary">
                         Strong suggestions preselected: {createMaterialSuggestionData.strong.length}
                       </div>
                     )}
                     {createMaterialNewSuggestions.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                         New candidates (click to add):
                         <button
                           type="button"
@@ -2871,7 +2931,7 @@ export default function ProjectsPage() {
                               .filter((title): title is string => Boolean(title));
                             setCreateMaterialNewNodeSelection(Array.from(new Set(titles)));
                           }}
-                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
                         >
                           Select all
                         </button>
@@ -2895,7 +2955,7 @@ export default function ProjectsPage() {
                               className={`rounded-full border px-2 py-0.5 transition ${
                                 isSelected
                                   ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                  : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
                               }`}
                             >
                               {title}
@@ -2904,7 +2964,7 @@ export default function ProjectsPage() {
                         })}
                       </div>
                     )}
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                    <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                       Selected nodes (click to toggle):
                       {createMaterialNodeSelection.map((nodeId) => {
                         const node = nodeLookup.get(nodeId);
@@ -2916,14 +2976,14 @@ export default function ProjectsPage() {
                             onClick={() => {
                               setCreateMaterialNodeSelection((prev) => prev.filter((id) => id !== nodeId));
                             }}
-                            className="rounded-full border border-rose-400 bg-rose-500/20 px-2 py-0.5 text-rose-100 transition"
+                            className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
                           >
                             {label}
                           </button>
                         );
                       })}
                       {createMaterialNodeSelection.length === 0 && (
-                        <span className="text-[11px] text-slate-500">None selected</span>
+                        <span className="text-xs font-body text-text-muted">None selected</span>
                       )}
                     </div>
                     <input
@@ -2936,7 +2996,7 @@ export default function ProjectsPage() {
                         }
                       }}
                       placeholder="Search nodes"
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                     />
                     {createMaterialNodeSearch.trim() &&
                       !nodes.some(
@@ -2946,13 +3006,13 @@ export default function ProjectsPage() {
                           type="button"
                           onClick={handleAddNodeFromCreateMaterialSearch}
                           disabled={busy}
-                          className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <span>Add "{createMaterialNodeSearch.trim()}"</span>
-                          <span className="text-[10px] text-slate-400">Shift + Enter</span>
+                          <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
                         </button>
                       )}
-                    <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                    <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
                       {createMaterialFilteredNodes.map((node) => {
                         const isSelected = createMaterialNodeSelection.includes(node.id);
                         const isStrongSuggested = createMaterialStrongIds.has(node.id);
@@ -2968,23 +3028,23 @@ export default function ProjectsPage() {
                                   : [...prev, node.id]
                               );
                             }}
-                            className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                            className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
                               isSelected
-                                ? "bg-rose-600/20 text-rose-100"
+                                ? "bg-accent/20 text-text-primary"
                                 : isStrongSuggested
-                                  ? "bg-rose-500/10 text-rose-100"
+                                  ? "bg-accent/10 text-text-primary"
                                   : isWeakSuggested
-                                    ? "bg-slate-800/60 text-slate-200"
-                                    : "text-slate-200 hover:bg-slate-800/60"
+                                    ? "bg-bg-hover text-text-primary"
+                                    : "text-text-primary hover:bg-bg-hover"
                             }`}
                           >
                             <span className="font-medium">{node.topic_name}</span>
-                            <span className="text-[10px] text-slate-500">{node.id}</span>
+                            <span className="text-xs font-body text-text-muted">{node.id}</span>
                           </button>
                         );
                       })}
                       {createMaterialFilteredNodes.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-slate-500">No matching nodes.</div>
+                        <div className="px-3 py-2 text-xs text-text-muted">No matching nodes.</div>
                       )}
                     </div>
                   </div>
@@ -2992,14 +3052,14 @@ export default function ProjectsPage() {
                 <button
                   onClick={handleCreateMaterial}
                   disabled={busy || createMaterialLinkInvalid}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Add material
                 </button>
               </div>
 
-              <div className="grid gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              <div className="grid gap-3 rounded-xl border border-dashed border-border-default bg-bg-surface p-4">
+                <div className="label-caps text-text-muted">
                   Upload .txt files
                 </div>
                 <input
@@ -3007,12 +3067,12 @@ export default function ProjectsPage() {
                   accept=".txt,text/plain"
                   multiple
                   onChange={(event) => setMaterialFiles(event.target.files)}
-                  className="text-sm text-slate-300"
+                  className="text-sm text-text-secondary"
                 />
                 <button
                   onClick={handleUploadMaterialFiles}
                   disabled={busy}
-                  className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg border border-border-default px-4 py-2 text-sm text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Upload files
                 </button>
@@ -3053,14 +3113,14 @@ export default function ProjectsPage() {
                   return (
                     <div
                       key={material.id}
-                      className="min-w-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-950 px-3 py-2"
+                      className="min-w-0 overflow-hidden rounded-lg border border-border-default bg-bg-elevated px-3 py-2"
                     >
                       {isEditing ? (
                         <div className="grid gap-2">
                           <input
                             value={editMaterialTitle}
                             onChange={(event) => setEditMaterialTitle(event.target.value)}
-                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                           />
                           <input
                             value={editMaterialSourceUrl}
@@ -3080,9 +3140,9 @@ export default function ProjectsPage() {
                               );
                             }}
                             placeholder="YouTube/source link"
-                            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                           />
-                          <div className={`text-[11px] ${editMaterialLinkInvalid ? "text-red-300" : "text-slate-500"}`}>
+                          <div className={`text-xs font-body ${editMaterialLinkInvalid ? "text-pkr-low" : "text-text-muted"}`}>
                             {editMaterialLinkInvalid
                               ? "Invalid YouTube URL format"
                               : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
@@ -3092,16 +3152,16 @@ export default function ProjectsPage() {
                               type="button"
                               onClick={() => loadEditMaterialTranscript(editMaterialSourceUrl)}
                               disabled={busy || editMaterialTranscriptChecking || !editMaterialSourceUrl.trim() || editMaterialLinkInvalid}
-                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {editMaterialTranscriptChecking ? "Checking transcript..." : "Check transcript"}
                             </button>
                             {editMaterialTranscriptStatus && (
-                              <div className="text-[11px] text-slate-400">{editMaterialTranscriptStatus}</div>
+                              <div className="text-xs font-body text-text-secondary">{editMaterialTranscriptStatus}</div>
                             )}
                           </div>
                           <div className="grid gap-1">
-                            <div className="text-[11px] text-slate-400">Notes</div>
+                            <div className="text-xs font-body text-text-secondary">Notes</div>
                             <textarea
                               value={editMaterialText}
                               onChange={(event) => {
@@ -3111,12 +3171,12 @@ export default function ProjectsPage() {
                                   updateMaterialSuggestionDraft(editingMaterialId, { notes: nextValue });
                                 }
                               }}
-                              className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                              className="min-h-[90px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                             />
                           </div>
                           {(editMaterialTranscriptChecking || Boolean(editTranscriptPreview.trim())) && (
                             <div className="grid gap-1">
-                              <div className="text-[11px] text-slate-400">Transcript (YouTube)</div>
+                              <div className="text-xs font-body text-text-secondary">Transcript (YouTube)</div>
                               <textarea
                                 value={
                                   editMaterialTranscriptChecking
@@ -3124,7 +3184,7 @@ export default function ProjectsPage() {
                                     : editTranscriptPreview
                                 }
                                 readOnly
-                                className="min-h-[90px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-300 focus:outline-none"
+                                className="min-h-[90px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary focus:outline-none"
                               />
                             </div>
                           )}
@@ -3132,14 +3192,14 @@ export default function ProjectsPage() {
                             <button
                               onClick={() => handleUpdateMaterial(material.id)}
                               disabled={busy || editMaterialLinkInvalid}
-                              className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Save
                             </button>
                             <button
                               onClick={cancelEditMaterial}
                               disabled={busy}
-                              className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Cancel
                             </button>
@@ -3149,8 +3209,8 @@ export default function ProjectsPage() {
                         <div className="grid min-w-0 gap-3">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="break-words text-sm font-semibold text-white">{material.title}</div>
-                              <div className="text-xs text-slate-400">
+                              <div className="break-words text-sm font-semibold font-heading text-text-primary">{material.title}</div>
+                              <div className="text-xs text-text-secondary">
                                 {material.chunk_count} chunks
                               </div>
                               {material.source_url ? (
@@ -3158,7 +3218,7 @@ export default function ProjectsPage() {
                                   href={material.source_url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="break-all text-xs text-blue-300 hover:text-blue-200"
+                                  className="break-all text-xs text-accent hover:text-accent-hover"
                                 >
                                   Source link
                                 </a>
@@ -3168,7 +3228,7 @@ export default function ProjectsPage() {
                               <button
                                 onClick={() => beginEditMaterial(material)}
                                 disabled={busy}
-                                className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 Edit
                               </button>
@@ -3179,7 +3239,7 @@ export default function ProjectsPage() {
                               <button
                                 onClick={() => handleDeleteMaterial(material.id)}
                                 disabled={busy}
-                                className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 Delete
                               </button>
@@ -3187,14 +3247,14 @@ export default function ProjectsPage() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-xs text-slate-500">Linked nodes:</div>
+                            <div className="text-xs text-text-muted">Linked nodes:</div>
                             {linkedNodes.length === 0 && (
-                              <div className="text-xs text-slate-400">None</div>
+                              <div className="text-xs text-text-secondary">None</div>
                             )}
                             {linkedNodes.map((node) => (
                               <span
                                 key={node.id}
-                                className="max-w-full break-all rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-200"
+                                className="max-w-full break-all rounded-full border border-border-default bg-bg-elevated px-2 py-0.5 text-xs font-body text-text-primary"
                               >
                                 {node.topic_name}
                               </span>
@@ -3202,24 +3262,24 @@ export default function ProjectsPage() {
                             <button
                               onClick={() => beginEditMaterialNodes(material)}
                               disabled={busy}
-                              className="rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                               title="Edit linked nodes"
                             >
-                              ✎
+                              âœŽ
                             </button>
                           </div>
 
                           {isEditingNodes && (
-                            <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+                            <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
                               <div className="flex flex-wrap items-center gap-2">
                                 <div
                                   ref={editMaterialSuggestSettingsRef}
-                                  className="relative inline-flex rounded-lg border border-rose-500/60"
+                                  className="relative inline-flex rounded-lg border border-accent/60"
                                 >
                                   <button
                                     onClick={() => handleSuggestMaterialNodes(material.id)}
                                     disabled={busy || suggestionLoading}
-                                    className="rounded-l-lg border-r border-rose-500/60 bg-rose-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     {suggestionLoading ? "Suggesting..." : "Suggest nodes"}
                                   </button>
@@ -3227,7 +3287,7 @@ export default function ProjectsPage() {
                                     type="button"
                                     onClick={() => setShowEditMaterialSuggestSettings((prev) => !prev)}
                                     disabled={busy || suggestionLoading}
-                                    className="rounded-r-lg bg-rose-600 px-2 py-1 text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                     aria-label="Toggle suggestion settings"
                                   >
                                     <ChevronDown
@@ -3237,9 +3297,9 @@ export default function ProjectsPage() {
                                     />
                                   </button>
                                   {showEditMaterialSuggestSettings && (
-                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
                                       <div className="grid gap-3">
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.threshold}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
                                           Threshold: {suggestionThreshold.toFixed(2)}
                                           <input
                                             type="range"
@@ -3252,7 +3312,7 @@ export default function ProjectsPage() {
                                             title={SLIDER_HELP.threshold}
                                           />
                                         </label>
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.semantic}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
                                           Semantic weight: {semanticWeight.toFixed(2)}
                                           <input
                                             type="range"
@@ -3265,7 +3325,7 @@ export default function ProjectsPage() {
                                             title={SLIDER_HELP.semantic}
                                           />
                                         </label>
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.keyword}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
                                           Keyword weight: {keywordWeight.toFixed(2)}
                                           <input
                                             type="range"
@@ -3278,7 +3338,7 @@ export default function ProjectsPage() {
                                             title={SLIDER_HELP.keyword}
                                           />
                                         </label>
-                                        <label className="grid gap-1 text-[11px] text-slate-300" title={SLIDER_HELP.dedup}>
+                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
                                           Dedup threshold: {dedupThreshold.toFixed(2)}
                                           <input
                                             type="range"
@@ -3295,20 +3355,20 @@ export default function ProjectsPage() {
                                     </div>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-slate-400">
+                                <div className="text-xs font-body text-text-secondary">
                                   Adjust threshold + weights before suggesting.
                                 </div>
                               </div>
                               {suggestionError && (
-                                <div className="text-xs text-red-300">{suggestionError}</div>
+                                <div className="text-xs text-pkr-low">{suggestionError}</div>
                               )}
                               {suggestionData.strong.length > 0 && (
-                                <div className="text-[11px] text-slate-400">
+                                <div className="text-xs font-body text-text-secondary">
                                   Strong suggestions preselected: {suggestionData.strong.length}
                                 </div>
                               )}
                               {newSuggestions.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                                <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                                   New candidates (click to add):
                                   <button
                                     type="button"
@@ -3318,7 +3378,7 @@ export default function ProjectsPage() {
                                         .filter((title): title is string => Boolean(title));
                                       setMaterialNewNodeSelection(Array.from(new Set(titles)));
                                     }}
-                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
                                   >
                                     Select all
                                   </button>
@@ -3342,7 +3402,7 @@ export default function ProjectsPage() {
                                         className={`rounded-full border px-2 py-0.5 transition ${
                                           isSelected
                                             ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                            : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                            : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
                                         }`}
                                       >
                                         {title}
@@ -3351,7 +3411,7 @@ export default function ProjectsPage() {
                                   })}
                                 </div>
                               )}
-                              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                                 Selected nodes (click to toggle):
                                 {Array.from(
                                   new Set([
@@ -3375,8 +3435,8 @@ export default function ProjectsPage() {
                                       }}
                                       className={`rounded-full border px-2 py-0.5 transition ${
                                         isSelected
-                                          ? "border-rose-400 bg-rose-500/20 text-rose-100"
-                                          : "border-slate-700 bg-slate-900 text-slate-400 hover:border-slate-500"
+                                          ? "border-accent bg-accent/20 text-text-primary"
+                                          : "border-border-default bg-bg-elevated text-text-secondary hover:border-border-accent"
                                       }`}
                                     >
                                       {label}
@@ -3394,7 +3454,7 @@ export default function ProjectsPage() {
                                   }
                                 }}
                                 placeholder="Search nodes"
-                                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                               />
                               {materialNodeSearch.trim() &&
                                 !nodes.some(
@@ -3406,13 +3466,13 @@ export default function ProjectsPage() {
                                     type="button"
                                     onClick={handleAddNodeFromMaterialSearch}
                                     disabled={busy}
-                                    className="flex w-full items-center justify-between rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-xs text-rose-100 transition hover:border-rose-400/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                    className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
                                   >
                                     <span>Add "{materialNodeSearch.trim()}"</span>
-                                    <span className="text-[10px] text-slate-400">Shift + Enter</span>
+                                    <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
                                   </button>
                                 )}
-                              <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                              <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
                                 {filteredNodes.map((node) => {
                                   const isSelected = materialNodeSelection.includes(node.id);
                                   const isStrongSuggested = strongSuggestionIds.has(node.id);
@@ -3428,23 +3488,23 @@ export default function ProjectsPage() {
                                             : [...prev, node.id]
                                         );
                                       }}
-                                      className={`flex w-full items-center justify-between gap-3 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                                      className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
                                         isSelected
-                                          ? "bg-rose-600/20 text-rose-100"
+                                          ? "bg-accent/20 text-text-primary"
                                           : isStrongSuggested
-                                            ? "bg-rose-500/10 text-rose-100"
+                                            ? "bg-accent/10 text-text-primary"
                                             : isWeakSuggested
-                                              ? "bg-slate-800/60 text-slate-200"
-                                              : "text-slate-200 hover:bg-slate-800/60"
+                                              ? "bg-bg-hover text-text-primary"
+                                              : "text-text-primary hover:bg-bg-hover"
                                       }`}
                                     >
                                       <span className="font-medium">{node.topic_name}</span>
-                                      <span className="text-[10px] text-slate-500">{node.id}</span>
+                                      <span className="text-xs font-body text-text-muted">{node.id}</span>
                                     </button>
                                   );
                                 })}
                                 {filteredNodes.length === 0 && (
-                                  <div className="px-3 py-2 text-xs text-slate-500">
+                                  <div className="px-3 py-2 text-xs text-text-muted">
                                     No matching nodes.
                                   </div>
                                 )}
@@ -3453,14 +3513,14 @@ export default function ProjectsPage() {
                                 <button
                                   onClick={() => handleSaveMaterialNodes(material.id)}
                                   disabled={busy}
-                                  className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   Save links
                                 </button>
                                 <button
                                   onClick={cancelEditMaterialNodes}
                                   disabled={busy}
-                                  className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   Cancel
                                 </button>
@@ -3473,40 +3533,43 @@ export default function ProjectsPage() {
                   );
                 })}
                 {materials.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
+                  <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
                     No materials yet for this project.
                   </div>
                 )}
               </div>
             </div>
           )}
-        </SectionCard>
+            </div>
+          )}
 
-        <SectionCard title="Communities" subtitle="Group projects into shared spaces">
+          {/* ── Tab: Communities ── */}
+          {activeTab === 'communities' && (
+            <div>
           <div className="grid gap-4">
-            <div className="grid gap-3 rounded-xl border border-slate-800 bg-slate-950 p-4">
+            <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
               <input
                 value={communityName}
                 onChange={(event) => setCommunityName(event.target.value)}
                 placeholder="Community name"
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
               />
               <textarea
                 value={communityDescription}
                 onChange={(event) => setCommunityDescription(event.target.value)}
                 placeholder="Community description"
-                className="min-h-[70px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
               />
               <input
                 value={communityProjectIds}
                 onChange={(event) => setCommunityProjectIds(event.target.value)}
                 placeholder="Project ids (comma separated)"
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
               />
               <button
                 onClick={handleCreateCommunity}
                 disabled={busy}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Add community
               </button>
@@ -3518,38 +3581,38 @@ export default function ProjectsPage() {
                 return (
                   <div
                     key={community.id}
-                    className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-2"
+                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2"
                   >
                     {isEditing ? (
                       <div className="grid gap-2">
                         <input
                           value={editCommunityName}
                           onChange={(event) => setEditCommunityName(event.target.value)}
-                          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                         />
                         <textarea
                           value={editCommunityDescription}
                           onChange={(event) => setEditCommunityDescription(event.target.value)}
-                          className="min-h-[70px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                         />
                         <input
                           value={editCommunityProjectIds}
                           onChange={(event) => setEditCommunityProjectIds(event.target.value)}
                           placeholder="Project ids (comma separated)"
-                          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
                         />
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => handleUpdateCommunity(community.id)}
                             disabled={busy}
-                            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Save
                           </button>
                           <button
                             onClick={cancelEditCommunity}
                             disabled={busy}
-                            className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Cancel
                           </button>
@@ -3558,8 +3621,8 @@ export default function ProjectsPage() {
                     ) : (
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="text-sm font-semibold text-white">{community.name}</div>
-                          <div className="text-xs text-slate-400">
+                          <div className="text-sm font-semibold font-heading text-text-primary">{community.name}</div>
+                          <div className="text-xs text-text-secondary">
                             {community.description || "No description"}
                           </div>
                         </div>
@@ -3567,14 +3630,14 @@ export default function ProjectsPage() {
                           <button
                             onClick={() => beginEditCommunity(community)}
                             disabled={busy}
-                            className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => handleDeleteCommunity(community.id)}
                             disabled={busy}
-                            className="rounded-lg border border-red-500/60 px-3 py-1 text-xs text-red-200 transition hover:border-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             Delete
                           </button>
@@ -3585,14 +3648,20 @@ export default function ProjectsPage() {
                 );
               })}
               {communities.length === 0 && (
-                <div className="rounded-lg border border-dashed border-slate-700 p-4 text-xs text-slate-500">
+                <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
                   No communities yet.
                 </div>
               )}
             </div>
           </div>
-        </SectionCard>
+            </div>
+          )}
+          </>
+          )}
+        </div>
       </div>
+
+
 
       <GenerateQuestionsModal
         isOpen={Boolean(questionGeneratorMaterial)}

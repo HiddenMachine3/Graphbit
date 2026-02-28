@@ -11,16 +11,16 @@ export default function MaterialNode({ data, selected }: MaterialNodeProps) {
   return (
     <div
       title={`Material: ${data.topic_name}`}
-      className={`flex h-14 w-14 flex-col items-center justify-center rounded-2xl border text-center text-[10px] shadow-sm transition ${
-        selected ? "ring-2 ring-rose-200" : ""
+      className={`flex h-14 w-14 flex-col items-center justify-center rounded-2xl border text-center text-xs shadow-sm transition ${
+        selected ? "ring-2 ring-border-accent" : ""
       }`}
       style={{
-        backgroundColor: "rgba(178, 38, 76, 0.2)",
-        borderColor: "rgba(178, 38, 76, 0.55)",
+        backgroundColor: "rgba(255, 255, 255, 0.08)",
+        borderColor: "rgba(255, 255, 255, 0.15)",
       }}
     >
-      <div className="px-1 text-[9px] font-semibold text-white">Material</div>
-      <div className="mt-0.5 line-clamp-2 px-1 text-[9px] text-rose-100/90">
+      <div className="px-1 text-xs font-semibold font-heading text-white">Material</div>
+      <div className="mt-0.5 line-clamp-2 px-1 text-xs font-normal font-body text-text-secondary">
         {data.topic_name}
       </div>
       <Handle

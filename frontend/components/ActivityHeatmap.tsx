@@ -54,11 +54,11 @@ export default function ActivityHeatmap({
   }, [data]);
 
   const getIntensityClass = (count: number) => {
-    if (count === 0) return "bg-slate-800";
-    if (count <= 1) return "bg-blue-900";
-    if (count <= 2) return "bg-blue-700";
-    if (count <= 3) return "bg-blue-500";
-    return "bg-blue-400";
+    if (count === 0) return "bg-bg-elevated";
+    if (count <= 1) return "bg-accent-dim";
+    if (count <= 2) return "bg-accent/60";
+    if (count <= 3) return "bg-accent/80";
+    return "bg-accent";
   };
 
   const weeks = Array.from({ length: 53 }, (_, i) => i);
@@ -80,9 +80,9 @@ export default function ActivityHeatmap({
   }, [heatmapData, streak]);
 
   return (
-    <div className={`rounded-lg border border-slate-700 bg-slate-900 p-3 ${className}`}>
+    <div className={`rounded-lg border border-border-default bg-bg-surface p-3 ${className}`}>
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="flex items-center space-x-2 text-sm font-medium text-white">
+        <h3 className="flex items-center space-x-2 text-sm font-medium font-heading text-text-primary">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
@@ -93,22 +93,22 @@ export default function ActivityHeatmap({
           </svg>
           <span>Recall Activity</span>
         </h3>
-        <div className="flex items-center space-x-4 text-xs text-slate-400">
+        <div className="flex items-center space-x-4 text-xs font-body text-text-muted">
           <span>Less</span>
           <div className="flex space-x-1">
-            <div className="h-3 w-3 rounded-sm bg-slate-800"></div>
-            <div className="h-3 w-3 rounded-sm bg-blue-900"></div>
-            <div className="h-3 w-3 rounded-sm bg-blue-700"></div>
-            <div className="h-3 w-3 rounded-sm bg-blue-500"></div>
-            <div className="h-3 w-3 rounded-sm bg-blue-400"></div>
+            <div className="h-3 w-3 rounded-sm bg-bg-elevated"></div>
+            <div className="h-3 w-3 rounded-sm bg-accent-dim"></div>
+            <div className="h-3 w-3 rounded-sm bg-accent/60"></div>
+            <div className="h-3 w-3 rounded-sm bg-accent/80"></div>
+            <div className="h-3 w-3 rounded-sm bg-accent"></div>
           </div>
           <span>More</span>
-          <span className="text-slate-300">Last 12 Months</span>
+          <span className="text-text-secondary">Last 12 Months</span>
         </div>
       </div>
 
       <div className="mb-4 grid grid-cols-[28px_1fr] gap-2">
-        <div className="flex flex-col space-y-1 text-xs text-slate-500">
+        <div className="flex flex-col space-y-1 text-xs font-body text-text-muted">
           {daysOfWeek.map((day) => (
             <div key={day} className="flex h-3 items-center leading-3">
               {day}
@@ -126,8 +126,8 @@ export default function ActivityHeatmap({
                 return (
                   <div
                     key={`${weekIndex}-${dayIndex}`}
-                    className={`h-3 w-3 rounded-sm transition-colors hover:ring-1 hover:ring-slate-400 ${
-                      dayData ? getIntensityClass(dayData.count) : "bg-slate-800"
+                    className={`h-3 w-3 rounded-sm transition-colors hover:ring-1 hover:ring-border-accent ${
+                      dayData ? getIntensityClass(dayData.count) : "bg-bg-elevated"
                     }`}
                     title={
                       dayData ? `${dayData.date}: ${dayData.count} sessions` : ""
@@ -142,26 +142,26 @@ export default function ActivityHeatmap({
 
       <div className="flex items-center justify-between text-sm">
         <div>
-          <span className="font-medium text-white">Current Streak</span>
+          <span className="font-medium font-body text-text-primary">Current Streak</span>
           <div className="flex items-center space-x-1">
-            <span className="text-2xl font-bold text-blue-400">{currentStreak}</span>
-            <span className="text-slate-400">Days</span>
+            <span className="text-2xl font-bold font-heading text-accent">{currentStreak}</span>
+            <span className="font-body text-text-muted">Days</span>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-slate-400">Accuracy</div>
-          <div className="text-2xl font-bold text-green-400">
+          <div className="font-body text-text-muted">Accuracy</div>
+          <div className="text-2xl font-bold font-heading text-pkr-high">
             {accuracy === null || accuracy === undefined ? "—" : `${Math.round(accuracy * 100)}%`}
           </div>
         </div>
       </div>
 
-      <div className="mt-3 rounded-lg bg-blue-950 p-3">
+      <div className="mt-3 rounded-lg bg-bg-elevated p-3">
         <div className="flex items-center space-x-2 text-sm">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-blue-400"></div>
-          <span className="font-medium text-blue-200">LIVE SYNC</span>
+          <div className="h-2 w-2 animate-pulse rounded-full bg-accent"></div>
+          <span className="font-medium font-body text-accent">LIVE SYNC</span>
         </div>
-        <div className="mt-1 text-xs text-blue-300">
+        <div className="mt-1 text-xs font-body text-text-secondary">
           Visualizing{" "}
           <span className="font-medium">
             {nodesCount === null || nodesCount === undefined ? "—" : nodesCount}

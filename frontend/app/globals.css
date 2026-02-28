@@ -1,20 +1,84 @@
-@import url("https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600;700&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
+
+  /* Typography Scale */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+
+  /* Font Weights */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Line Heights */
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  /* Backgrounds — layered depth */
+  --bg-base: #0e0a0b;
+  --bg-surface: #16100f;
+  --bg-elevated: #1e1614;
+  --bg-hover: #261a18;
+
+  /* Accent — PRIMARY ACTIONS ONLY */
+  --accent: #e0315a;
+  --accent-hover: #c4284f;
+  --accent-dim: #8a1f37;
+  --accent-glow: rgba(224, 49, 90, 0.12);
+
+  /* Text */
+  --text-primary: #f0e8e5;
+  --text-secondary: #9a7e7a;
+  --text-muted: #5a3f3c;
+
+  /* Semantic — for PKR/knowledge states */
+  --pkr-high: #3db87a;
+  --pkr-high-bg: rgba(61, 184, 122, 0.1);
+  --pkr-medium: #e0943a;
+  --pkr-medium-bg: rgba(224, 148, 58, 0.1);
+  --pkr-low: #e05555;
+  --pkr-low-bg: rgba(224, 85, 85, 0.1);
+
+  /* UI */
+  --border: rgba(255, 255, 255, 0.06);
+  --border-accent: rgba(224, 49, 90, 0.25);
+  --shadow: rgba(0, 0, 0, 0.4);
 }
 
 body {
-  @apply text-slate-200;
-  background:
-    radial-gradient(circle at top left, rgba(178, 38, 76, 0.18), transparent 45%),
-    radial-gradient(circle at bottom right, rgba(120, 24, 46, 0.2), transparent 40%),
-    linear-gradient(180deg, #14090b 0%, #1a0c10 100%);
-  font-family: "Spectral", "Georgia", serif;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  font-family: var(--font-body), 'DM Sans', sans-serif;
+}
+
+/* Heading font family */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading), 'Syne', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Letter spacing for small text */
+.text-xs, .text-sm {
+  letter-spacing: 0.01em;
+}
+
+/* Special: metadata labels that are ALL CAPS */
+.label-caps {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 * {

@@ -15,7 +15,7 @@ const levelStyles: Record<WeaknessNodeDTO["weakness_level"], string> = {
 export default function WeaknessBreakdown({ nodes, isLoading = false }: WeaknessBreakdownProps) {
   if (isLoading) {
     return (
-      <div className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-500">
+      <div className="rounded border border-border-default bg-bg-surface p-4 text-sm font-body text-text-muted">
         Loading weakness details...
       </div>
     );
@@ -23,23 +23,23 @@ export default function WeaknessBreakdown({ nodes, isLoading = false }: Weakness
 
   if (nodes.length === 0) {
     return (
-      <div className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-500">
+      <div className="rounded border border-border-default bg-bg-surface p-4 text-sm font-body text-text-muted">
         No weakness details available.
       </div>
     );
   }
 
   return (
-    <div className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-700">
-      <div className="text-sm font-semibold text-slate-800">Weakness breakdown</div>
+    <div className="rounded border border-border-default bg-bg-surface p-4 text-sm font-body text-text-secondary">
+      <div className="text-sm font-semibold font-heading text-text-primary">Weakness breakdown</div>
       <div className="mt-3 space-y-2">
         {nodes.map((node) => (
           <div
             key={node.node_id}
-            className="flex items-center justify-between rounded border border-slate-100 bg-slate-50 px-3 py-2"
+            className="flex items-center justify-between rounded border border-border-default bg-bg-elevated px-3 py-2"
           >
             <div>
-              <div className="text-sm font-medium text-slate-900">{node.topic}</div>
+              <div className="text-sm font-medium text-text-primary">{node.topic}</div>
               <ExplainTooltip label="Why" text={node.explanation} />
             </div>
             <span

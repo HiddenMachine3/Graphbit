@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Search } from "lucide-react";
+import { Play, Search } from "lucide-react";
+import Link from "next/link";
 import ActiveCommunityBadge from "./communities/ActiveCommunityBadge";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { getCurrentUser } from "../lib/api/user";
@@ -27,8 +28,8 @@ export default function Topbar() {
 
   const linkClass = (href: string) =>
     pathname === href
-      ? "rounded-lg px-4 py-2 text-sm font-medium text-blue-300 bg-blue-950 border border-blue-800"
-      : "rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800";
+      ? "px-4 py-2 text-sm font-medium font-body text-text-primary border-b-2 border-accent"
+      : "rounded-lg px-4 py-2 text-sm font-medium font-body text-text-secondary hover:text-text-primary hover:bg-bg-hover";
 
   useEffect(() => {
     let mounted = true;
@@ -118,7 +119,7 @@ export default function Topbar() {
   }, []);
 
   return (
-    <header className="border-b border-slate-800 bg-slate-950 px-4 py-4">
+    <header className="border-b border-border-default bg-bg-surface px-4 py-4">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex items-center gap-3">
@@ -136,7 +137,7 @@ export default function Topbar() {
               </svg>
             </div>
             <div className="leading-tight">
-              <div className="text-sm font-semibold text-white">Graphbit</div>
+              <div className="text-xl font-bold font-heading text-text-primary">Graphbit</div>
             </div>
           </div>
           
@@ -149,7 +150,7 @@ export default function Topbar() {
 
         <div className="relative hidden md:flex items-center justify-center">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
             <input
               ref={searchInputRef}
               type="text"
@@ -174,24 +175,24 @@ export default function Topbar() {
                   }
                 }
               }}
-              className="w-48 rounded-lg border border-slate-700 bg-slate-800 py-2 pl-9 pr-4 text-sm text-slate-200 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 lg:w-64"
+              className="w-48 rounded-lg border border-border-default bg-bg-elevated py-2 pl-9 pr-4 text-sm font-body text-text-primary placeholder:text-text-muted focus:border-accent-dim focus:outline-none focus:ring-1 focus:ring-accent-dim lg:w-64"
             />
-            <kbd className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-slate-600 bg-slate-700 px-1.5 py-0.5 text-xs text-slate-400 lg:block">
+            <kbd className="absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-border-default bg-bg-elevated px-1.5 py-0.5 text-xs text-text-muted lg:block">
               /
             </kbd>
             {searchOpen && (
-              <div className="absolute left-0 right-0 z-20 mt-2 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl">
-                <div className="text-[10px] text-slate-500">Shift + Enter to add new node</div>
+              <div className="absolute left-0 right-0 z-20 mt-2 rounded-xl border border-border-default bg-bg-surface p-3 shadow-xl">
+                <div className="text-xs font-body text-text-muted">Shift + Enter to add new node</div>
                 {searchLoading && (
-                  <div className="text-xs text-slate-400">Searching...</div>
+                  <div className="text-xs font-body text-text-muted">Searching...</div>
                 )}
                 {searchError && (
-                  <div className="text-xs text-red-300">{searchError}</div>
+                  <div className="text-xs font-body text-pkr-low">{searchError}</div>
                 )}
                 {!searchLoading && !searchError && (
-                  <div className="grid gap-3 text-xs text-slate-200">
+                  <div className="grid gap-3 text-xs font-body text-text-primary">
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                      <div className="label-caps text-text-muted">
                         Nodes
                       </div>
                       {!searchLoading && normalizedQuery && currentProjectId && !hasExactNodeMatch && (
@@ -208,29 +209,29 @@ export default function Topbar() {
                               setSearchOpen(true);
                             }
                           }}
-                          className="mt-2 w-full rounded-md border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-left text-xs text-rose-100 transition hover:border-rose-400/70"
+                          className="mt-2 w-full rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-left text-xs text-text-primary transition hover:border-accent/70"
                         >
                           Add "{searchQuery.trim()}"
                         </button>
                       )}
                       {searchResults.nodes.length === 0 && (
-                        <div className="mt-1 text-slate-500">No node matches.</div>
+                        <div className="mt-1 text-text-muted">No node matches.</div>
                       )}
                       {searchResults.nodes.map((item) => (
-                        <div key={item.id} className="mt-1 rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1">
+                        <div key={item.id} className="mt-1 rounded-md border border-border-default bg-bg-elevated px-2 py-1">
                           {item.title}
                         </div>
                       ))}
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                      <div className="label-caps text-text-muted">
                         Materials
                       </div>
                       {searchResults.materials.length === 0 && (
-                        <div className="mt-1 text-slate-500">No material matches.</div>
+                        <div className="mt-1 text-text-muted">No material matches.</div>
                       )}
                       {searchResults.materials.map((item) => (
-                        <div key={item.id} className="mt-1 rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1">
+                        <div key={item.id} className="mt-1 rounded-md border border-border-default bg-bg-elevated px-2 py-1">
                           {item.title}
                         </div>
                       ))}
@@ -254,8 +255,14 @@ export default function Topbar() {
               Graph
             </a>
           </nav>
-          <button className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-slate-200 transition hover:border-slate-600">
-            <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-slate-700">
+          <Link href="/session">
+            <button className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover">
+              <Play className="h-4 w-4 fill-white" />
+              <span className="hidden sm:inline">Start Session</span>
+            </button>
+          </Link>
+          <button className="flex items-center gap-2 rounded-full border border-border-default bg-bg-elevated px-2 py-1 text-sm font-body text-text-secondary transition hover:border-border-accent">
+              <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-bg-hover">
               {currentUser?.avatar_url ? (
                 <img
                   src={currentUser.avatar_url}
@@ -263,7 +270,7 @@ export default function Topbar() {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span className="text-xs font-semibold text-slate-200">
+                  <span className="text-xs font-semibold font-body text-text-secondary">
                   {(currentUser?.name ?? currentUser?.username ?? "U").slice(0, 1)}
                 </span>
               )}
