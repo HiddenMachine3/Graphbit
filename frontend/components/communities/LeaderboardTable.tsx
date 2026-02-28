@@ -10,23 +10,23 @@ export default function LeaderboardTable({
   currentUserId,
 }: LeaderboardTableProps) {
   return (
-    <div className="rounded border border-slate-200 bg-white p-4">
-      <div className="text-sm font-semibold text-slate-800">Leaderboard</div>
-      <table className="mt-3 w-full text-left text-sm">
-        <thead className="text-xs text-slate-400">
+    <div className="rounded border border-border-default bg-bg-surface p-4">
+      <div className="text-sm font-semibold font-heading text-text-primary">Leaderboard</div>
+      <table className="mt-3 w-full text-left text-sm font-body">
+        <thead className="text-xs text-text-muted">
           <tr>
             <th className="py-1">Rank</th>
             <th className="py-1">User</th>
             <th className="py-1">Score</th>
           </tr>
         </thead>
-        <tbody className="text-slate-700">
+        <tbody className="text-text-secondary">
           {entries.map((entry) => (
             <tr
               key={entry.user_id}
               className={
                 currentUserId && entry.user_id === currentUserId
-                  ? "bg-slate-50 font-semibold"
+                  ? "bg-bg-hover font-semibold"
                   : ""
               }
             >
@@ -38,7 +38,7 @@ export default function LeaderboardTable({
         </tbody>
       </table>
       {entries.length === 0 && (
-        <div className="mt-2 text-xs text-slate-500">No leaderboard data.</div>
+          <div className="mt-2 text-xs font-body text-text-muted">No leaderboard data.</div>
       )}
     </div>
   );

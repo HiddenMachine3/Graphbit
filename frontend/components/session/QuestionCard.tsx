@@ -19,12 +19,12 @@ export default function QuestionCard({
   const isMCQ = question.question_type === "MCQ";
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6">
-      <div className="text-xs uppercase tracking-wide text-slate-400">
+    <div className="rounded-2xl border border-border-default bg-bg-elevated p-6">
+      <div className="label-caps text-text-muted">
         {question.question_type}
       </div>
-      <div className="mt-2 text-lg font-semibold text-white">
-        <RichContent content={question.text} className="text-lg font-semibold text-white" />
+      <div className="mt-2 text-lg font-semibold font-heading text-text-primary">
+        <RichContent content={question.text} className="text-lg font-semibold font-heading text-text-primary" />
       </div>
 
       {isMCQ && question.options && (
@@ -34,16 +34,16 @@ export default function QuestionCard({
               key={index}
               onClick={() => onOptionSelect?.(option)}
               disabled={disabled}
-              className={`w-full rounded-lg border px-4 py-3 text-left text-sm font-medium transition-colors ${
+              className={`w-full rounded-lg border px-4 py-3 text-left text-sm font-medium font-body transition-colors ${
                 selectedOption === option
-                  ? "border-blue-500/60 bg-blue-500/15 text-white ring-2 ring-blue-400/40"
-                  : "border-slate-700 bg-slate-950/35 text-slate-200 hover:border-slate-500 hover:bg-slate-900/55"
+                  ? "border-accent/60 bg-accent/15 text-text-primary ring-2 ring-accent/40"
+                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent hover:bg-bg-hover"
               } ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <div>{option}</div>
               {feedback && selectedOption === option && feedback.explanation && (
                 <div
-                  className={`mt-2 text-xs font-semibold ${
+                  className={`mt-2 text-xs font-semibold font-body ${
                     feedback.correct ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >

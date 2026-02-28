@@ -134,8 +134,8 @@ export default function CommunitiesPage() {
   return (
     <section className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Communities</h1>
-        <p className="text-sm text-slate-500">Switch active learning context</p>
+        <h1 className="text-2xl font-bold font-heading">Communities</h1>
+        <p className="text-sm font-normal font-body text-text-muted">Switch active learning context</p>
       </div>
 
       {error && <ErrorState message={error} />}

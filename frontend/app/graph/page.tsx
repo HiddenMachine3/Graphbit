@@ -114,17 +114,17 @@ export default function GraphPage() {
 
   if (!summary) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6 text-sm text-slate-300">
+      <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm text-text-secondary">
         No graph data available.
       </div>
     );
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-6 px-6 pt-4">
       <div>
-        <h1 className="text-2xl font-semibold">Knowledge Graph</h1>
-        <p className="text-sm text-slate-400">Visualized from backend graph data</p>
+        <h1 className="text-2xl font-bold font-heading">Knowledge Graph</h1>
+        <p className="text-sm font-normal font-body text-text-muted">Visualized from backend graph data</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -179,19 +179,19 @@ export default function GraphPage() {
             selectedNodesForEdge={selectedNodesForEdge}
             onNodesChange={setSelectedNodesForEdge}
           />
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-white">Materials</h3>
-                <p className="text-xs text-slate-400">Show materials linked to nodes</p>
+                <h3 className="font-semibold font-heading text-text-primary">Materials</h3>
+                <p className="text-xs font-normal font-body text-text-muted">Show materials linked to nodes</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowMaterials((value) => !value)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
                   showMaterials
-                    ? "border-rose-500/70 bg-rose-600/30"
-                    : "border-slate-700 bg-slate-900/60"
+                    ? "border-accent/70 bg-accent/30"
+                    : "border-border-default bg-bg-elevated"
                 }`}
                 aria-pressed={showMaterials}
               >
@@ -203,12 +203,12 @@ export default function GraphPage() {
               </button>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
-            <h3 className="font-semibold text-white">Node Brightness</h3>
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
+            <h3 className="font-semibold font-heading text-text-primary">Node Brightness</h3>
             <select
               value={brightnessAttribute}
               onChange={(e) => setBrightnessAttribute(e.target.value as keyof GraphNodeDTO)}
-              className="mt-2 w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200"
+              className="mt-2 w-full rounded border border-border-default bg-bg-elevated px-2 py-1 text-xs font-body text-text-primary focus:border-accent-dim"
             >
               <option value="proven_knowledge_rating">Proven Knowledge</option>
               <option value="user_estimated_knowledge_rating">User Estimated Knowledge</option>

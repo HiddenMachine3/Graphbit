@@ -177,16 +177,16 @@ export default function SessionContainer() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 shadow-[0_18px_45px_rgba(69,13,30,0.35)] backdrop-blur">
+      <div className="rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_18px_45px_rgba(69,13,30,0.35)] backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-white">Revision Session</h1>
-            <p className="text-sm text-slate-300">
+            <h1 className="text-2xl font-semibold font-heading text-text-primary">Revision Session</h1>
+            <p className="text-sm font-body text-text-secondary">
               Adaptive recall guided by your knowledge graph
             </p>
           </div>
           <button
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
             onClick={handleStartSession}
             disabled={loading}
           >
@@ -203,13 +203,13 @@ export default function SessionContainer() {
       {error && <ErrorState message={error} />}
 
       {!session && !loading && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6 text-sm text-slate-300">
+        <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
           Start a session to receive questions.
         </div>
       )}
 
       {session && completed && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6 text-sm text-slate-300">
+        <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
           Session complete. You can restart to begin again.
         </div>
       )}
@@ -230,10 +230,10 @@ export default function SessionContainer() {
             feedback={currentQuestion.question_type === "MCQ" ? feedback : null}
           />
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-6 backdrop-blur">
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 backdrop-blur">
             {currentQuestion.question_type === "OPEN" && (
               <>
-                <label className="text-sm font-medium text-slate-200">
+                <label className="text-sm font-medium font-body text-text-primary">
                   Your answer
                 </label>
                 <AnswerInput
@@ -251,7 +251,7 @@ export default function SessionContainer() {
               <>
                 {!showFlashcardAnswer && (
                   <button
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
                     onClick={() => setShowFlashcardAnswer(true)}
                     disabled={loading}
                   >
@@ -259,8 +259,8 @@ export default function SessionContainer() {
                   </button>
                 )}
                 {showFlashcardAnswer && (
-                  <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/60 p-4">
-                    <div className="text-xs uppercase tracking-wide text-slate-400">Answer</div>
+                  <div className="mt-3 rounded-lg border border-border-default bg-bg-elevated p-4">
+                    <div className="label-caps text-text-muted">Answer</div>
                     <RichContent content={currentQuestion.answer} className="mt-2" />
                   </div>
                 )}
@@ -271,14 +271,14 @@ export default function SessionContainer() {
                 {currentQuestion.question_type !== "FLASHCARD" ? (
                   <>
                     <button
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
                       onClick={handleSubmitAnswer}
                       disabled={loading || !answer.trim()}
                     >
                       Submit Answer
                     </button>
                     <button
-                      className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-500 disabled:opacity-60"
+                      className="rounded-lg border border-border-default px-4 py-2 text-sm font-body text-text-primary transition hover:border-border-accent disabled:opacity-60"
                       onClick={handleIDontKnow}
                       disabled={loading}
                     >
@@ -289,28 +289,28 @@ export default function SessionContainer() {
                   showFlashcardAnswer && (
                     <div className="flex flex-wrap gap-2">
                       <button
-                        className="rounded-lg border border-rose-500/60 px-3 py-2 text-sm text-rose-100 transition hover:border-rose-400 disabled:opacity-60"
+                        className="rounded-lg border border-rose-500/60 px-3 py-2 text-sm font-body text-rose-100 transition hover:border-rose-400 disabled:opacity-60"
                         onClick={() => void handleFlashcardPerformance("bad")}
                         disabled={loading}
                       >
                         Bad
                       </button>
                       <button
-                        className="rounded-lg border border-amber-500/60 px-3 py-2 text-sm text-amber-100 transition hover:border-amber-400 disabled:opacity-60"
+                        className="rounded-lg border border-amber-500/60 px-3 py-2 text-sm font-body text-amber-100 transition hover:border-amber-400 disabled:opacity-60"
                         onClick={() => void handleFlashcardPerformance("ok")}
                         disabled={loading}
                       >
                         Ok
                       </button>
                       <button
-                        className="rounded-lg border border-emerald-500/60 px-3 py-2 text-sm text-emerald-100 transition hover:border-emerald-400 disabled:opacity-60"
+                        className="rounded-lg border border-emerald-500/60 px-3 py-2 text-sm font-body text-emerald-100 transition hover:border-emerald-400 disabled:opacity-60"
                         onClick={() => void handleFlashcardPerformance("good")}
                         disabled={loading}
                       >
                         Good
                       </button>
                       <button
-                        className="rounded-lg border border-blue-500/60 px-3 py-2 text-sm text-blue-100 transition hover:border-blue-400 disabled:opacity-60"
+                        className="rounded-lg border border-blue-500/60 px-3 py-2 text-sm font-body text-blue-100 transition hover:border-blue-400 disabled:opacity-60"
                         onClick={() => void handleFlashcardPerformance("great")}
                         disabled={loading}
                       >
@@ -324,9 +324,9 @@ export default function SessionContainer() {
           </div>
 
           {feedback && currentQuestion.question_type === "MCQ" && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
+            <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
               <button
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
                 onClick={handleNextQuestion}
                 disabled={loading}
               >
@@ -336,12 +336,12 @@ export default function SessionContainer() {
           )}
 
           {feedback && currentQuestion.question_type === "FLASHCARD" && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
-              <div className="mb-3 text-sm text-slate-300">
-                Performance recorded: <span className="font-semibold text-white">{feedback.performance ?? "ok"}</span>
+            <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
+              <div className="mb-3 text-sm font-body text-text-secondary">
+                Performance recorded: <span className="font-semibold text-text-primary">{feedback.performance ?? "ok"}</span>
               </div>
               <button
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
                 onClick={handleNextQuestion}
                 disabled={loading}
               >

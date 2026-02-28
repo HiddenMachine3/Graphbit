@@ -19,7 +19,7 @@ const toRenderableHtml = (value: string) => {
 export default function RichContent({ content, className = "" }: RichContentProps) {
   return (
     <div
-      className={`text-sm text-slate-100 [&_img]:max-h-64 [&_img]:max-w-full [&_img]:rounded [&_img]:border [&_img]:border-slate-700 ${className}`}
+      className={`text-sm font-body text-text-primary [&_img]:max-h-64 [&_img]:max-w-full [&_img]:rounded [&_img]:border [&_img]:border-border-default ${className}`}
       dangerouslySetInnerHTML={{ __html: toRenderableHtml(content || "") }}
     />
   );

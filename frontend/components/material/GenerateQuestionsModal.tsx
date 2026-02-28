@@ -433,23 +433,23 @@ export default function GenerateQuestionsModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-      <div className="flex h-[90vh] w-full max-w-6xl flex-col rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-800 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-elevated p-4">
+      <div className="flex h-[90vh] w-full max-w-6xl flex-col rounded-2xl border border-border-default bg-bg-elevated shadow-2xl">
+        <div className="flex items-start justify-between border-b border-border-default p-4">
           <div>
-            <div className="text-base font-semibold text-white">Generate questions</div>
-            <div className="text-xs text-slate-400">Material: {material.title}</div>
+            <div className="text-base font-semibold font-heading text-text-primary">Generate questions</div>
+            <div className="text-xs font-body text-text-secondary">Material: {material.title}</div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div
               ref={bulkSuggestSettingsRef}
-              className="relative inline-flex rounded-lg border border-rose-500/60"
+              className="relative inline-flex rounded-lg border border-accent/60"
             >
               <button
                 type="button"
                 onClick={handleBulkSuggestNodes}
                 disabled={loading || submitting || draftQuestions.length === 0}
-                className="rounded-l-lg border-r border-rose-500/60 px-3 py-1.5 text-xs text-rose-100 transition hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-l-lg border-r border-accent/60 px-3 py-1.5 text-xs font-body text-text-primary transition hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Bulk suggest nodes
               </button>
@@ -457,15 +457,15 @@ export default function GenerateQuestionsModal({
                 type="button"
                 onClick={() => setShowBulkSuggestSettings((prev) => !prev)}
                 disabled={loading || submitting}
-                className="rounded-r-lg px-2 py-1.5 text-rose-100 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-r-lg px-2 py-1.5 text-text-primary transition hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Toggle bulk suggestion settings"
               >
                 <ChevronDown className={`h-3.5 w-3.5 transition ${showBulkSuggestSettings ? "rotate-180" : ""}`} />
               </button>
               {showBulkSuggestSettings && (
-                <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                <div className="absolute right-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
                   <div className="grid gap-3">
-                    <label className="grid gap-1 text-[11px] text-slate-300">
+                    <label className="grid gap-1 text-xs font-body text-text-secondary">
                       Threshold: {suggestionThreshold.toFixed(2)}
                       <input
                         type="range"
@@ -477,7 +477,7 @@ export default function GenerateQuestionsModal({
                         className="w-full"
                       />
                     </label>
-                    <label className="grid gap-1 text-[11px] text-slate-300">
+                    <label className="grid gap-1 text-xs font-body text-text-secondary">
                       Semantic weight: {semanticWeight.toFixed(2)}
                       <input
                         type="range"
@@ -489,7 +489,7 @@ export default function GenerateQuestionsModal({
                         className="w-full"
                       />
                     </label>
-                    <label className="grid gap-1 text-[11px] text-slate-300">
+                    <label className="grid gap-1 text-xs font-body text-text-secondary">
                       Keyword weight: {keywordWeight.toFixed(2)}
                       <input
                         type="range"
@@ -501,7 +501,7 @@ export default function GenerateQuestionsModal({
                         className="w-full"
                       />
                     </label>
-                    <label className="grid gap-1 text-[11px] text-slate-300">
+                    <label className="grid gap-1 text-xs font-body text-text-secondary">
                       Dedup threshold: {dedupThreshold.toFixed(2)}
                       <input
                         type="range"
@@ -521,14 +521,14 @@ export default function GenerateQuestionsModal({
               type="button"
               onClick={handleBulkAdd}
               disabled={loading || submitting || draftQuestions.length === 0}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? "Adding..." : "Bulk add"}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-slate-600 px-2 py-1.5 text-xs text-slate-300 transition hover:border-slate-500"
+              className="rounded-lg border border-border-default px-2 py-1.5 text-xs font-body text-text-secondary transition hover:border-border-accent"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -536,9 +536,9 @@ export default function GenerateQuestionsModal({
           </div>
         </div>
 
-        <div className="border-b border-slate-800 p-4">
+        <div className="border-b border-border-default p-4">
           <div className="grid gap-3 md:grid-cols-[120px_1fr] md:items-end">
-            <label className="grid gap-1 text-xs text-slate-400">
+            <label className="grid gap-1 text-xs font-body text-text-secondary">
               Number of questions
               <input
                 type="number"
@@ -546,7 +546,7 @@ export default function GenerateQuestionsModal({
                 max={20}
                 value={count}
                 onChange={(event) => setCount(Math.max(1, Math.min(20, Number(event.target.value) || 1)))}
-                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none"
+                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm font-body text-text-primary focus:border-accent-dim focus:outline-none"
               />
             </label>
             <div className="flex items-center gap-2">
@@ -554,7 +554,7 @@ export default function GenerateQuestionsModal({
                 type="button"
                 onClick={() => void loadGeneratedQuestions(count)}
                 disabled={loading || submitting}
-                className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border-default px-3 py-2 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? "Generating..." : hasGeneratedOnce ? "Redo" : "Generate"}
               </button>
@@ -562,7 +562,7 @@ export default function GenerateQuestionsModal({
                 type="button"
                 onClick={handleAddEmptyQuestion}
                 disabled={loading || submitting}
-                className="rounded-lg border border-slate-600 px-3 py-2 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-border-default px-3 py-2 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Add empty question
               </button>
@@ -571,10 +571,10 @@ export default function GenerateQuestionsModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {localError && <div className="mb-3 text-sm text-red-300">{localError}</div>}
+          {localError && <div className="mb-3 text-sm font-body text-pkr-low">{localError}</div>}
 
           {loading && draftQuestions.length === 0 && (
-            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300">
+            <div className="rounded-lg border border-border-default bg-bg-surface p-4 text-sm font-body text-text-secondary">
               Generating questions...
             </div>
           )}
@@ -606,15 +606,15 @@ export default function GenerateQuestionsModal({
               });
 
               return (
-                <div key={question.id} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+                <div key={question.id} className="rounded-lg border border-border-default bg-bg-elevated p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="text-xs font-semibold text-slate-300">Question {index + 1}</div>
+                    <div className="text-xs font-semibold font-body text-text-secondary">Question {index + 1}</div>
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => void handleSuggestNodesForQuestion(question)}
                         disabled={loading || submitting || question.suggestionLoading}
-                        className="rounded-lg border border-rose-500/60 px-2 py-1 text-[11px] text-rose-100 transition hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg border border-accent/60 px-2 py-1 text-xs font-body text-text-primary transition hover:border-accent disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {question.suggestionLoading ? "Suggesting..." : "Suggest nodes"}
                       </button>
@@ -623,7 +623,7 @@ export default function GenerateQuestionsModal({
                         onClick={() => {
                           setDraftQuestions((prev) => prev.filter((item) => item.id !== question.id));
                         }}
-                        className="rounded-lg border border-red-500/60 px-2 py-1 text-[11px] text-red-200 transition hover:border-red-400"
+                        className="rounded-lg border border-pkr-low/60 px-2 py-1 text-xs font-body text-pkr-low transition hover:border-pkr-low"
                       >
                         Delete
                       </button>
@@ -637,7 +637,7 @@ export default function GenerateQuestionsModal({
                         updateDraftQuestion(question.id, (draft) => ({ ...draft, text: event.target.value }))
                       }
                       placeholder="Question prompt"
-                      className="min-h-[70px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                     />
 
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -650,7 +650,7 @@ export default function GenerateQuestionsModal({
                             correctOptionIndex: 0,
                           }))
                         }
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                       >
                         <option value="OPEN">Open</option>
                         <option value="FLASHCARD">Flashcard</option>
@@ -668,16 +668,16 @@ export default function GenerateQuestionsModal({
                             difficulty: Math.max(1, Math.min(5, Number(event.target.value) || 1)),
                           }))
                         }
-                        className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                       />
                     </div>
 
                     {question.question_type === "MCQ" ? (
-                      <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-                        <div className="text-[11px] text-slate-300">Multiple choice options</div>
+                      <div className="grid gap-2 rounded-lg border border-border-default bg-bg-elevated p-3">
+                        <div className="text-xs font-body text-text-secondary">Multiple choice options</div>
                         {question.options.map((option, optionIndex) => (
                           <div key={`${question.id}-option-${optionIndex}`} className="grid grid-cols-[auto_1fr] items-center gap-2">
-                            <label className="flex items-center gap-1 text-[11px] text-slate-300">
+                            <label className="flex items-center gap-1 text-xs font-body text-text-secondary">
                               <input
                                 type="radio"
                                 name={`bulk-correct-${question.id}`}
@@ -702,7 +702,7 @@ export default function GenerateQuestionsModal({
                                 })
                               }
                               placeholder={`Option ${optionLabel(optionIndex)}`}
-                              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                             />
                           </div>
                         ))}
@@ -714,7 +714,7 @@ export default function GenerateQuestionsModal({
                           updateDraftQuestion(question.id, (draft) => ({ ...draft, answer: event.target.value }))
                         }
                         placeholder="Answer"
-                        className="min-h-[60px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                        className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                       />
                     )}
 
@@ -724,7 +724,7 @@ export default function GenerateQuestionsModal({
                         updateDraftQuestion(question.id, (draft) => ({ ...draft, tags: event.target.value }))
                       }
                       placeholder="Tags (comma separated)"
-                      className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                     />
 
                     <div className="flex items-center gap-2">
@@ -736,23 +736,23 @@ export default function GenerateQuestionsModal({
                             nodePickerOpen: !draft.nodePickerOpen,
                           }))
                         }
-                        className="rounded-lg border border-slate-600 px-3 py-1 text-[11px] text-slate-200 transition hover:border-slate-500"
+                        className="rounded-lg border border-border-default px-3 py-1 text-xs font-body text-text-primary transition hover:border-border-accent"
                       >
                         {question.nodePickerOpen ? "Hide node picker" : "Add nodes"}
                       </button>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-xs font-body text-text-secondary">
                         {question.selectedNodeIds.length} selected
                       </div>
                     </div>
 
                     {question.nodePickerOpen && (
-                      <div className="grid gap-2 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+                      <div className="grid gap-2 rounded-lg border border-border-default bg-bg-elevated p-3">
                         {question.suggestionError && (
-                          <div className="text-xs text-red-300">{question.suggestionError}</div>
+                          <div className="text-xs font-body text-pkr-low">{question.suggestionError}</div>
                         )}
 
                         {newSuggestions.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                             New candidates:
                             <button
                               type="button"
@@ -768,7 +768,7 @@ export default function GenerateQuestionsModal({
                                   ),
                                 }))
                               }
-                              className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100 transition hover:border-amber-400"
+                              className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
                             >
                               Select all
                             </button>
@@ -793,7 +793,7 @@ export default function GenerateQuestionsModal({
                                   className={`rounded-full border px-2 py-0.5 transition ${
                                     isSelected
                                       ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                      : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500"
+                                      : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
                                   }`}
                                 >
                                   {title}
@@ -803,7 +803,7 @@ export default function GenerateQuestionsModal({
                           </div>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-300">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
                           Selected nodes:
                           {question.selectedNodeIds.map((nodeId) => {
                             const node = nodeLookup.get(nodeId);
@@ -818,14 +818,14 @@ export default function GenerateQuestionsModal({
                                     selectedNodeIds: draft.selectedNodeIds.filter((id) => id !== nodeId),
                                   }))
                                 }
-                                className="rounded-full border border-rose-400 bg-rose-500/20 px-2 py-0.5 text-rose-100 transition"
+                                className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
                               >
                                 {label}
                               </button>
                             );
                           })}
                           {question.selectedNodeIds.length === 0 && (
-                            <span className="text-[11px] text-slate-500">None selected</span>
+                            <span className="text-xs font-body text-text-muted">None selected</span>
                           )}
                         </div>
 
@@ -867,10 +867,10 @@ export default function GenerateQuestionsModal({
                             }
                           }}
                           placeholder="Search nodes"
-                          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:border-blue-500 focus:outline-none"
+                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs font-body text-text-primary focus:border-accent-dim focus:outline-none"
                         />
 
-                        <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/80">
+                        <div className="max-h-36 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
                           {filteredNodes.map((node) => {
                             const isSelected = question.selectedNodeIds.includes(node.id);
                             const isStrongSuggested = strongIds.has(node.id);
@@ -887,23 +887,23 @@ export default function GenerateQuestionsModal({
                                       : [...draft.selectedNodeIds, node.id],
                                   }))
                                 }
-                                className={`flex w-full items-center justify-between gap-2 border-b border-slate-800 px-3 py-2 text-left text-xs transition last:border-b-0 ${
+                                className={`flex w-full items-center justify-between gap-2 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
                                   isSelected
-                                    ? "bg-rose-600/20 text-rose-100"
+                                    ? "bg-accent/20 text-text-primary"
                                     : isStrongSuggested
-                                      ? "bg-rose-500/10 text-rose-100"
+                                      ? "bg-accent/10 text-text-primary"
                                       : isWeakSuggested
-                                        ? "bg-slate-800/60 text-slate-200"
-                                        : "text-slate-200 hover:bg-slate-800/60"
+                                        ? "bg-bg-hover text-text-primary"
+                                        : "text-text-primary hover:bg-bg-hover"
                                 }`}
                               >
                                 <span className="font-medium">{node.topic_name}</span>
-                                <span className="text-[10px] text-slate-500">{node.id}</span>
+                                <span className="text-xs font-body text-text-muted">{node.id}</span>
                               </button>
                             );
                           })}
                           {filteredNodes.length === 0 && (
-                            <div className="px-3 py-2 text-xs text-slate-500">No matching nodes.</div>
+                            <div className="px-3 py-2 text-xs font-body text-text-muted">No matching nodes.</div>
                           )}
                         </div>
                       </div>
@@ -915,7 +915,7 @@ export default function GenerateQuestionsModal({
           </div>
 
           {!loading && draftQuestions.length === 0 && (
-            <div className="rounded-lg border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+            <div className="rounded-lg border border-dashed border-border-default p-4 text-sm font-body text-text-secondary">
               No generated questions yet. Click Generate to start.
             </div>
           )}
@@ -937,7 +937,7 @@ export function GenerateQuestionsButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex items-center gap-1 rounded-lg border border-border-default px-3 py-1 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
     >
       <Hash className="h-3.5 w-3.5" />
       Generate questions

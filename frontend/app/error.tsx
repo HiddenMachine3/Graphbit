@@ -13,7 +13,7 @@ export default function GlobalError({
     <div className="p-6">
       <ErrorState title="Application error" message={error.message} />
       <button
-        className="mt-4 rounded bg-slate-900 px-4 py-2 text-sm text-white"
+        className="mt-4 rounded bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover transition"
         onClick={reset}
       >
         Try again

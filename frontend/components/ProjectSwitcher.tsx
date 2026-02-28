@@ -44,21 +44,21 @@ export function ProjectSwitcher() {
 	if (loading) {
 		return (
 			<div className="flex items-center gap-2">
-				<span className="text-sm text-gray-500">Loading projects...</span>
+				<span className="text-sm font-body text-gray-500">Loading projects...</span>
 			</div>
 		);
 	}
 
 	return (
 		<div className="flex items-center gap-2">
-			<label htmlFor="project-select" className="text-sm font-medium text-slate-300">
+			<label htmlFor="project-select" className="text-sm font-medium font-body text-text-secondary">
 				Project:
 			</label>
 			<select
 				id="project-select"
 				value={currentProjectId || ""}
 				onChange={handleProjectChange}
-				className="w-32 max-w-full truncate rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-40"
+				className="w-32 max-w-full truncate rounded-md border border-border-default bg-bg-elevated px-2 py-1.5 text-sm font-body text-text-primary focus:border-accent-dim focus:outline-none focus:ring-1 focus:ring-accent-dim sm:w-40"
 			>
 				{projects.length === 0 ? (
 					<option value="">No projects available</option>

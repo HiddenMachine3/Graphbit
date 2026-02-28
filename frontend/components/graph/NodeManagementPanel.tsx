@@ -84,13 +84,13 @@ export default function NodeManagementPanel({
   };
 
   return (
-    <div className='rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-slate-200'>
-      <h3 className='font-semibold text-white'>
+    <div className='rounded-2xl border border-border-default bg-bg-surface p-4 text-text-primary'>
+      <h3 className='font-semibold font-heading text-white'>
         {selectedNode ? 'Edit Node' : 'Add Node'}
       </h3>
 
       {error && (
-        <div className='mt-2 rounded border border-red-900/60 bg-red-950/40 p-2 text-xs text-red-200'>
+        <div className='mt-2 rounded border border-pkr-low/30 bg-pkr-low/10 p-2 text-xs font-body text-pkr-low'>
           {error}
         </div>
       )}
@@ -98,15 +98,14 @@ export default function NodeManagementPanel({
       {!showCreateForm && !showEditForm && (
         <div className='mt-3 space-y-2'>
           <button
-            className='w-full rounded bg-rose-600 px-3 py-2 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
-            onClick={() => setShowCreateForm(true)}
+            className='w-full rounded bg-accent px-3 py-2 text-xs font-semibold font-body text-white hover:bg-accent-hover disabled:opacity-60'
             disabled={loading || !projectId}
           >
             + Add New Node
           </button>
           {selectedNode && (
             <button
-              className='w-full rounded bg-slate-700 px-3 py-2 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
+              className='w-full rounded bg-bg-elevated border border-border-default px-3 py-2 text-xs font-semibold font-body text-text-primary hover:bg-bg-hover disabled:opacity-60'
               onClick={openEditForm}
               disabled={loading}
             >
@@ -123,11 +122,11 @@ export default function NodeManagementPanel({
             placeholder='Topic name'
             value={newTopicName}
             onChange={(e) => setNewTopicName(e.target.value)}
-            className='w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500'
+            className='w-full rounded border border-border-default bg-bg-elevated px-2 py-1 text-xs font-body text-text-primary placeholder:text-text-muted focus:border-accent-dim'
             disabled={loading}
           />
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-400'>
+            <label className='block text-xs font-medium font-body text-text-secondary'>
               Importance: {newImportance.toFixed(2)}
             </label>
             <input
@@ -142,7 +141,7 @@ export default function NodeManagementPanel({
             />
           </div>
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-400'>
+            <label className='block text-xs font-medium font-body text-text-secondary'>
               Relevance: {newRelevance.toFixed(2)}
             </label>
             <input
@@ -158,14 +157,14 @@ export default function NodeManagementPanel({
           </div>
           <div className='flex gap-2'>
             <button
-              className='flex-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
+              className='flex-1 rounded bg-accent px-2 py-1 text-xs font-semibold font-body text-white hover:bg-accent-hover disabled:opacity-60'
               onClick={handleCreateNode}
               disabled={loading}
             >
               Create
             </button>
             <button
-              className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
+              className='flex-1 rounded bg-bg-elevated border border-border-default px-2 py-1 text-xs font-semibold font-body text-text-primary hover:bg-bg-hover disabled:opacity-60'
               onClick={() => setShowCreateForm(false)}
               disabled={loading}
             >
@@ -182,11 +181,11 @@ export default function NodeManagementPanel({
             placeholder='Topic name'
             value={editedTopic}
             onChange={(e) => setEditedTopic(e.target.value)}
-            className='w-full rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500'
+            className='w-full rounded border border-border-default bg-bg-elevated px-2 py-1 text-xs font-body text-text-primary placeholder:text-text-muted focus:border-accent-dim'
             disabled={loading}
           />
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-400'>
+            <label className='block text-xs font-medium font-body text-text-secondary'>
               Importance: {editedImportance.toFixed(2)}
             </label>
             <input
@@ -201,7 +200,7 @@ export default function NodeManagementPanel({
             />
           </div>
           <div className='space-y-1'>
-            <label className='block text-xs text-slate-400'>
+            <label className='block text-xs font-medium font-body text-text-secondary'>
               Relevance: {editedRelevance.toFixed(2)}
             </label>
             <input
@@ -217,14 +216,14 @@ export default function NodeManagementPanel({
           </div>
           <div className='flex gap-2'>
             <button
-              className='flex-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-60'
+              className='flex-1 rounded bg-accent px-2 py-1 text-xs font-semibold font-body text-white hover:bg-accent-hover disabled:opacity-60'
               onClick={handleUpdateNode}
               disabled={loading}
             >
               Update
             </button>
             <button
-              className='flex-1 rounded bg-slate-700 px-2 py-1 text-xs text-white hover:bg-slate-600 disabled:opacity-60'
+              className='flex-1 rounded bg-bg-elevated border border-border-default px-2 py-1 text-xs font-semibold font-body text-text-primary hover:bg-bg-hover disabled:opacity-60'
               onClick={() => setShowEditForm(false)}
               disabled={loading}
             >
