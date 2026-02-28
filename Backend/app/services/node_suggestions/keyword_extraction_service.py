@@ -1,5 +1,9 @@
 import logging
 import os
+import json
+from typing import Any
+
+import requests
 
 from app.core.config import settings
 
@@ -14,6 +18,20 @@ class KeywordExtractionService:
     def extract_phrases(self, text: str) -> list[str]:
         if not text.strip():
             return []
+
+        # Prefer Gemini structured extraction when API key is provided.
+        gemini_key = os.environ.get("GEMINI_API_KEY")
+        if gemini_key:
+            try:
+                gemini_extracted = self._extract_with_gemini(text, api_key=gemini_key)
+                print("Wordkd :", gemini_extracted)
+                return gemini_extracted
+            except Exception:
+                print("Gemini keyword extraction failed, falling back to HF")
+                logger.exception("Gemini keyword extraction failed, falling back to HF")
+        else:
+            print("GEMINI KEY not found")
+        # Fallback to Hugging Face inference client behavior
         model_name = getattr(settings, "HF_KEYPHRASE_MODEL", None)
         base_url = os.environ.get(
             "HF_INFERENCE_BASE_URL",
@@ -35,6 +53,67 @@ class KeywordExtractionService:
             )
             raise RuntimeError(f"HF keyword extraction failed for model '{model_name}': {exc}") from exc
 
+        return self._normalize_hf_results(results)
+
+
+    def _extract_with_gemini(self, text: str, api_key: str) -> list[str]:
+        # New Gemini v1 generateContent shape (gemini-1.5-flash)
+        model = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+        endpoint = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}"
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "phrases": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                }
+            },
+            "required": ["phrases"],
+        }
+
+        body = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": f"Extract concise key phrases from the following text:\n\n{text}"}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.0,
+                "maxOutputTokens": 256,
+                "response_mime_type": "application/json",
+                "response_schema": schema,
+            },
+        }
+
+        resp = requests.post(endpoint, json=body, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+
+        try:
+            raw_json = data["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = json.loads(raw_json)
+        except Exception:
+            raise RuntimeError(f"Gemini returned invalid structured response: {data}")
+
+        phrases = parsed.get("phrases")
+        if not isinstance(phrases, list):
+            raise RuntimeError("Schema violation: 'phrases' missing or not array")
+
+        normalized = []
+        seen = set()
+        for phrase in phrases:
+            cleaned = str(phrase).strip().lower()
+            if len(cleaned) < 3 or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            normalized.append(cleaned)
+
+        return normalized
+
+    def _normalize_hf_results(self, results: list[dict]) -> list[str]:
         phrases: list[str] = []
         current = ""
         for item in results or []:

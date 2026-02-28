@@ -11,6 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
 from sqlalchemy import text
+# Load .env early so all modules see environment variables (GEMINI_API_KEY, etc.)
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
 from app.core.config import settings
 from app.api import api_router
 from app.db.session import async_engine
