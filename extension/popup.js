@@ -1,14 +1,21 @@
 const DEFAULT_BACKEND = "http://localhost:8000/api/v1";
+const DEFAULT_FRONTEND = "http://localhost:3000";
 const STATUS_EL = document.getElementById("status");
 const backendUrlEl = document.getElementById("backendUrl");
+const frontendUrlEl = document.getElementById("frontendUrl");
 const pageTypeBadgeEl = document.getElementById("pageTypeBadge");
 const projectSelectEl = document.getElementById("projectSelect");
 const refreshProjectsBtn = document.getElementById("refreshProjectsBtn");
 const createdByEl = document.getElementById("createdBy");
 const saveBtn = document.getElementById("saveBtn");
 const captureBtn = document.getElementById("captureBtn");
+const ingestBtn = document.getElementById("ingestBtn");
 const lastAddedCardEl = document.getElementById("lastAddedCard");
 const lastAddedTextEl = document.getElementById("lastAddedText");
+const ingestResultCardEl = document.getElementById("ingestResultCard");
+const topicsGridEl = document.getElementById("topicsGrid");
+const ingestSummaryEl = document.getElementById("ingestSummary");
+const openInGraphbitEl = document.getElementById("openInGraphbit");
 
 let statusResetTimer = null;
 const CREATE_PROJECT_OPTION = "__create_new_project__";
@@ -85,15 +92,26 @@ function updateLastAddedUI(lastAdded) {
   lastAddedCardEl.classList.remove("hidden");
 }
 
+function updateYouTubeOnlyUI(isYouTube) {
+  if (isYouTube) {
+    ingestBtn.classList.remove("hidden");
+  } else {
+    ingestBtn.classList.add("hidden");
+    ingestResultCardEl.classList.add("hidden");
+  }
+}
+
 async function updatePageContextBadge() {
   try {
     const tab = await getActiveTab();
     const { label, className } = detectPageType(tab?.url || "");
     pageTypeBadgeEl.textContent = label;
     pageTypeBadgeEl.className = `badge ${className}`.trim();
+    updateYouTubeOnlyUI(className === "youtube");
   } catch {
     pageTypeBadgeEl.textContent = "Unknown page";
     pageTypeBadgeEl.className = "badge";
+    updateYouTubeOnlyUI(false);
   }
 }
 
@@ -120,14 +138,16 @@ async function getPageContent(tabId) {
 }
 
 async function loadSettings() {
-  const { backendUrl, selectedProjectId, createdBy, lastAdded } = await chrome.storage.sync.get([
+  const { backendUrl, frontendUrl, selectedProjectId, createdBy, lastAdded } = await chrome.storage.sync.get([
     "backendUrl",
+    "frontendUrl",
     "selectedProjectId",
     "createdBy",
     "lastAdded",
   ]);
 
   backendUrlEl.value = backendUrl || DEFAULT_BACKEND;
+  frontendUrlEl.value = frontendUrl || DEFAULT_FRONTEND;
   createdByEl.value = createdBy || "browser-extension";
   updateLastAddedUI(lastAdded);
 
@@ -139,10 +159,13 @@ async function saveSettings() {
   setBusy(saveBtn, "Saving...", true);
   const selectedProjectId = projectSelectEl.value || "";
   const backendUrl = normalizeApiBase(backendUrlEl.value);
+  const frontendUrl = (frontendUrlEl.value || "").trim().replace(/\/+$/, "") || DEFAULT_FRONTEND;
   backendUrlEl.value = backendUrl;
+  frontendUrlEl.value = frontendUrl;
   try {
     await chrome.storage.sync.set({
       backendUrl,
+      frontendUrl,
       selectedProjectId,
       createdBy: createdByEl.value.trim(),
     });
@@ -351,8 +374,78 @@ async function addMaterial() {
   }
 }
 
+function renderTopicChips(topics) {
+  topicsGridEl.innerHTML = "";
+  (topics || []).forEach(({ topic, created }) => {
+    const chip = document.createElement("span");
+    chip.className = `topic-chip${created ? " topic-chip-new" : ""}`;
+    chip.textContent = topic;
+    if (created) chip.title = "New node";
+    topicsGridEl.appendChild(chip);
+  });
+}
+
+async function ingestVideoToGraph() {
+  setBusy(ingestBtn, "Extracting topics…", true);
+  ingestResultCardEl.classList.add("hidden");
+  openInGraphbitEl.classList.add("hidden");
+  try {
+    const tab = await getActiveTab();
+    if (!tab || !tab.url || !isYouTubeUrl(tab.url)) {
+      setStatus("Not a YouTube tab.", "error");
+      return;
+    }
+
+    const projectId = projectSelectEl.value || "";
+    if (!projectId) {
+      setStatus("Select a project first.", "error");
+      return;
+    }
+
+    const backendUrl = normalizeApiBase(backendUrlEl.value);
+    setStatus("Fetching transcript…", "info");
+
+    const response = await fetch(`${backendUrl}/graph/ingest/video`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        video_url: tab.url,
+        title: tab.title || "YouTube Video",
+      }),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${responseText}`);
+    }
+
+    const result = JSON.parse(responseText);
+    const topics = result.topics || [];
+    const newCount = topics.filter((t) => t.created).length;
+    const seqNum = result.sequence_number ?? null;
+
+    renderTopicChips(topics);
+    const seqLabel = seqNum ? ` · Video #${seqNum}` : "";
+    ingestSummaryEl.textContent = `${newCount} new node${newCount !== 1 ? "s" : ""} · ${result.edges_added || 0} edges added${seqLabel}`;
+
+    const { frontendUrl } = await chrome.storage.sync.get(["frontendUrl"]);
+    const base = (frontendUrl || DEFAULT_FRONTEND).replace(/\/+$/, "");
+    openInGraphbitEl.href = `${base}/graph?project_id=${encodeURIComponent(projectId)}`;
+    openInGraphbitEl.classList.remove("hidden");
+    ingestResultCardEl.classList.remove("hidden");
+
+    setStatus(`Graph updated — ${topics.length} topic${topics.length !== 1 ? "s" : ""} extracted.`, "success");
+  } catch (error) {
+    setStatus(`Ingest failed: ${error.message}`, "error");
+  } finally {
+    setBusy(ingestBtn, "Extracting topics…", false);
+  }
+}
+
 saveBtn.addEventListener("click", saveSettings);
 captureBtn.addEventListener("click", addMaterial);
+ingestBtn.addEventListener("click", ingestVideoToGraph);
 refreshProjectsBtn.addEventListener("click", async () => {
   setStatus("Refreshing projects...", "info");
   await loadProjects(projectSelectEl.value || "");
