@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -76,8 +77,13 @@ def _normalize_topic_key(topic_name: str) -> str:
     return " ".join(cleaned.split())
 
 
-def _topic_id_from_key(topic_key: str) -> str:
-    return "topic_" + topic_key.replace(" ", "_")[:48]
+def _topic_id_from_key(topic_key: str, project_id: str = "") -> str:
+    slug = topic_key.replace(" ", "_")[:48]
+    if project_id:
+        # Include short hash of project_id for global PK uniqueness
+        suffix = hashlib.md5(project_id.encode()).hexdigest()[:8]
+        return f"topic_{slug}_{suffix}"
+    return f"topic_{slug}"
 
 
 async def _edge_exists(
@@ -329,15 +335,16 @@ async def _get_or_create_chapter_node(
     # Link to previous chapter with a VIDEO_SEQUENCE edge
     if prev_chapter is not None:
         seq_edge_id = f"{prev_chapter.id}-{chapter_id}-VIDEO_SEQUENCE"
-        seq_edge = EdgeModel(
-            id=seq_edge_id,
-            project_id=project_id,
-            source=prev_chapter.id,
-            target=chapter_id,
-            type=EdgeType.VIDEO_SEQUENCE.value,
-            weight=1.0,
-        )
-        db.add(seq_edge)
+        if not await _edge_exists(db, project_id, prev_chapter.id, chapter_id, EdgeType.VIDEO_SEQUENCE):
+            seq_edge = EdgeModel(
+                id=seq_edge_id,
+                project_id=project_id,
+                source=prev_chapter.id,
+                target=chapter_id,
+                type=EdgeType.VIDEO_SEQUENCE.value,
+                weight=1.0,
+            )
+            db.add(seq_edge)
 
     _chapter_index_by_source[index_key] = chapter_id
     return chapter_id, sequence_number
@@ -355,7 +362,8 @@ async def _get_or_create_topic_node(
         raise ValueError("Topic name cannot be empty")
 
     index_key = (project_id, topic_key)
-    node_id = _topic_id_from_key(topic_key)
+    node_id = _topic_id_from_key(topic_key, project_id)
+    legacy_node_id = _topic_id_from_key(topic_key)  # old-style without project hash
 
     # --- cache hit ---
     existing_id = _topic_index_by_key.get(index_key)
@@ -373,7 +381,7 @@ async def _get_or_create_topic_node(
             existing_node.source_material_ids = list(source_ids)
             return existing_id
 
-    # --- DB-level dedup: check by deterministic node_id (handles restarts) ---
+    # --- DB-level dedup: check new-style project-scoped ID first ---
     result = await db.execute(
         select(NodeModel).where(
             NodeModel.project_id == project_id,
@@ -388,7 +396,23 @@ async def _get_or_create_topic_node(
         _topic_index_by_key[index_key] = node_id  # repopulate cache
         return node_id
 
-    # --- not found anywhere: insert ---
+    # --- backward compat: check legacy ID for this project ---
+    if legacy_node_id != node_id:
+        result = await db.execute(
+            select(NodeModel).where(
+                NodeModel.project_id == project_id,
+                NodeModel.id == legacy_node_id,
+            )
+        )
+        existing_node = result.scalar_one_or_none()
+        if existing_node:
+            source_ids = set(existing_node.source_material_ids or [])
+            source_ids.add(material_id)
+            existing_node.source_material_ids = list(source_ids)
+            _topic_index_by_key[index_key] = legacy_node_id  # repopulate cache
+            return legacy_node_id
+
+    # --- not found anywhere: insert with project-scoped ID ---
     node = NodeModel(
         id=node_id,
         project_id=project_id,
@@ -747,7 +771,7 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
 
     material = _get_or_create_material(request.project_id, request.video_url, request.title, request.channel)
 
-    chapter_created = request.video_url not in _chapter_index_by_source
+    chapter_created = (request.project_id, request.video_url) not in _chapter_index_by_source
     chapter_node_id, sequence_number = await _get_or_create_chapter_node(
         db,
         request.project_id,
@@ -759,6 +783,7 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
 
     topics_result = []
     edges_added = 0
+    pending_edge_ids: set[str] = set()  # track edges added in this batch to avoid duplicates
 
     for topic in topics:
         topic_key = _normalize_topic_key(topic)
@@ -772,14 +797,14 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
             created_by=created_by,
         )
 
-        if not await _edge_exists(
+        edge_id = f"{chapter_node_id}-{topic_node_id}-{EdgeType.SUBCONCEPT_OF.value}"
+        if edge_id not in pending_edge_ids and not await _edge_exists(
             db,
             request.project_id,
             chapter_node_id,
             topic_node_id,
             EdgeType.SUBCONCEPT_OF,
         ):
-            edge_id = f"{chapter_node_id}-{topic_node_id}-{EdgeType.SUBCONCEPT_OF.value}"
             edge = EdgeModel(
                 id=edge_id,
                 project_id=request.project_id,
@@ -789,11 +814,15 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
                 weight=0.9,
             )
             db.add(edge)
+            pending_edge_ids.add(edge_id)
             edges_added += 1
 
         chapter_neighbors = _topic_chapter_index.get((request.project_id, topic_node_id), set())
         for other_chapter_id in sorted(chapter_neighbors):
             if other_chapter_id == chapter_node_id:
+                continue
+            edge_id = f"{other_chapter_id}-{chapter_node_id}-{EdgeType.APPLIED_WITH.value}"
+            if edge_id in pending_edge_ids:
                 continue
             if not await _edge_exists(
                 db,
@@ -802,7 +831,6 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
                 chapter_node_id,
                 EdgeType.APPLIED_WITH,
             ):
-                edge_id = f"{other_chapter_id}-{chapter_node_id}-{EdgeType.APPLIED_WITH.value}"
                 edge = EdgeModel(
                     id=edge_id,
                     project_id=request.project_id,
@@ -812,6 +840,7 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
                     weight=0.4,
                 )
                 db.add(edge)
+                pending_edge_ids.add(edge_id)
                 edges_added += 1
 
         _topic_chapter_index.setdefault((request.project_id, topic_node_id), set()).add(chapter_node_id)
