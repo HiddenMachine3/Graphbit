@@ -25,13 +25,11 @@ class KeywordExtractionService:
         if gemini_key:
             try:
                 gemini_extracted = self._extract_with_gemini(text, api_key=gemini_key)
-                print("Wordkd :", gemini_extracted)
                 return gemini_extracted
             except Exception:
-                print("Gemini keyword extraction failed, falling back to HF")
                 logger.exception("Gemini keyword extraction failed, falling back to HF")
         else:
-            print("GEMINI KEY not found")
+            logger.debug("GEMINI_API_KEY not set, using HF keyphrase model")
         # Fallback to Hugging Face inference client behavior
         model_name = getattr(settings, "HF_KEYPHRASE_MODEL", None)
         base_url = os.environ.get(
