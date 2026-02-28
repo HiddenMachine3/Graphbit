@@ -68,3 +68,25 @@ export async function createEdge(
     }),
   });
 }
+
+export async function deleteNode(projectId: string, nodeId: string): Promise<{ deleted: string[] }> {
+  return apiFetch<{ deleted: string[] }>(
+    `/graph/nodes/${encodeURIComponent(nodeId)}?project_id=${encodeURIComponent(projectId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+export async function bulkDeleteNodes(
+  projectId: string,
+  nodeIds: string[]
+): Promise<{ deleted: string[] }> {
+  return apiFetch<{ deleted: string[] }>("/graph/nodes/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      node_ids: nodeIds,
+    }),
+  });
+}
