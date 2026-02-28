@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -175,6 +176,15 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
                 }
             )
 
+    # Determine sequential order of chapter nodes for sequence_number
+    chapter_nodes_sorted = sorted(
+        [n for n in nodes if n.id.startswith("chapter_")],
+        key=lambda n: n.created_at or datetime.min,
+    )
+    chapter_sequence_map: dict[str, int] = {
+        n.id: i + 1 for i, n in enumerate(chapter_nodes_sorted)
+    }
+
     return {
         "nodes": [
             {
@@ -191,7 +201,8 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
                 "forgetting_score": 1.0 - node.proven_knowledge_rating,
                 "linked_questions_count": question_counts.get(node.id, 0),
                 "linked_materials_count": len(node.source_material_ids or []),
-                "node_type": "topic",
+                "node_type": "chapter" if node.id.startswith("chapter_") else "topic",
+                "sequence_number": chapter_sequence_map.get(node.id),
             }
             for node in nodes
         ] + material_nodes,
@@ -227,7 +238,7 @@ async def _update_node_search_vector(db: AsyncSession, node_id: str) -> None:
     )
 
 
-def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) -> Material:
+def _get_or_create_material(project_id: str, video_url: str, title: str, channel: Optional[str]) -> Material:
     global _material_counter
 
     existing_id = _material_index_by_source.get(video_url)
@@ -238,6 +249,7 @@ def _get_or_create_material(video_url: str, title: str, channel: Optional[str]) 
     material_id = f"material-{_material_counter}"
     material = Material(
         id=material_id,
+        project_id=project_id,
         title=title,
         material_type=MaterialType.VIDEO,
         source=video_url,
@@ -255,8 +267,12 @@ async def _get_or_create_chapter_node(
     material: Material,
     title: str,
     video_url: str,
-) -> str:
+    created_by: str = "",
+) -> tuple[str, int]:
+    """Create or return a chapter node for a video, and wire a VIDEO_SEQUENCE edge from the previous chapter."""
     index_key = (project_id, video_url)
+
+    # --- cache hit ---
     existing = _chapter_index_by_source.get(index_key)
     if existing:
         result = await db.execute(
@@ -266,12 +282,39 @@ async def _get_or_create_chapter_node(
             )
         )
         if result.scalar_one_or_none():
-            return existing
+            chapters_result = await db.execute(
+                select(NodeModel.id)
+                .where(NodeModel.project_id == project_id, NodeModel.id.like("chapter_%"))
+                .order_by(NodeModel.created_at)
+            )
+            chapter_ids = [r[0] for r in chapters_result.fetchall()]
+            seq = (chapter_ids.index(existing) + 1) if existing in chapter_ids else 1
+            return existing, seq
 
-    chapter_id = f"chapter_{len(_chapter_index_by_source) + 1}"
+    # --- load all existing chapter nodes from DB (used for sequence + restart recovery) ---
+    chapters_result = await db.execute(
+        select(NodeModel)
+        .where(NodeModel.project_id == project_id, NodeModel.id.like("chapter_%"))
+        .order_by(NodeModel.created_at)
+    )
+    existing_chapters = chapters_result.scalars().all()
+
+    # --- DB-level dedup: check if a chapter for this material already exists (handles restarts) ---
+    for ch in existing_chapters:
+        if material.id in (ch.source_material_ids or []):
+            chapter_ids = [c.id for c in existing_chapters]
+            seq = (chapter_ids.index(ch.id) + 1) if ch.id in chapter_ids else 1
+            _chapter_index_by_source[index_key] = ch.id  # repopulate cache
+            return ch.id, seq
+
+    sequence_number = len(existing_chapters) + 1
+    prev_chapter = existing_chapters[-1] if existing_chapters else None
+
+    chapter_id = f"chapter_{int(datetime.now().timestamp() * 1000)}"
     chapter_node = NodeModel(
         id=chapter_id,
         project_id=project_id,
+        created_by=created_by,
         topic_name=title,
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -282,8 +325,22 @@ async def _get_or_create_chapter_node(
     )
     db.add(chapter_node)
     await db.flush()
+
+    # Link to previous chapter with a VIDEO_SEQUENCE edge
+    if prev_chapter is not None:
+        seq_edge_id = f"{prev_chapter.id}-{chapter_id}-VIDEO_SEQUENCE"
+        seq_edge = EdgeModel(
+            id=seq_edge_id,
+            project_id=project_id,
+            source=prev_chapter.id,
+            target=chapter_id,
+            type=EdgeType.VIDEO_SEQUENCE.value,
+            weight=1.0,
+        )
+        db.add(seq_edge)
+
     _chapter_index_by_source[index_key] = chapter_id
-    return chapter_id
+    return chapter_id, sequence_number
 
 
 async def _get_or_create_topic_node(
@@ -291,12 +348,16 @@ async def _get_or_create_topic_node(
     project_id: str,
     topic_name: str,
     material_id: str,
+    created_by: str = "",
 ) -> str:
     topic_key = _normalize_topic_key(topic_name)
     if not topic_key:
         raise ValueError("Topic name cannot be empty")
 
     index_key = (project_id, topic_key)
+    node_id = _topic_id_from_key(topic_key)
+
+    # --- cache hit ---
     existing_id = _topic_index_by_key.get(index_key)
     if existing_id:
         result = await db.execute(
@@ -312,11 +373,26 @@ async def _get_or_create_topic_node(
             existing_node.source_material_ids = list(source_ids)
             return existing_id
 
-    node_id = _topic_id_from_key(topic_key)
+    # --- DB-level dedup: check by deterministic node_id (handles restarts) ---
+    result = await db.execute(
+        select(NodeModel).where(
+            NodeModel.project_id == project_id,
+            NodeModel.id == node_id,
+        )
+    )
+    existing_node = result.scalar_one_or_none()
+    if existing_node:
+        source_ids = set(existing_node.source_material_ids or [])
+        source_ids.add(material_id)
+        existing_node.source_material_ids = list(source_ids)
+        _topic_index_by_key[index_key] = node_id  # repopulate cache
+        return node_id
 
+    # --- not found anywhere: insert ---
     node = NodeModel(
         id=node_id,
         project_id=project_id,
+        created_by=created_by,
         topic_name=topic_name.strip(),
         proven_knowledge_rating=0.0,
         user_estimated_knowledge_rating=0.0,
@@ -654,25 +730,31 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
     if not request.title.strip():
         raise HTTPException(status_code=400, detail="title is required")
 
+    default_user = await _get_default_user(db)
+    created_by = default_user.username if default_user else ""
+
     transcript = request.transcript
     if not transcript:
-        transcript = fetch_youtube_transcript(request.video_url)
+        transcript, _ = await asyncio.to_thread(fetch_youtube_transcript, request.video_url)
 
-    topics = request.topics or extract_topics_from_text(transcript, title=request.title)
+    topics = request.topics
+    if not topics:
+        topics = await asyncio.to_thread(extract_topics_from_text, transcript, request.title)
     topics = [topic.strip() for topic in topics if topic.strip()]
 
     if not topics:
         raise HTTPException(status_code=400, detail="No topics extracted")
 
-    material = _get_or_create_material(request.video_url, request.title, request.channel)
+    material = _get_or_create_material(request.project_id, request.video_url, request.title, request.channel)
 
     chapter_created = request.video_url not in _chapter_index_by_source
-    chapter_node_id = await _get_or_create_chapter_node(
+    chapter_node_id, sequence_number = await _get_or_create_chapter_node(
         db,
         request.project_id,
         material,
         request.title,
         request.video_url,
+        created_by=created_by,
     )
 
     topics_result = []
@@ -687,6 +769,7 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
             request.project_id,
             topic,
             material.id,
+            created_by=created_by,
         )
 
         if not await _edge_exists(
@@ -746,6 +829,7 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
     return {
         "chapter_node_id": chapter_node_id,
         "chapter_created": chapter_created,
+        "sequence_number": sequence_number,
         "topics": topics_result,
         "edges_added": edges_added,
         "graph": await _serialize_graph_summary(request.project_id, db),
