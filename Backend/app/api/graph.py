@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import EdgeType
@@ -45,6 +45,11 @@ class CreateEdgeRequest(BaseModel):
     to_node_id: str
     edge_type: str = "PREREQUISITE"
     weight: float = 1.0
+
+
+class DeleteNodesRequest(BaseModel):
+    project_id: str
+    node_ids: list[str]
 
 
 class VideoIngestRequest(BaseModel):
@@ -531,6 +536,113 @@ async def create_edge(request: CreateEdgeRequest, db: AsyncSession = Depends(get
         "target": edge.target,
         "type": edge.type,
         "weight": edge.weight,
+    }
+
+
+@router.delete("/graph/nodes/{node_id}")
+async def delete_node(
+    node_id: str,
+    project_id: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a node and its connected edges."""
+    if node_id.startswith("material:"):
+        raise HTTPException(status_code=400, detail="Material nodes cannot be deleted")
+
+    result = await db.execute(
+        select(NodeModel).where(
+            NodeModel.project_id == project_id,
+            NodeModel.id == node_id,
+        )
+    )
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    await db.execute(
+        delete(EdgeModel).where(
+            EdgeModel.project_id == project_id,
+            or_(EdgeModel.source == node_id, EdgeModel.target == node_id),
+        )
+    )
+
+    questions_result = await db.execute(
+        select(QuestionModel).where(QuestionModel.project_id == project_id)
+    )
+    questions = questions_result.scalars().all()
+    updated_questions = 0
+    for question in questions:
+        if not question.covered_node_ids:
+            continue
+        if node_id in question.covered_node_ids:
+            question.covered_node_ids = [
+                existing_id for existing_id in question.covered_node_ids if existing_id != node_id
+            ]
+            updated_questions += 1
+
+    await db.delete(node)
+    await db.commit()
+
+    return {
+        "deleted": [node_id],
+        "updated_questions": updated_questions,
+    }
+
+
+@router.post("/graph/nodes/bulk-delete")
+async def bulk_delete_nodes(request: DeleteNodesRequest, db: AsyncSession = Depends(get_db)):
+    """Delete multiple nodes and their connected edges."""
+    node_ids = [node_id for node_id in request.node_ids if node_id]
+    if not node_ids:
+        raise HTTPException(status_code=400, detail="node_ids cannot be empty")
+    if any(node_id.startswith("material:") for node_id in node_ids):
+        raise HTTPException(status_code=400, detail="Material nodes cannot be deleted")
+
+    result = await db.execute(
+        select(NodeModel).where(
+            NodeModel.project_id == request.project_id,
+            NodeModel.id.in_(node_ids),
+        )
+    )
+    nodes = result.scalars().all()
+    existing_ids = {node.id for node in nodes}
+    missing = [node_id for node_id in node_ids if node_id not in existing_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Nodes not found: {', '.join(missing)}")
+
+    await db.execute(
+        delete(EdgeModel).where(
+            EdgeModel.project_id == request.project_id,
+            or_(EdgeModel.source.in_(node_ids), EdgeModel.target.in_(node_ids)),
+        )
+    )
+
+    questions_result = await db.execute(
+        select(QuestionModel).where(QuestionModel.project_id == request.project_id)
+    )
+    questions = questions_result.scalars().all()
+    updated_questions = 0
+    node_id_set = set(node_ids)
+    for question in questions:
+        if not question.covered_node_ids:
+            continue
+        if any(node_id in node_id_set for node_id in question.covered_node_ids):
+            question.covered_node_ids = [
+                existing_id for existing_id in question.covered_node_ids if existing_id not in node_id_set
+            ]
+            updated_questions += 1
+
+    await db.execute(
+        delete(NodeModel).where(
+            NodeModel.project_id == request.project_id,
+            NodeModel.id.in_(node_ids),
+        )
+    )
+    await db.commit()
+
+    return {
+        "deleted": node_ids,
+        "updated_questions": updated_questions,
     }
 
 
