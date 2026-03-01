@@ -10,7 +10,7 @@ import GraphLegend from "../components/graph/GraphLegend";
 import NodeManagementPanel from "../components/graph/NodeManagementPanel";
 import EdgeManagementPanel from "../components/graph/EdgeManagementPanel";
 import { fetchGraphSummary, deleteNode, bulkDeleteNodes } from "../lib/api/graph";
-import { listMaterials } from "../lib/api/material";
+import { fetchMaterial, listMaterials } from "../lib/api/material";
 import { useAppStore } from "../lib/store";
 import type { GraphNodeDTO, GraphSummaryDTO, MaterialDTO } from "../lib/types";
 
@@ -158,6 +158,11 @@ export default function HomePage() {
   const [materialsById, setMaterialsById] = useState<Record<string, MaterialDTO>>({});
   const [activeVideoEmbedUrl, setActiveVideoEmbedUrl] = useState<string | null>(null);
   const [activeVideoTitle, setActiveVideoTitle] = useState<string>("");
+  const [activeReadTitle, setActiveReadTitle] = useState<string>("");
+  const [activeReadChunks, setActiveReadChunks] = useState<string[]>([]);
+  const [activeReadTranscriptChunks, setActiveReadTranscriptChunks] = useState<string[]>([]);
+  const [isReadLoading, setIsReadLoading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
   const [graphFitTrigger, setGraphFitTrigger] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -302,6 +307,44 @@ export default function HomePage() {
     setActiveVideoEmbedUrl(null);
     setActiveVideoTitle("");
   }, []);
+
+  const closeReadViewer = useCallback(() => {
+    setActiveReadTitle("");
+    setActiveReadChunks([]);
+    setActiveReadTranscriptChunks([]);
+    setReadError(null);
+    setIsReadLoading(false);
+  }, []);
+
+  const handleOpenMaterialRead = useCallback(
+    async ({ materialId, nodeTitle }: { materialId: string; nodeId: string; nodeTitle: string }) => {
+      if (!materialId) {
+        return;
+      }
+
+      setIsReadLoading(true);
+      setReadError(null);
+      setActiveReadTitle(nodeTitle || "Material Notes");
+      setActiveReadChunks([]);
+      setActiveReadTranscriptChunks([]);
+
+      try {
+        const material = await fetchMaterial(materialId);
+        setActiveReadTitle(material.title || nodeTitle || "Material Notes");
+        setActiveReadChunks(Array.isArray(material.chunks) ? material.chunks : []);
+        setActiveReadTranscriptChunks(
+          Array.isArray(material.transcript_chunks) ? material.transcript_chunks : []
+        );
+      } catch (materialError) {
+        setReadError(
+          materialError instanceof Error ? materialError.message : "Failed to load material notes"
+        );
+      } finally {
+        setIsReadLoading(false);
+      }
+    },
+    []
+  );
 
   const handleOpenNodeVideo = useCallback(
     ({ nodeTitle, embedUrl }: { nodeId: string; nodeTitle: string; embedUrl: string }) => {
@@ -494,6 +537,7 @@ export default function HomePage() {
           projectId={currentProjectId}
           selectedNodeId={clickModeActive || deleteModeActive ? null : selectedNodeId}
           onSelectNode={handleNodeClick}
+          onOpenMaterialRead={handleOpenMaterialRead}
           onOpenNodeVideo={handleOpenNodeVideo}
           highlightedNodeIds={
             deleteModeActive
@@ -736,6 +780,60 @@ export default function HomePage() {
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(isReadLoading || Boolean(readError) || activeReadChunks.length > 0 || activeReadTranscriptChunks.length > 0) && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
+          <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-surface shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
+              <div className="truncate text-sm font-semibold font-heading text-text-primary">
+                {activeReadTitle || "Material Notes"}
+              </div>
+              <button
+                type="button"
+                onClick={closeReadViewer}
+                className="rounded border border-border-default bg-bg-elevated p-1 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                aria-label="Close material notes"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm font-body text-text-secondary">
+              {isReadLoading && <div className="text-text-muted">Loading notes...</div>}
+              {!isReadLoading && readError && (
+                <div className="rounded border border-pkr-low/30 bg-pkr-low/10 p-3 text-pkr-low">{readError}</div>
+              )}
+              {!isReadLoading && !readError && activeReadTranscriptChunks.length > 0 && (
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Transcript</div>
+                  <div className="space-y-3">
+                    {activeReadTranscriptChunks.map((chunk, index) => (
+                      <p key={`transcript-${index}`} className="leading-relaxed text-text-secondary">
+                        {chunk}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!isReadLoading && !readError && activeReadChunks.length > 0 && (
+                <div className={activeReadTranscriptChunks.length > 0 ? "mt-5" : ""}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Notes</div>
+                  <div className="space-y-3">
+                    {activeReadChunks.map((chunk, index) => (
+                      <p key={`chunk-${index}`} className="leading-relaxed text-text-secondary">
+                        {chunk}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!isReadLoading && !readError && activeReadTranscriptChunks.length === 0 && activeReadChunks.length === 0 && (
+                <div className="text-text-muted">No notes available for this material.</div>
+              )}
             </div>
           </div>
         </div>

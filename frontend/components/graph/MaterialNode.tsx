@@ -7,6 +7,10 @@ type MaterialNodeProps = {
     brightnessAttribute?: keyof GraphNodeDTO;
     youtubeThumbnailUrl?: string | null;
     youtubeEmbedUrl?: string | null;
+    materialId?: string | null;
+    sourceUrl?: string | null;
+    onOpenRead?: () => void;
+    onOpenSource?: () => void;
     onOpenVideo?: () => void;
     isExpanded?: boolean;
     hasChildren?: boolean;
@@ -16,7 +20,8 @@ type MaterialNodeProps = {
 };
 
 export default function MaterialNode({ data, selected }: MaterialNodeProps) {
-  const thumbnailUrl = data.youtubeThumbnailUrl || null;
+  const hasYoutubeVideo = Boolean(data.youtubeEmbedUrl);
+  const hasReadableMaterial = Boolean(data.materialId && data.onOpenRead);
 
   return (
     <div
@@ -28,24 +33,36 @@ export default function MaterialNode({ data, selected }: MaterialNodeProps) {
         borderColor: "rgba(255, 255, 255, 0.15)",
       }}
     >
-      {thumbnailUrl && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            data.onOpenVideo?.();
-          }}
-          className="absolute bottom-full left-1/2 z-20 mb-2 hidden w-28 -translate-x-1/2 overflow-hidden rounded-md border border-border-default bg-bg-surface shadow-lg group-hover:block"
-          title="Open video"
-        >
-          <img
-            src={thumbnailUrl}
-            alt="YouTube thumbnail preview"
-            className="h-16 w-full object-cover"
-            loading="lazy"
-          />
-        </button>
+      {selected && (
+        <div className="absolute left-1/2 top-full z-20 mt-2 flex -translate-x-1/2 items-center gap-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              data.onOpenRead?.();
+            }}
+            disabled={!hasReadableMaterial}
+            className="rounded border border-border-default bg-bg-surface px-2 py-0.5 text-[10px] font-semibold font-body text-text-secondary shadow-sm hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+            title={hasReadableMaterial ? "Read material notes" : "No readable material available"}
+          >
+            Read
+          </button>
+          {hasYoutubeVideo && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                data.onOpenVideo?.();
+              }}
+              className="rounded border border-border-default bg-bg-surface px-2 py-0.5 text-[10px] font-semibold font-body text-text-secondary shadow-sm hover:bg-bg-hover"
+              title="View linked YouTube video"
+            >
+              View
+            </button>
+          )}
+        </div>
       )}
       <div className="px-1 text-xs font-semibold font-heading text-white">Material</div>
       <div className="mt-0.5 line-clamp-2 px-1 text-xs font-normal font-body text-text-secondary">

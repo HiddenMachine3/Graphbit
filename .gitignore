@@ -57,3 +57,4 @@ Backend/.local_pgvector_db
 !.env.example
 
 Backend/.env
+frontend/build-output.log

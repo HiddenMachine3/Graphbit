@@ -33,6 +33,7 @@ export type KnowledgeGraphViewProps = {
   projectId: string | null;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+  onOpenMaterialRead?: (payload: { materialId: string; nodeId: string; nodeTitle: string }) => void;
   onOpenNodeVideo?: (payload: { nodeId: string; nodeTitle: string; embedUrl: string }) => void;
   highlightedNodeIds?: string[];
   brightnessAttribute?: keyof GraphNodeDTO;
@@ -110,6 +111,7 @@ function buildFlowNodes(
   expandedNodeIds: Set<string>,
   hasChildrenMap: Map<string, boolean>,
   onToggleExpand: (nodeId: string) => void,
+  onOpenMaterialRead?: (payload: { materialId: string; nodeId: string; nodeTitle: string }) => void,
   onOpenNodeVideo?: (payload: { nodeId: string; nodeTitle: string; embedUrl: string }) => void
 ): Node[] {
   return nodes.map((node) => {
@@ -117,17 +119,26 @@ function buildFlowNodes(
     if (node.id.startsWith("material:")) {
       candidateMaterialIds.add(node.id.replace("material:", ""));
     }
+    const candidateMaterialIdList = Array.from(candidateMaterialIds);
 
     let youtubeThumbnailUrl: string | null = null;
     let youtubeEmbedUrl: string | null = null;
-    for (const materialId of candidateMaterialIds) {
-      const sourceUrl = materialSourceUrlById[materialId];
-      if (!sourceUrl) {
+    let sourceUrl: string | null = null;
+    let primaryMaterialId: string | null = candidateMaterialIdList[0] || null;
+    for (const materialId of candidateMaterialIdList) {
+      const materialSourceUrl = materialSourceUrlById[materialId];
+      if (!materialSourceUrl) {
         continue;
       }
-      const nextThumbnail = toYoutubeThumbnailUrl(sourceUrl);
-      const nextEmbed = extractYoutubeVideoId(sourceUrl)
-        ? `https://www.youtube.com/embed/${encodeURIComponent(extractYoutubeVideoId(sourceUrl) as string)}?autoplay=1&rel=0`
+      if (!primaryMaterialId) {
+        primaryMaterialId = materialId;
+      }
+      if (!sourceUrl) {
+        sourceUrl = materialSourceUrl;
+      }
+      const nextThumbnail = toYoutubeThumbnailUrl(materialSourceUrl);
+      const nextEmbed = extractYoutubeVideoId(materialSourceUrl)
+        ? `https://www.youtube.com/embed/${encodeURIComponent(extractYoutubeVideoId(materialSourceUrl) as string)}?autoplay=1&rel=0`
         : null;
       if (nextThumbnail && nextEmbed) {
         youtubeThumbnailUrl = nextThumbnail;
@@ -145,9 +156,24 @@ function buildFlowNodes(
         brightnessAttribute,
         youtubeThumbnailUrl,
         youtubeEmbedUrl,
+        materialId: primaryMaterialId,
+        sourceUrl,
         isExpanded: expandedNodeIds.has(node.id),
         hasChildren: hasChildrenMap.get(node.id) || false,
         onToggleExpand,
+        onOpenRead:
+          primaryMaterialId && onOpenMaterialRead
+            ? () =>
+                onOpenMaterialRead({
+                  materialId: primaryMaterialId as string,
+                  nodeId: node.id,
+                  nodeTitle: node.topic_name,
+                })
+            : undefined,
+        onOpenSource:
+          sourceUrl
+            ? () => window.open(sourceUrl as string, "_blank", "noopener,noreferrer")
+            : undefined,
         onOpenVideo:
           youtubeEmbedUrl && onOpenNodeVideo
             ? () =>
@@ -180,6 +206,7 @@ export default function KnowledgeGraphView({
   projectId,
   selectedNodeId,
   onSelectNode,
+  onOpenMaterialRead,
   onOpenNodeVideo,
   highlightedNodeIds,
   brightnessAttribute = "proven_knowledge_rating",
@@ -304,8 +331,8 @@ export default function KnowledgeGraphView({
 
   const sourceUrlById = materialSourceUrlById || {};
   const baseNodes = useMemo(
-    () => buildFlowNodes(visibleNodes, brightnessAttribute, sourceUrlById, expandedNodeIds, hasChildrenMap, handleToggleExpand, onOpenNodeVideo),
-    [visibleNodes, brightnessAttribute, sourceUrlById, expandedNodeIds, hasChildrenMap, handleToggleExpand, onOpenNodeVideo]
+    () => buildFlowNodes(visibleNodes, brightnessAttribute, sourceUrlById, expandedNodeIds, hasChildrenMap, handleToggleExpand, onOpenMaterialRead, onOpenNodeVideo),
+    [visibleNodes, brightnessAttribute, sourceUrlById, expandedNodeIds, hasChildrenMap, handleToggleExpand, onOpenMaterialRead, onOpenNodeVideo]
   );
   const baseEdges = useMemo(() => buildFlowEdges(visibleEdges), [visibleEdges]);
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
