@@ -229,7 +229,7 @@ async def _serialize_graph_summary(project_id: str, db: AsyncSession):
 
 
 async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
-    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
+    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id).limit(1))
     return result.scalar_one_or_none()
 
 

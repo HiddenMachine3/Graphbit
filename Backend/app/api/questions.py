@@ -56,7 +56,7 @@ def _serialize_question(question: QuestionModel) -> dict:
 
 
 async def _get_default_user(db: AsyncSession) -> AppUserModel | None:
-    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
+    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id).limit(1))
     return result.scalar_one_or_none()
 
 

@@ -11,7 +11,7 @@ import certifi
 
 logger = logging.getLogger(__name__)
 
-GEMINI_EMBED_MODEL = "text-embedding-004"
+GEMINI_EMBED_MODEL = "gemini-embedding-001"
 GEMINI_EMBED_DIM = 768
 
 
@@ -47,9 +47,12 @@ class EmbeddingService:
             raise RuntimeError(f"Gemini embedding returned empty result: {data}")
 
         if len(embedding) != self.expected_dim:
-            raise ValueError(
-                f"Expected embedding size {self.expected_dim}, got {len(embedding)}"
-            )
+            if len(embedding) > self.expected_dim:
+                embedding = embedding[:self.expected_dim]
+            else:
+                raise ValueError(
+                    f"Expected embedding size {self.expected_dim}, got {len(embedding)}"
+                )
 
         return [float(v) for v in embedding]
 

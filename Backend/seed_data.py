@@ -18,12 +18,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
-from app.domain import (
-    Node, Edge, EdgeType, Graph,
-    Question, QuestionMetadata, QuestionType, KnowledgeType,
-    User, Community, Project, ProjectVisibility,
-    QuestionBank, UserNodeState
-)
+from app.core.config import settings
 from app.models import (
     Base,
     Question as QuestionModel,
@@ -80,13 +75,12 @@ async def seed_database(reset_db: bool = False):
     
     # 1. Create user
     print("👤 Creating user...")
-    user = User(
-        id="admin",
-        name="admin",
-        email="admin@example.com",
-        joined_community_ids=set()
-    )
-    print(f"  ✓ {user.name} ({user.id})")
+    user = {
+        "id": "admin",
+        "name": "admin",
+        "email": "admin@example.com",
+    }
+    print(f"  ✓ {user['name']} ({user['id']})")
 
     async with async_session() as session:
         existing_admin_result = await session.execute(
@@ -105,59 +99,55 @@ async def seed_database(reset_db: bool = False):
     # 2. Create projects
     print("\n📁 Creating projects...")
     projects = [
-        Project(
-            id="python_project",
-            name="Python Programming",
-            description="Learn Python from basics to advanced concepts",
-            owner_id=user.id,
-            visibility=ProjectVisibility.PUBLIC,
-            created_at=now - timedelta(days=30),
-            updated_at=now - timedelta(days=1),
-        ),
-        Project(
-            id="dsa_project",
-            name="Data Structures & Algorithms",
-            description="Master DSA concepts and problem solving",
-            owner_id=user.id,
-            visibility=ProjectVisibility.PUBLIC,
-            created_at=now - timedelta(days=25),
-            updated_at=now - timedelta(days=2),
-        ),
-        Project(
-            id="biology_project",
-            name="Biology Fundamentals",
-            description="Explore biology concepts from cells to ecosystems",
-            owner_id=user.id,
-            visibility=ProjectVisibility.SHARED,
-            created_at=now - timedelta(days=20),
-            updated_at=now - timedelta(days=3),
-        ),
-        Project(
-            id="stoicism_project",
-            name="Stoicism",
-            description="Practice Stoic philosophy and apply core principles",
-            owner_id=user.id,
-            visibility=ProjectVisibility.PUBLIC,
-            created_at=now - timedelta(days=18),
-            updated_at=now - timedelta(days=2),
-        ),
+        {
+            "id": "python_project",
+            "name": "Python Programming",
+            "description": "Learn Python from basics to advanced concepts",
+            "owner_id": user["id"],
+            "visibility": "public",
+            "created_at": now - timedelta(days=30),
+            "updated_at": now - timedelta(days=1),
+        },
+        {
+            "id": "dsa_project",
+            "name": "Data Structures & Algorithms",
+            "description": "Master DSA concepts and problem solving",
+            "owner_id": user["id"],
+            "visibility": "public",
+            "created_at": now - timedelta(days=25),
+            "updated_at": now - timedelta(days=2),
+        },
+        {
+            "id": "biology_project",
+            "name": "Biology Fundamentals",
+            "description": "Explore biology concepts from cells to ecosystems",
+            "owner_id": user["id"],
+            "visibility": "shared",
+            "created_at": now - timedelta(days=20),
+            "updated_at": now - timedelta(days=3),
+        },
+        {
+            "id": "stoicism_project",
+            "name": "Stoicism",
+            "description": "Practice Stoic philosophy and apply core principles",
+            "owner_id": user["id"],
+            "visibility": "public",
+            "created_at": now - timedelta(days=18),
+            "updated_at": now - timedelta(days=2),
+        },
     ]
     
     for project in projects:
-        print(f"  ✓ {project.name}")
+        print(f"  ✓ {project['name']}")
     
     # 3. Create community and attach all projects
     print("\n👥 Creating community...")
-    community = Community(
-        id="learning_hub",
-        name="Learning Hub",
-        description="A community for collaborative learning across all projects",
-        project_ids={p.id for p in projects},
-        node_importance_overrides={},
-        question_importance_overrides={}
-    )
-    user.join_community(community.id)
-    print(f"  ✓ {community.name}")
+    community_id = "learning_hub"
+    community_name = "Learning Hub"
+    community_description = "A community for collaborative learning across all projects"
+    community_project_ids = {p["id"] for p in projects}
+
+    print(f"  ✓ {community_name}")
     print(f"  ✓ Attached {len(projects)} projects to community")
     
     # 4. Seed data for each project
@@ -172,11 +162,11 @@ async def seed_database(reset_db: bool = False):
                 ("py_debugging", "Debugging Basics", 0.1, 0.2, 0.7),
             ],
             "edges": [
-                ("py_basics", "py_variables", EdgeType.PREREQUISITE, 1.0),
-                ("py_variables", "py_functions", EdgeType.PREREQUISITE, 1.0),
-                ("py_functions", "py_oop", EdgeType.PREREQUISITE, 1.0),
-                ("py_oop", "py_classes", EdgeType.PREREQUISITE, 1.0),
-                ("py_basics", "py_debugging", EdgeType.APPLIED_WITH, 0.7),
+                ("py_basics", "py_variables", "prerequisite", 1.0),
+                ("py_variables", "py_functions", "prerequisite", 1.0),
+                ("py_functions", "py_oop", "prerequisite", 1.0),
+                ("py_oop", "py_classes", "prerequisite", 1.0),
+                ("py_basics", "py_debugging", "applied_with", 0.7),
             ],
             "questions": [
                 ("py_q1", "What is a variable in Python?", "A variable is a named container that stores a value", "py_variables", 1),
@@ -213,10 +203,10 @@ async def seed_database(reset_db: bool = False):
                 ("dsa_complexity", "Time Complexity", 0.1, 0.2, 0.9),
             ],
             "edges": [
-                ("dsa_arrays", "dsa_stacks", EdgeType.PREREQUISITE, 1.0),
-                ("dsa_arrays", "dsa_sorting", EdgeType.PREREQUISITE, 0.8),
-                ("dsa_stacks", "dsa_trees", EdgeType.PREREQUISITE, 0.9),
-                ("dsa_arrays", "dsa_complexity", EdgeType.APPLIED_WITH, 0.75),
+                ("dsa_arrays", "dsa_stacks", "prerequisite", 1.0),
+                ("dsa_arrays", "dsa_sorting", "prerequisite", 0.8),
+                ("dsa_stacks", "dsa_trees", "prerequisite", 0.9),
+                ("dsa_arrays", "dsa_complexity", "applied_with", 0.75),
             ],
             "questions": [
                 ("dsa_q1", "What is an array?", "A contiguous data structure for storing elements", "dsa_arrays", 1),
@@ -253,10 +243,10 @@ async def seed_database(reset_db: bool = False):
                 ("bio_homeostasis", "Homeostasis", 0.1, 0.2, 0.8),
             ],
             "edges": [
-                ("bio_cells", "bio_dna", EdgeType.PREREQUISITE, 1.0),
-                ("bio_dna", "bio_evolution", EdgeType.PREREQUISITE, 0.9),
-                ("bio_cells", "bio_ecology", EdgeType.APPLIED_WITH, 0.7),
-                ("bio_cells", "bio_homeostasis", EdgeType.APPLIED_WITH, 0.75),
+                ("bio_cells", "bio_dna", "prerequisite", 1.0),
+                ("bio_dna", "bio_evolution", "prerequisite", 0.9),
+                ("bio_cells", "bio_ecology", "applied_with", 0.7),
+                ("bio_cells", "bio_homeostasis", "applied_with", 0.75),
             ],
             "questions": [
                 ("bio_q1", "What is the basic unit of life?", "The cell", "bio_cells", 1),
@@ -301,14 +291,14 @@ async def seed_database(reset_db: bool = False):
                 ("stoic_memento_mori", "Memento Mori", 0.1, 0.2, 0.8),
             ],
             "edges": [
-                ("stoic_foundations", "stoic_virtue", EdgeType.PREREQUISITE, 1.0),
-                ("stoic_foundations", "stoic_dichotomy", EdgeType.PREREQUISITE, 1.0),
-                ("stoic_dichotomy", "stoic_judgments", EdgeType.PREREQUISITE, 0.9),
-                ("stoic_judgments", "stoic_emotions", EdgeType.PREREQUISITE, 0.9),
-                ("stoic_virtue", "stoic_role_ethics", EdgeType.APPLIED_WITH, 0.8),
-                ("stoic_dichotomy", "stoic_practice", EdgeType.APPLIED_WITH, 0.85),
-                ("stoic_negative_vis", "stoic_practice", EdgeType.APPLIED_WITH, 0.75),
-                ("stoic_foundations", "stoic_memento_mori", EdgeType.APPLIED_WITH, 0.7),
+                ("stoic_foundations", "stoic_virtue", "prerequisite", 1.0),
+                ("stoic_foundations", "stoic_dichotomy", "prerequisite", 1.0),
+                ("stoic_dichotomy", "stoic_judgments", "prerequisite", 0.9),
+                ("stoic_judgments", "stoic_emotions", "prerequisite", 0.9),
+                ("stoic_virtue", "stoic_role_ethics", "applied_with", 0.8),
+                ("stoic_dichotomy", "stoic_practice", "applied_with", 0.85),
+                ("stoic_negative_vis", "stoic_practice", "applied_with", 0.75),
+                ("stoic_foundations", "stoic_memento_mori", "applied_with", 0.7),
             ],
             "questions": [
                 (
@@ -389,87 +379,62 @@ async def seed_database(reset_db: bool = False):
     print("\n📚 Seeding project data...")
     async with async_session() as session:
         existing_community_result = await session.execute(
-            select(CommunityModel).where(CommunityModel.id == community.id)
+            select(CommunityModel).where(CommunityModel.id == community_id)
         )
         db_community = existing_community_result.scalar_one_or_none()
         if not db_community:
             db_community = CommunityModel(
-                id=community.id,
-                name=community.name,
-                description=community.description,
-                created_by=user.id,
-                project_ids=sorted(list(community.project_ids)),
-                member_ids=[user.id],
+                id=community_id,
+                name=community_name,
+                description=community_description,
+                created_by=user["id"],
+                project_ids=sorted(list(community_project_ids)),
+                member_ids=[user["id"]],
                 node_importance_overrides=community_node_overrides,
                 question_importance_overrides={},
             )
             session.add(db_community)
         else:
-            db_community.project_ids = sorted(list(community.project_ids))
-            db_community.member_ids = list({*(db_community.member_ids or []), user.id})
+            db_community.project_ids = sorted(list(community_project_ids))
+            db_community.member_ids = list({*(db_community.member_ids or []), user["id"]})
             db_community.node_importance_overrides = community_node_overrides
 
         existing_project_ids_result = await session.execute(select(ProjectModel.id))
         existing_project_ids = {row[0] for row in existing_project_ids_result.fetchall()}
         for project in projects:
-            print(f"\n  Project: {project.name}")
-            if project.id not in existing_project_ids:
+            print(f"\n  Project: {project['name']}")
+            if project["id"] not in existing_project_ids:
                 db_project = ProjectModel(
-                    id=project.id,
-                    name=project.name,
-                    description=project.description,
-                    owner_id=project.owner_id,
-                    created_by=user.id,
-                    visibility=project.visibility.value,
-                    created_at=project.created_at,
-                    updated_at=project.updated_at,
+                    id=project["id"],
+                    name=project["name"],
+                    description=project["description"],
+                    owner_id=project["owner_id"],
+                    created_by=user["id"],
+                    visibility=project["visibility"],
+                    created_at=project["created_at"],
+                    updated_at=project["updated_at"],
                 )
                 session.add(db_project)
-                existing_project_ids.add(project.id)
-            data = project_data[project.id]
+                existing_project_ids.add(project["id"])
+            data = project_data[project["id"]]
 
             existing_node_ids_result = await session.execute(
-                select(NodeModel.id).where(NodeModel.project_id == project.id)
+                select(NodeModel.id).where(NodeModel.project_id == project["id"])
             )
             existing_node_ids = {row[0] for row in existing_node_ids_result.fetchall()}
             existing_edge_ids_result = await session.execute(
-                select(EdgeModel.id).where(EdgeModel.project_id == project.id)
+                select(EdgeModel.id).where(EdgeModel.project_id == project["id"])
             )
             existing_edge_ids = {row[0] for row in existing_edge_ids_result.fetchall()}
-            
-            # Create graph for project
-            graph = Graph(project_id=project.id)
             
             # Create nodes
             print(f"    Creating {len(data['nodes'])} nodes...")
             for node_id, topic_name, proven, estimated, importance in data["nodes"]:
-                node = Node(
-                    id=node_id,
-                    project_id=project.id,
-                    topic_name=topic_name,
-                    proven_knowledge_rating=proven,
-                    user_estimated_knowledge_rating=estimated,
-                    importance=importance,
-                    relevance=0.8,
-                    view_frequency=max(1, int(proven * 10))
-                )
-                graph.add_node(node)
-                
-                # Create user node state for this user
-                user_state = UserNodeState(
-                    user_id=user.id,
-                    project_id=project.id,
-                    node_id=node_id,
-                    proven_knowledge_rating=proven,
-                    review_count=int(proven * 10),
-                    last_reviewed_at=now - timedelta(days=int((1 - proven) * 10)),
-                    stability=1.0 + proven
-                )
                 if node_id not in existing_node_ids:
                     db_node = NodeModel(
                         id=node_id,
-                        project_id=project.id,
-                        created_by=user.id,
+                        project_id=project["id"],
+                        created_by=user["id"],
                         topic_name=topic_name,
                         proven_knowledge_rating=proven,
                         user_estimated_knowledge_rating=estimated,
@@ -489,29 +454,23 @@ async def seed_database(reset_db: bool = False):
                         "SET search_vector = to_tsvector('english', COALESCE(topic_name, '')) "
                         "WHERE project_id = :project_id"
                     ),
-                    {"project_id": project.id},
+                    {"project_id": project["id"]},
                 )
             
             # Create edges
             print(f"    Creating {len(data['edges'])} edges...")
             for from_id, to_id, edge_type, weight in data["edges"]:
-                edge = Edge(
-                    project_id=project.id,
-                    from_node_id=from_id,
-                    to_node_id=to_id,
-                    type=edge_type,
-                    weight=weight
-                )
-                graph.add_edge(edge)
                 print(f"      ✓ {from_id} → {to_id}")
-                edge_id = f"{from_id}-{to_id}-{edge_type.value}"
+                # We expect edge_type to be a string or have a .value attribute
+                e_type_val = edge_type.value if hasattr(edge_type, 'value') else edge_type
+                edge_id = f"{from_id}-{to_id}-{e_type_val}"
                 if edge_id not in existing_edge_ids:
                     db_edge = EdgeModel(
                         id=edge_id,
-                        project_id=project.id,
+                        project_id=project["id"],
                         source=from_id,
                         target=to_id,
-                        type=edge_type.value,
+                        type=e_type_val,
                         weight=weight,
                     )
                     session.add(db_edge)
@@ -530,19 +489,19 @@ async def seed_database(reset_db: bool = False):
                 # Create database Question model
                 db_question = QuestionModel(
                     id=qid,
-                    project_id=project.id,
-                    created_by=user.id,
+                    project_id=project["id"],
+                    created_by=user["id"],
                     text=question_text,
                     answer=answer,
                     options=None,
                     option_explanations=None,
-                    question_type=QuestionType.OPEN.value,
-                    knowledge_type=KnowledgeType.CONCEPT.value,
+                    question_type="open",
+                    knowledge_type="concept",
                     covered_node_ids=[node_id],
                     difficulty=difficulty,
-                    tags=["fundamentals", project.id],
+                    tags=["fundamentals", project["id"]],
                     question_metadata={
-                        "created_by": user.id,
+                        "created_by": user["id"],
                         "created_at": (now - timedelta(days=difficulty)).isoformat(),
                         "importance": difficulty * 0.2,
                         "hits": 0,
@@ -573,19 +532,19 @@ async def seed_database(reset_db: bool = False):
 
                 db_question = QuestionModel(
                     id=qid,
-                    project_id=project.id,
-                    created_by=user.id,
+                    project_id=project["id"],
+                    created_by=user["id"],
                     text=question_text,
                     answer=answer,
                     options=options,
                     option_explanations=option_explanations,
-                    question_type=QuestionType.MCQ.value,
-                    knowledge_type=KnowledgeType.CONCEPT.value,
+                    question_type="mcq",
+                    knowledge_type="concept",
                     covered_node_ids=[node_id],
                     difficulty=difficulty,
-                    tags=["mcq", "fundamentals", project.id],
+                    tags=["mcq", "fundamentals", project["id"]],
                     question_metadata={
-                        "created_by": user.id,
+                        "created_by": user["id"],
                         "created_at": (now - timedelta(days=difficulty)).isoformat(),
                         "importance": difficulty * 0.25,
                         "hits": 0,
@@ -598,26 +557,24 @@ async def seed_database(reset_db: bool = False):
                 session.add(db_question)
                 print(f"      ✓ {qid}: {question_text[:40]}...")
             
-            # Set community overrides for this project
+            # Extract community overrides if any are provided logically
             if data["community_overrides"]:
-                for node_id, importance in data["community_overrides"].items():
-                    community.set_node_importance(project.id, node_id, importance)
                 print(f"    ✓ Set {len(data['community_overrides'])} community overrides")
 
-            material_text = seed_materials.get(project.id, "")
+            material_text = seed_materials.get(project["id"], "")
             if material_text:
-                material_file = seed_materials_dir / f"{project.id}.txt"
+                material_file = seed_materials_dir / f"{project['id']}.txt"
                 material_file.write_text(material_text, encoding="utf-8")
-                material_id = f"{project.id}-material"
+                material_id = f"{project['id']}-material"
                 existing_material_result = await session.execute(
                     select(MaterialModel.id).where(MaterialModel.id == material_id)
                 )
                 if not existing_material_result.scalar_one_or_none():
                     db_material = MaterialModel(
                         id=material_id,
-                        project_id=project.id,
-                        created_by=user.id,
-                        title=f"{project.name} Notes",
+                        project_id=project["id"],
+                        created_by=user["id"],
+                        title=f"{project['name']} Notes",
                         content_text=material_text,
                         summary=None,
                         embedding=None,
@@ -625,22 +582,22 @@ async def seed_database(reset_db: bool = False):
                     session.add(db_material)
 
                 node_result = await session.execute(
-                    select(NodeModel).where(NodeModel.project_id == project.id)
+                    select(NodeModel).where(NodeModel.project_id == project["id"])
                 )
-                for node in node_result.scalars().all():
-                    source_ids = set(node.source_material_ids or [])
+                for db_node in node_result.scalars().all():
+                    source_ids = set(db_node.source_material_ids or [])
                     if material_id not in source_ids:
                         source_ids.add(material_id)
-                        node.source_material_ids = list(source_ids)
+                        db_node.source_material_ids = list(source_ids)
 
                 question_result = await session.execute(
-                    select(QuestionModel).where(QuestionModel.project_id == project.id)
+                    select(QuestionModel).where(QuestionModel.project_id == project["id"])
                 )
-                for question in question_result.scalars().all():
-                    source_ids = set(question.source_material_ids or [])
+                for db_question_ in question_result.scalars().all():
+                    source_ids = set(db_question_.source_material_ids or [])
                     if material_id not in source_ids:
                         source_ids.add(material_id)
-                        question.source_material_ids = list(source_ids)
+                        db_question_.source_material_ids = list(source_ids)
         
         await session.commit()
     

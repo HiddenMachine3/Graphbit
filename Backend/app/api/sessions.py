@@ -16,7 +16,7 @@ _session_counter = 0
 
 
 async def _get_default_user_id(db: AsyncSession) -> str:
-    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id))
+    result = await db.execute(select(AppUserModel).order_by(AppUserModel.id).limit(1))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=400, detail="No default user found")
