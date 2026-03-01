@@ -7,13 +7,17 @@
     "default_title": "Add to Graphbit",
     "default_popup": "popup.html"
   },
-  "permissions": ["activeTab", "tabs", "storage", "scripting"],
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "scripting"
+  ],
   "host_permissions": [
     "http://localhost:8000/*",
     "http://127.0.0.1:8000/*",
     "https://www.youtube.com/*",
     "https://youtu.be/*",
-    "file:///*",
-    "<all_urls>"
+    "file:///*"
   ]
 }

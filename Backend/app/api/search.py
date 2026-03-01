@@ -23,11 +23,6 @@ async def search_knowledge(
     pattern = f"%{query}%"
 
     if db.bind.dialect.name == "postgresql":
-        try:
-            await db.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
-        except Exception:
-            pass
-
         node_rows = await db.execute(
             text(
                 """

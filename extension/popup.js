@@ -551,6 +551,7 @@ async function generateQuizQuestionsForChunks(backendUrl, chunks, questionsPerCh
 
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index];
+    setStatus(`Generating quiz ${index + 1}/${chunks.length}…`, "info");
     const response = await fetch(`${backendUrl}/qa/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -742,7 +743,7 @@ async function startInVideoQuiz() {
               if (data.type === "GRAPHBIT_QUIZ_READY") {
                 try {
                   frame.contentWindow?.postMessage(message, "*");
-                } catch {}
+                } catch { }
                 return;
               }
               if (data.type === "GRAPHBIT_QUIZ_DONE") {
@@ -756,7 +757,7 @@ async function startInVideoQuiz() {
             const sendTimer = setInterval(() => {
               try {
                 frame.contentWindow?.postMessage(message, "*");
-              } catch {}
+              } catch { }
             }, 300);
 
             const handshakeTimeout = setTimeout(() => {
@@ -770,7 +771,7 @@ async function startInVideoQuiz() {
           try {
             await openFrontendQuizForChunk(chunk, chunkIndex, totalChunks);
           } finally {
-            video.play().catch(() => {});
+            video.play().catch(() => { });
           }
         };
 

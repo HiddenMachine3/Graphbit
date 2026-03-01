@@ -6,7 +6,7 @@ import logging
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -213,13 +213,21 @@ async def get_material(material_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/materials")
-async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
+async def create_material(
+    data: dict, 
+    background_tasks: BackgroundTasks, 
+    db: AsyncSession = Depends(get_db)
+):
     """Create a new material."""
     project_id = data.get("project_id")
     title = data.get("title")
     source_url = (data.get("source_url") or data.get("link") or "").strip()
     content_text = (data.get("content_text") or "").strip()
     transcript_text = (data.get("transcript_text") or "").strip()
+
+    # PostgreSQL text fields cannot contain NUL (0x00) bytes — strip them
+    content_text = content_text.replace("\x00", "")
+    transcript_text = transcript_text.replace("\x00", "")
     transcript_segments = _normalize_transcript_segments(data.get("transcript_segments") or [])
     if not project_id or not title:
         raise HTTPException(status_code=400, detail="project_id and title are required")
@@ -314,7 +322,7 @@ async def create_material(data: dict, db: AsyncSession = Depends(get_db)):
                 title=title,
                 transcript=content_text or transcript_text,
             )
-            await _ingest_video(ingest_request, db)
+            await _ingest_video(ingest_request, background_tasks, db)
             logger.info(
                 "Material auto-ingest to graph success: material_id=%s project_id=%s",
                 material.id,
@@ -676,24 +684,17 @@ async def suggest_nodes_for_material_text(data: dict, db: AsyncSession = Depends
     if not text_value:
         return {"strong": [], "weak": []}
 
-    hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
-    if not hf_token:
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_key:
         logger.warning(
-            "Material suggestion skipped due to missing HF_TOKEN: project_id=%s material_id=%s",
+            "Material suggestion skipped due to missing GEMINI_API_KEY: project_id=%s material_id=%s",
             project_id,
             material_id,
         )
         return {"strong": [], "weak": []}
 
-    from huggingface_hub import InferenceClient
-
-    hf_base_url = os.environ.get(
-        "HF_INFERENCE_BASE_URL",
-        "https://router.huggingface.co/hf-inference",
-    )
-    client = InferenceClient(token=hf_token, base_url=hf_base_url)
-    embedding_service = EmbeddingService(client, expected_dim=768)
-    keyword_service = KeywordExtractionService(client)
+    embedding_service = EmbeddingService()
+    keyword_service = KeywordExtractionService()
     repository = PostgresNodeSuggestionRepository(db)
     service = NodeSuggestionService(repository, embedding_service, keyword_service)
     try:

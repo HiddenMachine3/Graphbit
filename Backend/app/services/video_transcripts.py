@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from urllib.parse import parse_qs, urlparse
+
+logger = logging.getLogger(__name__)
 
 
 def extract_youtube_video_id(video_url: str) -> str | None:
@@ -102,6 +105,7 @@ def fetch_youtube_transcript_segments(
     """
     video_id = extract_youtube_video_id(video_url)
     if not video_id:
+        logger.error("Failed to parse YouTube video ID from URL: %s", video_url)
         raise ValueError("Unable to parse YouTube video ID from URL")
 
     requested_languages = languages or ["en", "en-US", "en-GB"]
@@ -115,11 +119,13 @@ def fetch_youtube_transcript_segments(
             fetched = api_client.fetch(video_id, languages=requested_languages)
             segments = _to_raw_segments(fetched)
             if segments and len(segments) > 0:
+                logger.info("Transcript fetched: video_id=%s strategy=fetch segments=%d", video_id, len(segments))
                 return segments, "fetch"
 
         if hasattr(YouTubeTranscriptApi, "get_transcript"):
             segments = YouTubeTranscriptApi.get_transcript(video_id)
             if segments and len(segments) > 0:
+                logger.info("Transcript fetched: video_id=%s strategy=get_transcript segments=%d", video_id, len(segments))
                 return segments, "get_transcript"
 
         raise ValueError("Primary transcript methods returned empty data")
@@ -157,6 +163,7 @@ def fetch_youtube_transcript_segments(
     except Exception as fallback_exc:
         primary_reason = f"{type(primary_error).__name__}: {primary_error}" if primary_error else "unknown"
         fallback_reason = f"{type(fallback_exc).__name__}: {fallback_exc}"
+        logger.error("Transcript fetch failed: video_id=%s primary=%s fallback=%s", video_id, primary_reason, fallback_reason)
         raise RuntimeError(f"Primary: {primary_reason}. Fallback: {fallback_reason}") from fallback_exc
 
 

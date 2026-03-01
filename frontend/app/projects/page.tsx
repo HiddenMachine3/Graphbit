@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Eye, EyeOff, Import, MoreVertical } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, Import, MoreVertical, Trash2 } from "lucide-react";
 
 import { getPKRColor } from "@/lib/colors";
 
@@ -15,7 +15,7 @@ import type {
   UserDTO,
 } from "@/lib/types";
 import { getProjects, createProject, deleteProject } from "@/lib/api/project";
-import { listNodes, createNode } from "@/lib/api/graph";
+import { listNodes, createNode, updateNode, deleteNode } from "@/lib/api/graph";
 import {
   listQuestions as listQuestionBank,
   createQuestion,
@@ -239,6 +239,11 @@ export default function ProjectsPage() {
   const [nodeTopic, setNodeTopic] = useState("");
   const [nodeImportance, setNodeImportance] = useState(0.6);
   const [nodeRelevance, setNodeRelevance] = useState(0.7);
+
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [editNodeTopic, setEditNodeTopic] = useState("");
+  const [editNodeImportance, setEditNodeImportance] = useState(0);
+  const [editNodeRelevance, setEditNodeRelevance] = useState(0.5);
 
   const [questionText, setQuestionText] = useState("");
   const [questionAnswer, setQuestionAnswer] = useState("");
@@ -670,6 +675,53 @@ export default function ProjectsPage() {
       setStatus({ type: "success", message: "Node added" });
     } catch {
       setStatus({ type: "error", message: "Failed to add node" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginEditNode = (node: NodeDTO) => {
+    setEditingNodeId(node.id);
+    setEditNodeTopic(node.topic_name);
+    setEditNodeImportance(node.importance ?? 0);
+    setEditNodeRelevance(node.relevance ?? 0.5);
+  };
+
+  const cancelEditNode = () => {
+    setEditingNodeId(null);
+  };
+
+  const handleUpdateNode = async (nodeId: string) => {
+    if (!currentProjectId || !editNodeTopic.trim()) return;
+    try {
+      setBusy(true);
+      await updateNode(currentProjectId, nodeId, {
+        topic_name: editNodeTopic.trim(),
+        importance: editNodeImportance,
+        relevance: editNodeRelevance,
+      });
+      await refreshProjectData(currentProjectId);
+      setEditingNodeId(null);
+      setStatus({ type: "success", message: "Node updated" });
+    } catch (error) {
+      console.error(error);
+      setStatus({ type: "error", message: "Failed to update node." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteNodeUi = async (nodeId: string) => {
+    if (!currentProjectId) return;
+    if (!confirm("Are you sure you want to delete this node?")) return;
+    try {
+      setBusy(true);
+      await deleteNode(currentProjectId, nodeId);
+      await refreshProjectData(currentProjectId);
+      setStatus({ type: "success", message: "Node deleted" });
+    } catch (error: any) {
+      console.error(error);
+      setStatus({ type: "error", message: "Failed to delete node." });
     } finally {
       setBusy(false);
     }
@@ -1394,22 +1446,22 @@ export default function ProjectsPage() {
         .join("\n\n");
       const response = draftText
         ? await suggestMaterialNodesByText({
-            project_id: currentProjectId,
-            text: draftText,
-            threshold: suggestionThreshold,
-            semantic_weight: semanticWeight,
-            keyword_weight: keywordWeight,
-            dedup_threshold: dedupThreshold,
-            top_k: suggestionTopK,
-          })
+          project_id: currentProjectId,
+          text: draftText,
+          threshold: suggestionThreshold,
+          semantic_weight: semanticWeight,
+          keyword_weight: keywordWeight,
+          dedup_threshold: dedupThreshold,
+          top_k: suggestionTopK,
+        })
         : await suggestMaterialNodes(materialId, {
-            project_id: currentProjectId,
-            threshold: suggestionThreshold,
-            semantic_weight: semanticWeight,
-            keyword_weight: keywordWeight,
-            dedup_threshold: dedupThreshold,
-            top_k: suggestionTopK,
-          });
+          project_id: currentProjectId,
+          threshold: suggestionThreshold,
+          semantic_weight: semanticWeight,
+          keyword_weight: keywordWeight,
+          dedup_threshold: dedupThreshold,
+          top_k: suggestionTopK,
+        });
       setMaterialSuggestions({ materialId, strong: response.strong, weak: response.weak });
       const newCandidates = response.weak
         .filter((item: SuggestionItem) => item.suggestion_type === "NEW" && item.suggested_title)
@@ -1674,11 +1726,10 @@ export default function ProjectsPage() {
 
       {status.type !== "idle" && status.message !== "Imported!" && (
         <div
-          className={`mx-6 mt-4 rounded-lg border px-4 py-3 text-sm ${
-            status.type === "error"
-              ? "border-pkr-low/50 bg-pkr-low/10 text-pkr-low"
-              : "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
-          }`}
+          className={`mx-6 mt-4 rounded-lg border px-4 py-3 text-sm ${status.type === "error"
+            ? "border-pkr-low/50 bg-pkr-low/10 text-pkr-low"
+            : "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
+            }`}
         >
           {status.message}
         </div>
@@ -1687,9 +1738,8 @@ export default function ProjectsPage() {
       {showImportedToast && (
         <div className="pointer-events-none fixed bottom-4 right-4 z-[70]">
           <div
-            className={`rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 transition-opacity duration-[2000ms] ${
-              importedToastVisible ? "opacity-100" : "opacity-0"
-            }`}
+            className={`rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 transition-opacity duration-[2000ms] ${importedToastVisible ? "opacity-100" : "opacity-0"
+              }`}
           >
             Imported!
           </div>
@@ -1758,11 +1808,10 @@ export default function ProjectsPage() {
                   setCurrentProjectId(project.id);
                   setCurrentProjectName(project.name);
                 }}
-                className={`group relative w-full cursor-pointer rounded-xl border p-3 text-left transition ${
-                  project.id === currentProjectId
-                    ? "border-border-accent bg-bg-elevated"
-                    : "border-border-default bg-transparent hover:bg-bg-hover"
-                }`}
+                className={`group relative w-full cursor-pointer rounded-xl border p-3 text-left transition ${project.id === currentProjectId
+                  ? "border-border-accent bg-bg-elevated"
+                  : "border-border-default bg-transparent hover:bg-bg-hover"
+                  }`}
                 style={{ borderLeft: project.id === currentProjectId ? `3px solid ${getPKRColor(nodes.reduce((sum, n) => sum + (n.proven_knowledge_rating ?? 0), 0) / Math.max(nodes.length, 1))}` : '3px solid var(--border-default)' }}
               >
                 <div className="text-sm font-semibold font-body text-text-primary">{project.name}</div>
@@ -1782,7 +1831,7 @@ export default function ProjectsPage() {
                       className="rounded p-1 text-text-muted transition hover:bg-bg-hover hover:text-pkr-low disabled:opacity-60"
                       title="Delete project"
                     >
-                      <MoreVertical className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -1802,10 +1851,10 @@ export default function ProjectsPage() {
             <div className="flex h-full flex-col items-center justify-center text-center">
               <div className="mb-4 text-text-muted">
                 <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/>
-                  <circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>
-                  <line x1="12" y1="9" x2="6" y2="7"/><line x1="12" y1="9" x2="18" y2="7"/>
-                  <line x1="12" y1="15" x2="6" y2="17"/><line x1="12" y1="15" x2="18" y2="17"/>
+                  <circle cx="12" cy="12" r="3" /><circle cx="6" cy="6" r="2" /><circle cx="18" cy="6" r="2" />
+                  <circle cx="6" cy="18" r="2" /><circle cx="18" cy="18" r="2" />
+                  <line x1="12" y1="9" x2="6" y2="7" /><line x1="12" y1="9" x2="18" y2="7" />
+                  <line x1="12" y1="15" x2="6" y2="17" /><line x1="12" y1="15" x2="18" y2="17" />
                 </svg>
               </div>
               <h3 className="text-lg font-semibold font-heading text-text-primary">Select a project</h3>
@@ -1816,1853 +1865,1913 @@ export default function ProjectsPage() {
           )}
           {currentProjectId && (
             <>
-          {/* Tab Bar */}
-          <div className="border-b border-border-default mb-6 flex gap-0">
-            {(['nodes', 'questions', 'materials', 'communities'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3 text-sm font-medium font-body capitalize cursor-pointer transition-colors ${
-                  activeTab === tab
-                    ? 'text-text-primary border-b-2 border-accent'
-                    : 'text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-
-          {/* ── Tab: Nodes ── */}
-          {activeTab === 'nodes' && (
-            <div>
-              {!currentProjectId && (
-                <div className="text-sm text-text-secondary">Select a project to add nodes.</div>
-              )}
-              {currentProjectId && (
-                <div className="grid gap-4">
-                  <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
-                    <input
-                      value={nodeTopic}
-                      onChange={(event) => setNodeTopic(event.target.value)}
-                      placeholder="Node topic"
-                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={1}
-                        step={0.1}
-                        value={nodeImportance}
-                        onChange={(event) => setNodeImportance(Number(event.target.value))}
-                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        max={1}
-                        step={0.1}
-                        value={nodeRelevance}
-                        onChange={(event) => setNodeRelevance(Number(event.target.value))}
-                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                      />
-                    </div>
-                    <button
-                      onClick={handleCreateNode}
-                      disabled={busy}
-                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Add node
-                    </button>
-                  </div>
-                  <div className="grid min-w-0 gap-2">
-                    {nodes.map((node) => (
-                      <div
-                        key={node.id}
-                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary"
-                        style={{ borderLeft: `3px solid ${getPKRColor(node.importance ?? 0)}` }}
-                      >
-                        <div className="font-semibold font-heading text-sm text-text-primary">{node.topic_name}</div>
-                        <div className="text-text-secondary">Importance: {node.importance.toFixed(2)}</div>
-                      </div>
-                    ))}
-                    {nodes.length === 0 && (
-                      <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
-                        No nodes yet for this project.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Tab: Questions ── */}
-          {activeTab === 'questions' && (
-            <div>
-          {!currentProjectId && (
-            <div className="text-sm text-text-secondary">Select a project to manage questions.</div>
-          )}
-          {currentProjectId && (
-            <div className="grid gap-4">
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsImportQuestionsOpen(true)}
-                  disabled={busy}
-                  className="inline-flex items-center gap-2 rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Import className="h-3.5 w-3.5" />
-                  Import questions
-                </button>
-              </div>
-              <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
-                <textarea
-                  ref={createQuestionTextRef}
-                  value={questionText}
-                  onChange={(event) => setQuestionText(event.target.value)}
-                  placeholder="Question prompt"
-                  className="min-h-[80px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <select
-                    value={questionType}
-                    onChange={(event) => {
-                      setQuestionType(event.target.value);
-                      setQuestionCorrectOptionIndex(0);
-                    }}
-                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+              {/* Tab Bar */}
+              <div className="border-b border-border-default mb-6 flex gap-0">
+                {(['nodes', 'questions', 'materials', 'communities'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-3 text-sm font-medium font-body capitalize cursor-pointer transition-colors ${activeTab === tab
+                      ? 'text-text-primary border-b-2 border-accent'
+                      : 'text-text-muted hover:text-text-secondary'
+                      }`}
                   >
-                    <option value="OPEN">Open</option>
-                    <option value="FLASHCARD">Flashcard</option>
-                    <option value="CLOZE">Cloze</option>
-                    <option value="MCQ">Multiple choice</option>
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    max={5}
-                    value={questionDifficulty}
-                    onChange={(event) => setQuestionDifficulty(Number(event.target.value))}
-                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                    placeholder="Difficulty"
-                  />
-                </div>
-                {isQuestionMcq ? (
-                  <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                    <div className="text-xs font-semibold font-heading text-text-primary">Multiple choice options</div>
-                    {questionMcqOptions.map((option, index) => (
-                      <div key={`create-option-${index}`} className="grid grid-cols-[auto_1fr] items-center gap-2">
-                        <label className="flex items-center gap-1 text-xs text-text-secondary">
-                          <input
-                            type="radio"
-                            name="create-correct-option"
-                            checked={questionCorrectOptionIndex === index}
-                            onChange={() => setQuestionCorrectOptionIndex(index)}
-                            className="h-3.5 w-3.5"
-                          />
-                          {optionLabel(index)}
-                        </label>
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Tab: Nodes ── */}
+              {activeTab === 'nodes' && (
+                <div>
+                  {!currentProjectId && (
+                    <div className="text-sm text-text-secondary">Select a project to add nodes.</div>
+                  )}
+                  {currentProjectId && (
+                    <div className="grid gap-4">
+                      <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
                         <input
-                          value={option}
-                          onChange={(event) =>
-                            setQuestionMcqOptions((prev) => {
-                              const next = [...prev];
-                              next[index] = event.target.value;
-                              return next;
-                            })
-                          }
-                          placeholder={`Option ${optionLabel(index)}`}
+                          value={nodeTopic}
+                          onChange={(event) => setNodeTopic(event.target.value)}
+                          placeholder="Node topic"
                           className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                         />
-                      </div>
-                    ))}
-                    <div className="text-xs font-body text-text-secondary">
-                      Select the radio button for the correct option.
-                    </div>
-                  </div>
-                ) : (
-                  <textarea
-                    ref={createQuestionAnswerRef}
-                    value={questionAnswer}
-                    onChange={(event) => setQuestionAnswer(event.target.value)}
-                    placeholder={
-                      questionType === "FLASHCARD"
-                        ? "Flashcard back"
-                        : questionType === "CLOZE"
-                          ? "Expected completion"
-                          : "Answer"
-                    }
-                    className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                  />
-                )}
-                <input
-                  value={questionTags}
-                  onChange={(event) => setQuestionTags(event.target.value)}
-                  placeholder="Tags (comma separated)"
-                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingQuestionNodesId(null);
-                      setQuestionSuggestionError(null);
-                      setQuestionSuggestions({ questionId: null, strong: [], weak: [] });
-                      setIsCreateQuestionNodesOpen((prev) => !prev);
-                    }}
-                    disabled={busy}
-                    className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isCreateQuestionNodesOpen ? "Hide node picker" : "Add nodes"}
-                  </button>
-                  <div className="text-xs text-text-secondary">
-                    {createQuestionNodeSelection.length} node{createQuestionNodeSelection.length === 1 ? "" : "s"} selected
-                  </div>
-                </div>
-                {isCreateQuestionNodesOpen && (
-                  <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div
-                        ref={createQuestionSuggestSettingsRef}
-                        className="relative inline-flex rounded-lg border border-accent/60"
-                      >
-                        <button
-                          onClick={handleSuggestDraftQuestionNodes}
-                          disabled={busy || questionSuggestionLoading}
-                          className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowCreateQuestionSuggestSettings((prev) => !prev)
-                          }
-                          disabled={busy || questionSuggestionLoading}
-                          className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                          aria-label="Toggle suggestion settings"
-                        >
-                          <ChevronDown
-                            className={`h-3.5 w-3.5 transition ${
-                              showCreateQuestionSuggestSettings ? "rotate-180" : ""
-                            }`}
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.1}
+                            value={nodeImportance}
+                            onChange={(event) => setNodeImportance(Number(event.target.value))}
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                           />
+                          <input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.1}
+                            value={nodeRelevance}
+                            onChange={(event) => setNodeRelevance(Number(event.target.value))}
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={handleCreateNode}
+                          disabled={busy}
+                          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Add node
                         </button>
-                        {showCreateQuestionSuggestSettings && (
-                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
-                            <div className="grid gap-3">
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
-                                Threshold: {suggestionThreshold.toFixed(2)}
+                      </div>
+                      <div className="grid min-w-0 gap-2">
+                        {nodes.map((node) => (
+                          <div
+                            key={node.id}
+                            className="rounded-lg border border-border-default bg-bg-elevated px-4 py-3 text-xs text-text-primary flex flex-col gap-2"
+                            style={{ borderLeft: `3px solid ${getPKRColor(node.importance ?? 0)}` }}
+                          >
+                            {editingNodeId === node.id ? (
+                              <div className="grid gap-3">
                                 <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.01}
-                                  value={suggestionThreshold}
-                                  onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.threshold}
+                                  value={editNodeTopic}
+                                  onChange={(event) => setEditNodeTopic(event.target.value)}
+                                  placeholder="Node topic"
+                                  className="rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                                 />
-                              </label>
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
-                                Semantic weight: {semanticWeight.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.05}
-                                  value={semanticWeight}
-                                  onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.semantic}
-                                />
-                              </label>
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
-                                Keyword weight: {keywordWeight.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.05}
-                                  value={keywordWeight}
-                                  onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.keyword}
-                                />
-                              </label>
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
-                                Dedup threshold: {dedupThreshold.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.01}
-                                  value={dedupThreshold}
-                                  onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.dedup}
-                                />
-                              </label>
-                            </div>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <label className="flex flex-col gap-1 text-xs text-text-secondary">
+                                    Importance
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={1}
+                                      step={0.1}
+                                      value={editNodeImportance}
+                                      onChange={(event) => setEditNodeImportance(Number(event.target.value))}
+                                      className="rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                                    />
+                                  </label>
+                                  <label className="flex flex-col gap-1 text-xs text-text-secondary">
+                                    Relevance
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={1}
+                                      step={0.1}
+                                      value={editNodeRelevance}
+                                      onChange={(event) => setEditNodeRelevance(Number(event.target.value))}
+                                      className="rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                                    />
+                                  </label>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleUpdateNode(node.id)}
+                                    disabled={busy}
+                                    className="rounded-lg bg-accent px-3 py-1 font-semibold text-text-primary hover:bg-accent-hover transition"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={cancelEditNode}
+                                    disabled={busy}
+                                    className="rounded-lg border border-border-default px-3 py-1 text-text-primary hover:border-border-accent transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="font-semibold font-heading text-sm text-text-primary">{node.topic_name}</div>
+                                  <div className="text-text-secondary">Importance: {node.importance.toFixed(2)} &bull; Relevance: {(node.relevance ?? 0.5).toFixed(2)}</div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => beginEditNode(node)}
+                                    disabled={busy}
+                                    className="rounded p-1 text-text-muted transition hover:bg-bg-hover hover:text-text-primary disabled:opacity-60"
+                                    title="Edit node"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteNodeUi(node.id)}
+                                    disabled={busy}
+                                    className="rounded p-1 text-text-muted transition hover:bg-bg-hover hover:text-pkr-low disabled:opacity-60"
+                                    title="Delete node"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {nodes.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
+                            No nodes yet for this project.
                           </div>
                         )}
                       </div>
-                      <div className="text-xs font-body text-text-secondary">
-                        Adjust threshold + weights before suggesting.
-                      </div>
                     </div>
-                    {questionSuggestionError && (
-                      <div className="text-xs text-pkr-low">{questionSuggestionError}</div>
-                    )}
-                    {createQuestionSuggestionData.strong.length > 0 && (
-                      <div className="text-xs font-body text-text-secondary">
-                        Strong suggestions preselected: {createQuestionSuggestionData.strong.length}
-                      </div>
-                    )}
-                    {createQuestionNewSuggestions.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                        New candidates (click to add):
+                  )}
+                </div>
+              )}
+
+              {/* ── Tab: Questions ── */}
+              {activeTab === 'questions' && (
+                <div>
+                  {!currentProjectId && (
+                    <div className="text-sm text-text-secondary">Select a project to manage questions.</div>
+                  )}
+                  {currentProjectId && (
+                    <div className="grid gap-4">
+                      <div className="flex justify-end">
                         <button
                           type="button"
-                          onClick={() => {
-                            const titles = createQuestionNewSuggestions
-                              .map((item) => item.suggested_title?.trim())
-                              .filter((title): title is string => Boolean(title));
-                            setCreateQuestionNewNodeSelection(Array.from(new Set(titles)));
-                          }}
-                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
-                        >
-                          Select all
-                        </button>
-                        {createQuestionNewSuggestions.map((item, index) => {
-                          const title = item.suggested_title?.trim();
-                          if (!title) {
-                            return null;
-                          }
-                          const isSelected = createQuestionNewNodeSelection.includes(title);
-                          return (
-                            <button
-                              key={`create-${title}-${index}`}
-                              type="button"
-                              onClick={() => {
-                                setCreateQuestionNewNodeSelection((prev) =>
-                                  prev.includes(title)
-                                    ? prev.filter((entry) => entry !== title)
-                                    : [...prev, title]
-                                );
-                              }}
-                              className={`rounded-full border px-2 py-0.5 transition ${
-                                isSelected
-                                  ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
-                              }`}
-                            >
-                              {title}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                      Selected nodes (click to toggle):
-                      {createQuestionNodeSelection.map((nodeId) => {
-                        const node = nodeLookup.get(nodeId);
-                        const label = node?.topic_name ?? nodeId;
-                        return (
-                          <button
-                            key={`create-selected-${nodeId}`}
-                            type="button"
-                            onClick={() => {
-                              setCreateQuestionNodeSelection((prev) => prev.filter((id) => id !== nodeId));
-                            }}
-                            className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                      {createQuestionNodeSelection.length === 0 && (
-                        <span className="text-xs font-body text-text-muted">None selected</span>
-                      )}
-                    </div>
-                    <input
-                      value={createQuestionNodeSearch}
-                      onChange={(event) => setCreateQuestionNodeSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && event.shiftKey) {
-                          event.preventDefault();
-                          handleAddNodeFromCreateQuestionSearch();
-                        }
-                      }}
-                      placeholder="Search nodes"
-                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                    />
-                    {createQuestionNodeSearch.trim() &&
-                      !nodes.some(
-                        (node) => node.topic_name.toLowerCase() === createQuestionNodeSearch.trim().toLowerCase()
-                      ) && (
-                        <button
-                          type="button"
-                          onClick={handleAddNodeFromCreateQuestionSearch}
+                          onClick={() => setIsImportQuestionsOpen(true)}
                           disabled={busy}
-                          className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex items-center gap-2 rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <span>Add "{createQuestionNodeSearch.trim()}"</span>
-                          <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
+                          <Import className="h-3.5 w-3.5" />
+                          Import questions
                         </button>
-                      )}
-                    <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
-                      {createQuestionFilteredNodes.map((node) => {
-                        const isSelected = createQuestionNodeSelection.includes(node.id);
-                        const isStrongSuggested = createQuestionStrongIds.has(node.id);
-                        const isWeakSuggested = createQuestionWeakIds.has(node.id);
-                        return (
-                          <button
-                            key={`create-node-${node.id}`}
-                            type="button"
-                            onClick={() => {
-                              setCreateQuestionNodeSelection((prev) =>
-                                prev.includes(node.id)
-                                  ? prev.filter((id) => id !== node.id)
-                                  : [...prev, node.id]
-                              );
+                      </div>
+                      <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
+                        <textarea
+                          ref={createQuestionTextRef}
+                          value={questionText}
+                          onChange={(event) => setQuestionText(event.target.value)}
+                          placeholder="Question prompt"
+                          className="min-h-[80px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                        />
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <select
+                            value={questionType}
+                            onChange={(event) => {
+                              setQuestionType(event.target.value);
+                              setQuestionCorrectOptionIndex(0);
                             }}
-                            className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
-                              isSelected
-                                ? "bg-accent/20 text-text-primary"
-                                : isStrongSuggested
-                                  ? "bg-accent/10 text-text-primary"
-                                  : isWeakSuggested
-                                    ? "bg-bg-hover text-text-primary"
-                                    : "text-text-primary hover:bg-bg-hover"
-                            }`}
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                           >
-                            <span className="font-medium">{node.topic_name}</span>
-                            <span className="text-xs font-body text-text-muted">{node.id}</span>
-                          </button>
-                        );
-                      })}
-                      {createQuestionFilteredNodes.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-text-muted">No matching nodes.</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <button
-                  onClick={handleCreateQuestion}
-                  disabled={busy}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Add question
-                </button>
-              </div>
-              <div className="grid gap-2">
-                {questions.map((question) => {
-                  const isEditing = editingQuestionId === question.id;
-                  const isEditingNodes = editingQuestionNodesId === question.id;
-                  const isQuestionPreviewOpen = questionPreviewIds.includes(question.id);
-                  const linkedNodes = nodes.filter((node) =>
-                    (question.covered_node_ids ?? []).includes(node.id)
-                  );
-                  const questionSuggestionData =
-                    questionSuggestions.questionId === question.id
-                      ? questionSuggestions
-                      : { questionId: null, strong: [], weak: [] };
-                  const questionStrongIds = new Set(
-                    questionSuggestionData.strong
-                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
-                      .map((item) => item.node_id as string)
-                  );
-                  const questionWeakIds = new Set(
-                    questionSuggestionData.weak
-                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
-                      .map((item) => item.node_id as string)
-                  );
-                  const questionNewSuggestions = questionSuggestionData.weak.filter(
-                    (item) => item.suggestion_type === "NEW"
-                  );
-                  return (
-                    <div
-                      key={question.id}
-                      className="rounded-lg border border-border-default bg-bg-elevated p-3"
-                    >
-                      {isEditing ? (
-                        <div className="grid gap-2">
-                          <textarea
-                            value={editQuestionText}
-                            onChange={(event) => setEditQuestionText(event.target.value)}
-                            className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                            <option value="OPEN">Open</option>
+                            <option value="FLASHCARD">Flashcard</option>
+                            <option value="CLOZE">Cloze</option>
+                            <option value="MCQ">Multiple choice</option>
+                          </select>
+                          <input
+                            type="number"
+                            min={1}
+                            max={5}
+                            value={questionDifficulty}
+                            onChange={(event) => setQuestionDifficulty(Number(event.target.value))}
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                            placeholder="Difficulty"
                           />
+                        </div>
+                        {isQuestionMcq ? (
+                          <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                            <div className="text-xs font-semibold font-heading text-text-primary">Multiple choice options</div>
+                            {questionMcqOptions.map((option, index) => (
+                              <div key={`create-option-${index}`} className="grid grid-cols-[auto_1fr] items-center gap-2">
+                                <label className="flex items-center gap-1 text-xs text-text-secondary">
+                                  <input
+                                    type="radio"
+                                    name="create-correct-option"
+                                    checked={questionCorrectOptionIndex === index}
+                                    onChange={() => setQuestionCorrectOptionIndex(index)}
+                                    className="h-3.5 w-3.5"
+                                  />
+                                  {optionLabel(index)}
+                                </label>
+                                <input
+                                  value={option}
+                                  onChange={(event) =>
+                                    setQuestionMcqOptions((prev) => {
+                                      const next = [...prev];
+                                      next[index] = event.target.value;
+                                      return next;
+                                    })
+                                  }
+                                  placeholder={`Option ${optionLabel(index)}`}
+                                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                                />
+                              </div>
+                            ))}
+                            <div className="text-xs font-body text-text-secondary">
+                              Select the radio button for the correct option.
+                            </div>
+                          </div>
+                        ) : (
                           <textarea
-                            value={editQuestionAnswer}
-                            onChange={(event) => setEditQuestionAnswer(event.target.value)}
+                            ref={createQuestionAnswerRef}
+                            value={questionAnswer}
+                            onChange={(event) => setQuestionAnswer(event.target.value)}
                             placeholder={
-                              editQuestionType === "FLASHCARD"
+                              questionType === "FLASHCARD"
                                 ? "Flashcard back"
-                                : editQuestionType === "CLOZE"
+                                : questionType === "CLOZE"
                                   ? "Expected completion"
                                   : "Answer"
                             }
-                            className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                            className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                           />
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <select
-                              value={editQuestionType}
-                              onChange={(event) => {
-                                setEditQuestionType(event.target.value);
-                                setEditQuestionCorrectOptionIndex(0);
-                              }}
-                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                            >
-                              <option value="OPEN">Open</option>
-                              <option value="FLASHCARD">Flashcard</option>
-                              <option value="CLOZE">Cloze</option>
-                              <option value="MCQ">Multiple choice</option>
-                            </select>
-                            <input
-                              type="number"
-                              min={1}
-                              max={5}
-                              value={editQuestionDifficulty}
-                              onChange={(event) => setEditQuestionDifficulty(Number(event.target.value))}
-                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                            />
-                          </div>
-                          {isEditQuestionMcq && (
-                            <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                              <div className="text-xs font-body font-semibold text-text-primary">
-                                Multiple choice options
-                              </div>
-                              {editQuestionMcqOptions.map((option, index) => (
-                                <div
-                                  key={`edit-option-${index}`}
-                                  className="grid grid-cols-[auto_1fr] items-center gap-2"
-                                >
-                                  <label className="flex items-center gap-1 text-xs font-body text-text-secondary">
-                                    <input
-                                      type="radio"
-                                      name={`edit-correct-option-${question.id}`}
-                                      checked={editQuestionCorrectOptionIndex === index}
-                                      onChange={() => setEditQuestionCorrectOptionIndex(index)}
-                                      className="h-3 w-3"
-                                    />
-                                    {optionLabel(index)}
-                                  </label>
-                                  <input
-                                    value={option}
-                                    onChange={(event) =>
-                                      setEditQuestionMcqOptions((prev) => {
-                                        const next = [...prev];
-                                        next[index] = event.target.value;
-                                        return next;
-                                      })
-                                    }
-                                    placeholder={`Option ${optionLabel(index)}`}
-                                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                                  />
-                                </div>
-                              ))}
-                              <div className="text-xs font-body text-text-secondary">
-                                Select the radio button for the correct option.
-                              </div>
-                            </div>
-                          )}
-                          <input
-                            value={editQuestionTags}
-                            onChange={(event) => setEditQuestionTags(event.target.value)}
-                            placeholder="Tags (comma separated)"
-                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                          />
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => handleUpdateQuestion(question.id)}
-                              disabled={busy}
-                              className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEditQuestion}
-                              disabled={busy}
-                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Cancel
-                            </button>
+                        )}
+                        <input
+                          value={questionTags}
+                          onChange={(event) => setQuestionTags(event.target.value)}
+                          placeholder="Tags (comma separated)"
+                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingQuestionNodesId(null);
+                              setQuestionSuggestionError(null);
+                              setQuestionSuggestions({ questionId: null, strong: [], weak: [] });
+                              setIsCreateQuestionNodesOpen((prev) => !prev);
+                            }}
+                            disabled={busy}
+                            className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isCreateQuestionNodesOpen ? "Hide node picker" : "Add nodes"}
+                          </button>
+                          <div className="text-xs text-text-secondary">
+                            {createQuestionNodeSelection.length} node{createQuestionNodeSelection.length === 1 ? "" : "s"} selected
                           </div>
                         </div>
-                      ) : (
-                        <>
-                          <div className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold font-heading text-text-primary">
-                            {question.text}
-                          </div>
-                          {!isQuestionPreviewOpen && (
-                            <div className="min-w-0 whitespace-pre-wrap break-words text-xs text-text-secondary">
-                              Answer: {question.answer}
-                            </div>
-                          )}
-                          {isQuestionPreviewOpen && (
-                            <div className="mt-2 grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                              <div>
-                                <div className="text-xs font-body text-text-secondary">Prompt</div>
-                                <RichContent content={question.text} className="mt-1" />
-                              </div>
-                              <div>
-                                <div className="text-xs font-body text-text-secondary">Answer</div>
-                                <RichContent content={question.answer} className="mt-1" />
-                              </div>
-                            </div>
-                          )}
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <div className="text-xs text-text-muted">Linked nodes:</div>
-                            {linkedNodes.length === 0 && (
-                              <div className="text-xs text-text-secondary">None</div>
-                            )}
-                            {linkedNodes.map((node) => (
-                              <span
-                                key={node.id}
-                                className="rounded-full border border-border-default bg-bg-elevated px-2 py-0.5 text-xs font-body text-text-primary"
+                        {isCreateQuestionNodesOpen && (
+                          <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div
+                                ref={createQuestionSuggestSettingsRef}
+                                className="relative inline-flex rounded-lg border border-accent/60"
                               >
-                                {node.topic_name}
-                              </span>
-                            ))}
-                            <button
-                              onClick={() => beginEditQuestionNodes(question)}
-                              disabled={busy}
-                              className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                              title="Edit linked nodes"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
-                              </svg>
-                            </button>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuestionPreviewIds((prev) =>
-                                  prev.includes(question.id)
-                                    ? prev.filter((id) => id !== question.id)
-                                    : [...prev, question.id]
-                                );
-                              }}
-                              className="inline-flex items-center rounded-lg border border-border-default px-2 py-1 text-xs text-text-primary transition hover:border-border-accent"
-                              title={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
-                              aria-label={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
-                            >
-                              {isQuestionPreviewOpen ? (
-                                <EyeOff className="h-3.5 w-3.5" />
-                              ) : (
-                                <Eye className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => beginEditQuestion(question)}
-                              disabled={busy}
-                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuestion(question.id)}
-                              disabled={busy}
-                              className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                          {isEditingNodes && (
-                            <div className="mt-3 grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div
-                                  ref={editQuestionSuggestSettingsRef}
-                                  className="relative inline-flex rounded-lg border border-accent/60"
+                                <button
+                                  onClick={handleSuggestDraftQuestionNodes}
+                                  disabled={busy || questionSuggestionLoading}
+                                  className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  <button
-                                    onClick={() => handleSuggestQuestionNodes(question.id)}
-                                    disabled={busy || questionSuggestionLoading}
-                                    className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowEditQuestionSuggestSettings((prev) => !prev)}
-                                    disabled={busy || questionSuggestionLoading}
-                                    className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                    aria-label="Toggle suggestion settings"
-                                  >
-                                    <ChevronDown
-                                      className={`h-3.5 w-3.5 transition ${
-                                        showEditQuestionSuggestSettings ? "rotate-180" : ""
-                                      }`}
-                                    />
-                                  </button>
-                                  {showEditQuestionSuggestSettings && (
-                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
-                                      <div className="grid gap-3">
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
-                                          Threshold: {suggestionThreshold.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.01}
-                                            value={suggestionThreshold}
-                                            onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.threshold}
-                                          />
-                                        </label>
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
-                                          Semantic weight: {semanticWeight.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.05}
-                                            value={semanticWeight}
-                                            onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.semantic}
-                                          />
-                                        </label>
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
-                                          Keyword weight: {keywordWeight.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.05}
-                                            value={keywordWeight}
-                                            onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.keyword}
-                                          />
-                                        </label>
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
-                                          Dedup threshold: {dedupThreshold.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.01}
-                                            value={dedupThreshold}
-                                            onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.dedup}
-                                          />
-                                        </label>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="text-xs font-body text-text-secondary">
-                                  Adjust threshold + weights before suggesting.
-                                </div>
-                              </div>
-                              {questionSuggestionError && (
-                                <div className="text-xs text-pkr-low">{questionSuggestionError}</div>
-                              )}
-                              {questionSuggestionData.strong.length > 0 && (
-                                <div className="text-xs font-body text-text-secondary">
-                                  Strong suggestions preselected: {questionSuggestionData.strong.length}
-                                </div>
-                              )}
-                              {questionNewSuggestions.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                                  New candidates (click to add):
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const titles = questionNewSuggestions
-                                        .map((item) => item.suggested_title?.trim())
-                                        .filter((title): title is string => Boolean(title));
-                                      setQuestionNewNodeSelection(Array.from(new Set(titles)));
-                                    }}
-                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
-                                  >
-                                    Select all
-                                  </button>
-                                  {questionNewSuggestions.map((item, index) => {
-                                    const title = item.suggested_title?.trim();
-                                    if (!title) {
-                                      return null;
-                                    }
-                                    const isSelected = questionNewNodeSelection.includes(title);
-                                    return (
-                                      <button
-                                        key={`${title}-${index}`}
-                                        type="button"
-                                        onClick={() => {
-                                          setQuestionNewNodeSelection((prev) =>
-                                            prev.includes(title)
-                                              ? prev.filter((entry) => entry !== title)
-                                              : [...prev, title]
-                                          );
-                                        }}
-                                        className={`rounded-full border px-2 py-0.5 transition ${
-                                          isSelected
-                                            ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                            : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
-                                        }`}
-                                      >
-                                        {title}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                              <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                                Selected nodes (click to toggle):
-                                {Array.from(
-                                  new Set([
-                                    ...linkedNodes.map((node) => node.id),
-                                    ...questionNodeSelection,
-                                  ])
-                                ).map((nodeId) => {
-                                  const node = nodeLookup.get(nodeId);
-                                  const label = node?.topic_name ?? nodeId;
-                                  const isSelected = questionNodeSelection.includes(nodeId);
-                                  return (
-                                    <button
-                                      key={nodeId}
-                                      type="button"
-                                      onClick={() => {
-                                        setQuestionNodeSelection((prev) =>
-                                          prev.includes(nodeId)
-                                            ? prev.filter((id) => id !== nodeId)
-                                            : [...prev, nodeId]
-                                        );
-                                      }}
-                                      className={`rounded-full border px-2 py-0.5 transition ${
-                                        isSelected
-                                          ? "border-accent bg-accent/20 text-text-primary"
-                                          : "border-border-default bg-bg-elevated text-text-secondary hover:border-border-accent"
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              <input
-                                value={questionNodeSearch}
-                                onChange={(event) => setQuestionNodeSearch(event.target.value)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" && event.shiftKey) {
-                                    event.preventDefault();
-                                    handleAddNodeFromQuestionSearch();
+                                  {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setShowCreateQuestionSuggestSettings((prev) => !prev)
                                   }
-                                }}
-                                placeholder="Search nodes"
-                                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                              />
-                              {questionNodeSearch.trim() &&
-                                !nodes.some(
-                                  (node) =>
-                                    node.topic_name.toLowerCase() ===
-                                    questionNodeSearch.trim().toLowerCase()
-                                ) && (
-                                  <button
-                                    type="button"
-                                    onClick={handleAddNodeFromQuestionSearch}
-                                    disabled={busy}
-                                    className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    <span>Add "{questionNodeSearch.trim()}"</span>
-                                    <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
-                                  </button>
-                                )}
-                              <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
-                                {questionFilteredNodes.map((node) => {
-                                  const isSelected = questionNodeSelection.includes(node.id);
-                                  const isStrongSuggested = questionStrongIds.has(node.id);
-                                  const isWeakSuggested = questionWeakIds.has(node.id);
-                                  return (
-                                    <button
-                                      key={node.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setQuestionNodeSelection((prev) =>
-                                          prev.includes(node.id)
-                                            ? prev.filter((id) => id !== node.id)
-                                            : [...prev, node.id]
-                                        );
-                                      }}
-                                      className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
-                                        isSelected
-                                          ? "bg-accent/20 text-text-primary"
-                                          : isStrongSuggested
-                                            ? "bg-accent/10 text-text-primary"
-                                            : isWeakSuggested
-                                              ? "bg-bg-hover text-text-primary"
-                                              : "text-text-primary hover:bg-bg-hover"
+                                  disabled={busy || questionSuggestionLoading}
+                                  className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                  aria-label="Toggle suggestion settings"
+                                >
+                                  <ChevronDown
+                                    className={`h-3.5 w-3.5 transition ${showCreateQuestionSuggestSettings ? "rotate-180" : ""
                                       }`}
-                                    >
-                                      <span className="font-medium">{node.topic_name}</span>
-                                      <span className="text-xs font-body text-text-muted">{node.id}</span>
-                                    </button>
-                                  );
-                                })}
-                                {questionFilteredNodes.length === 0 && (
-                                  <div className="px-3 py-2 text-xs text-text-muted">
-                                    No matching nodes.
+                                  />
+                                </button>
+                                {showCreateQuestionSuggestSettings && (
+                                  <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
+                                    <div className="grid gap-3">
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
+                                        Threshold: {suggestionThreshold.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.01}
+                                          value={suggestionThreshold}
+                                          onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.threshold}
+                                        />
+                                      </label>
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
+                                        Semantic weight: {semanticWeight.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.05}
+                                          value={semanticWeight}
+                                          onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.semantic}
+                                        />
+                                      </label>
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
+                                        Keyword weight: {keywordWeight.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.05}
+                                          value={keywordWeight}
+                                          onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.keyword}
+                                        />
+                                      </label>
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
+                                        Dedup threshold: {dedupThreshold.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.01}
+                                          value={dedupThreshold}
+                                          onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.dedup}
+                                        />
+                                      </label>
+                                    </div>
                                   </div>
                                 )}
                               </div>
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  onClick={() => handleSaveQuestionNodes(question.id)}
-                                  disabled={busy}
-                                  className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Save links
-                                </button>
-                                <button
-                                  onClick={cancelEditQuestionNodes}
-                                  disabled={busy}
-                                  className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Cancel
-                                </button>
+                              <div className="text-xs font-body text-text-secondary">
+                                Adjust threshold + weights before suggesting.
                               </div>
                             </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                {questions.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
-                    No questions yet for this project.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-            </div>
-          )}
-
-          {/* ── Tab: Materials ── */}
-          {activeTab === 'materials' && (
-            <div>
-          {!currentProjectId && (
-            <div className="text-sm text-text-secondary">Select a project to manage materials.</div>
-          )}
-          {currentProjectId && (
-            <div className="grid gap-4">
-              <div className="grid min-w-0 gap-3 overflow-hidden rounded-xl border border-border-default bg-bg-elevated p-4">
-                <input
-                  value={materialTitle}
-                  onChange={(event) => setMaterialTitle(event.target.value)}
-                  placeholder="Material title"
-                  className="w-full min-w-0 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                />
-                <div className="flex w-full min-w-0 items-center gap-2">
-                  <input
-                    value={materialSourceUrl}
-                    onChange={(event) => {
-                      setMaterialSourceUrl(event.target.value);
-                      setMaterialCheckedTranscriptText(null);
-                      setMaterialCheckedTranscriptSegments([]);
-                      setMaterialTranscriptStatus(null);
-                    }}
-                    placeholder="YouTube link (optional if text provided)"
-                    className="min-w-0 flex-1 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                  />
-                  <button
-                    onClick={handleCheckMaterialTranscript}
-                    disabled={busy || materialTranscriptChecking || !materialSourceUrl.trim() || createMaterialLinkInvalid}
-                    className="whitespace-nowrap rounded-lg border border-border-default px-3 py-2 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {materialTranscriptChecking ? "Fetching..." : "Fetch transcript"}
-                  </button>
-                </div>
-                <div className={`text-xs ${createMaterialLinkInvalid ? "text-pkr-low" : "text-text-muted"}`}>
-                  {createMaterialLinkInvalid
-                    ? "Invalid YouTube URL format"
-                    : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
-                </div>
-                {materialTranscriptStatus ? (
-                  <div className="text-xs text-text-secondary">{materialTranscriptStatus}</div>
-                ) : null}
-                {Boolean(createTranscriptPreview.trim()) && (
-                  <div className="grid gap-1 rounded-lg border border-border-default bg-bg-elevated p-3">
-                    <div className="text-xs font-body text-text-secondary">Fetched transcript preview</div>
-                    <textarea
-                      value={createTranscriptPreview}
-                      readOnly
-                      className="min-h-[180px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary focus:outline-none"
-                    />
-                  </div>
-                )}
-                <textarea
-                  value={materialText}
-                  onChange={(event) => setMaterialText(event.target.value)}
-                  placeholder="Paste notes or study material (optional if YouTube link provided)"
-                  className="w-full min-h-[100px] min-w-0 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingMaterialNodesId(null);
-                      setCreateMaterialSuggestionError(null);
-                      setMaterialSuggestions({ materialId: null, strong: [], weak: [] });
-                      setIsCreateMaterialNodesOpen((prev) => !prev);
-                    }}
-                    disabled={busy}
-                    className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isCreateMaterialNodesOpen ? "Hide node picker" : "Add nodes"}
-                  </button>
-                  <div className="text-xs text-text-secondary">
-                    {createMaterialNodeSelection.length} node{createMaterialNodeSelection.length === 1 ? "" : "s"} selected
-                  </div>
-                </div>
-                {isCreateMaterialNodesOpen && (
-                  <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div
-                        ref={createMaterialSuggestSettingsRef}
-                        className="relative inline-flex rounded-lg border border-accent/60"
-                      >
-                        <button
-                          onClick={handleSuggestDraftMaterialNodes}
-                          disabled={busy || createMaterialSuggestionLoading}
-                          className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {createMaterialSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowCreateMaterialSuggestSettings((prev) => !prev)}
-                          disabled={busy || createMaterialSuggestionLoading}
-                          className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                          aria-label="Toggle suggestion settings"
-                        >
-                          <ChevronDown
-                            className={`h-3.5 w-3.5 transition ${
-                              showCreateMaterialSuggestSettings ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                        {showCreateMaterialSuggestSettings && (
-                          <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
-                            <div className="grid gap-3">
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
-                                Threshold: {suggestionThreshold.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.01}
-                                  value={suggestionThreshold}
-                                  onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.threshold}
-                                />
-                              </label>
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
-                                Semantic weight: {semanticWeight.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.05}
-                                  value={semanticWeight}
-                                  onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.semantic}
-                                />
-                              </label>
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
-                                Keyword weight: {keywordWeight.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.05}
-                                  value={keywordWeight}
-                                  onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.keyword}
-                                />
-                              </label>
-                              <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
-                                Dedup threshold: {dedupThreshold.toFixed(2)}
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={1}
-                                  step={0.01}
-                                  value={dedupThreshold}
-                                  onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                                  className="w-full"
-                                  title={SLIDER_HELP.dedup}
-                                />
-                              </label>
+                            {questionSuggestionError && (
+                              <div className="text-xs text-pkr-low">{questionSuggestionError}</div>
+                            )}
+                            {createQuestionSuggestionData.strong.length > 0 && (
+                              <div className="text-xs font-body text-text-secondary">
+                                Strong suggestions preselected: {createQuestionSuggestionData.strong.length}
+                              </div>
+                            )}
+                            {createQuestionNewSuggestions.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                                New candidates (click to add):
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const titles = createQuestionNewSuggestions
+                                      .map((item) => item.suggested_title?.trim())
+                                      .filter((title): title is string => Boolean(title));
+                                    setCreateQuestionNewNodeSelection(Array.from(new Set(titles)));
+                                  }}
+                                  className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
+                                >
+                                  Select all
+                                </button>
+                                {createQuestionNewSuggestions.map((item, index) => {
+                                  const title = item.suggested_title?.trim();
+                                  if (!title) {
+                                    return null;
+                                  }
+                                  const isSelected = createQuestionNewNodeSelection.includes(title);
+                                  return (
+                                    <button
+                                      key={`create-${title}-${index}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setCreateQuestionNewNodeSelection((prev) =>
+                                          prev.includes(title)
+                                            ? prev.filter((entry) => entry !== title)
+                                            : [...prev, title]
+                                        );
+                                      }}
+                                      className={`rounded-full border px-2 py-0.5 transition ${isSelected
+                                        ? "border-amber-400 bg-amber-500/20 text-amber-100"
+                                        : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
+                                        }`}
+                                    >
+                                      {title}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                              Selected nodes (click to toggle):
+                              {createQuestionNodeSelection.map((nodeId) => {
+                                const node = nodeLookup.get(nodeId);
+                                const label = node?.topic_name ?? nodeId;
+                                return (
+                                  <button
+                                    key={`create-selected-${nodeId}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setCreateQuestionNodeSelection((prev) => prev.filter((id) => id !== nodeId));
+                                    }}
+                                    className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
+                              {createQuestionNodeSelection.length === 0 && (
+                                <span className="text-xs font-body text-text-muted">None selected</span>
+                              )}
+                            </div>
+                            <input
+                              value={createQuestionNodeSearch}
+                              onChange={(event) => setCreateQuestionNodeSearch(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" && event.shiftKey) {
+                                  event.preventDefault();
+                                  handleAddNodeFromCreateQuestionSearch();
+                                }
+                              }}
+                              placeholder="Search nodes"
+                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                            />
+                            {createQuestionNodeSearch.trim() &&
+                              !nodes.some(
+                                (node) => node.topic_name.toLowerCase() === createQuestionNodeSearch.trim().toLowerCase()
+                              ) && (
+                                <button
+                                  type="button"
+                                  onClick={handleAddNodeFromCreateQuestionSearch}
+                                  disabled={busy}
+                                  className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <span>Add "{createQuestionNodeSearch.trim()}"</span>
+                                  <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
+                                </button>
+                              )}
+                            <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
+                              {createQuestionFilteredNodes.map((node) => {
+                                const isSelected = createQuestionNodeSelection.includes(node.id);
+                                const isStrongSuggested = createQuestionStrongIds.has(node.id);
+                                const isWeakSuggested = createQuestionWeakIds.has(node.id);
+                                return (
+                                  <button
+                                    key={`create-node-${node.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setCreateQuestionNodeSelection((prev) =>
+                                        prev.includes(node.id)
+                                          ? prev.filter((id) => id !== node.id)
+                                          : [...prev, node.id]
+                                      );
+                                    }}
+                                    className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${isSelected
+                                      ? "bg-accent/20 text-text-primary"
+                                      : isStrongSuggested
+                                        ? "bg-accent/10 text-text-primary"
+                                        : isWeakSuggested
+                                          ? "bg-bg-hover text-text-primary"
+                                          : "text-text-primary hover:bg-bg-hover"
+                                      }`}
+                                  >
+                                    <span className="font-medium">{node.topic_name}</span>
+                                    <span className="text-xs font-body text-text-muted">{node.id}</span>
+                                  </button>
+                                );
+                              })}
+                              {createQuestionFilteredNodes.length === 0 && (
+                                <div className="px-3 py-2 text-xs text-text-muted">No matching nodes.</div>
+                              )}
                             </div>
                           </div>
                         )}
-                      </div>
-                      <div className="text-xs font-body text-text-secondary">
-                        Uses notes + optional valid YouTube transcript.
-                      </div>
-                    </div>
-                    {createMaterialSuggestionError && (
-                      <div className="text-xs text-pkr-low">{createMaterialSuggestionError}</div>
-                    )}
-                    {createMaterialSuggestionData.strong.length > 0 && (
-                      <div className="text-xs font-body text-text-secondary">
-                        Strong suggestions preselected: {createMaterialSuggestionData.strong.length}
-                      </div>
-                    )}
-                    {createMaterialNewSuggestions.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                        New candidates (click to add):
                         <button
-                          type="button"
-                          onClick={() => {
-                            const titles = createMaterialNewSuggestions
-                              .map((item) => item.suggested_title?.trim())
-                              .filter((title): title is string => Boolean(title));
-                            setCreateMaterialNewNodeSelection(Array.from(new Set(titles)));
-                          }}
-                          className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
+                          onClick={handleCreateQuestion}
+                          disabled={busy}
+                          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Select all
+                          Add question
                         </button>
-                        {createMaterialNewSuggestions.map((item, index) => {
-                          const title = item.suggested_title?.trim();
-                          if (!title) {
-                            return null;
-                          }
-                          const isSelected = createMaterialNewNodeSelection.includes(title);
+                      </div>
+                      <div className="grid gap-2">
+                        {questions.map((question) => {
+                          const isEditing = editingQuestionId === question.id;
+                          const isEditingNodes = editingQuestionNodesId === question.id;
+                          const isQuestionPreviewOpen = questionPreviewIds.includes(question.id);
+                          const linkedNodes = nodes.filter((node) =>
+                            (question.covered_node_ids ?? []).includes(node.id)
+                          );
+                          const questionSuggestionData =
+                            questionSuggestions.questionId === question.id
+                              ? questionSuggestions
+                              : { questionId: null, strong: [], weak: [] };
+                          const questionStrongIds = new Set(
+                            questionSuggestionData.strong
+                              .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                              .map((item) => item.node_id as string)
+                          );
+                          const questionWeakIds = new Set(
+                            questionSuggestionData.weak
+                              .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                              .map((item) => item.node_id as string)
+                          );
+                          const questionNewSuggestions = questionSuggestionData.weak.filter(
+                            (item) => item.suggestion_type === "NEW"
+                          );
                           return (
-                            <button
-                              key={`create-material-${title}-${index}`}
-                              type="button"
-                              onClick={() => {
-                                setCreateMaterialNewNodeSelection((prev) =>
-                                  prev.includes(title)
-                                    ? prev.filter((entry) => entry !== title)
-                                    : [...prev, title]
-                                );
-                              }}
-                              className={`rounded-full border px-2 py-0.5 transition ${
-                                isSelected
-                                  ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
-                              }`}
+                            <div
+                              key={question.id}
+                              className="rounded-lg border border-border-default bg-bg-elevated p-3"
                             >
-                              {title}
-                            </button>
+                              {isEditing ? (
+                                <div className="grid gap-2">
+                                  <textarea
+                                    value={editQuestionText}
+                                    onChange={(event) => setEditQuestionText(event.target.value)}
+                                    className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                  />
+                                  <textarea
+                                    value={editQuestionAnswer}
+                                    onChange={(event) => setEditQuestionAnswer(event.target.value)}
+                                    placeholder={
+                                      editQuestionType === "FLASHCARD"
+                                        ? "Flashcard back"
+                                        : editQuestionType === "CLOZE"
+                                          ? "Expected completion"
+                                          : "Answer"
+                                    }
+                                    className="min-h-[60px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                  />
+                                  <div className="grid gap-2 sm:grid-cols-2">
+                                    <select
+                                      value={editQuestionType}
+                                      onChange={(event) => {
+                                        setEditQuestionType(event.target.value);
+                                        setEditQuestionCorrectOptionIndex(0);
+                                      }}
+                                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                    >
+                                      <option value="OPEN">Open</option>
+                                      <option value="FLASHCARD">Flashcard</option>
+                                      <option value="CLOZE">Cloze</option>
+                                      <option value="MCQ">Multiple choice</option>
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={5}
+                                      value={editQuestionDifficulty}
+                                      onChange={(event) => setEditQuestionDifficulty(Number(event.target.value))}
+                                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                    />
+                                  </div>
+                                  {isEditQuestionMcq && (
+                                    <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                                      <div className="text-xs font-body font-semibold text-text-primary">
+                                        Multiple choice options
+                                      </div>
+                                      {editQuestionMcqOptions.map((option, index) => (
+                                        <div
+                                          key={`edit-option-${index}`}
+                                          className="grid grid-cols-[auto_1fr] items-center gap-2"
+                                        >
+                                          <label className="flex items-center gap-1 text-xs font-body text-text-secondary">
+                                            <input
+                                              type="radio"
+                                              name={`edit-correct-option-${question.id}`}
+                                              checked={editQuestionCorrectOptionIndex === index}
+                                              onChange={() => setEditQuestionCorrectOptionIndex(index)}
+                                              className="h-3 w-3"
+                                            />
+                                            {optionLabel(index)}
+                                          </label>
+                                          <input
+                                            value={option}
+                                            onChange={(event) =>
+                                              setEditQuestionMcqOptions((prev) => {
+                                                const next = [...prev];
+                                                next[index] = event.target.value;
+                                                return next;
+                                              })
+                                            }
+                                            placeholder={`Option ${optionLabel(index)}`}
+                                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                          />
+                                        </div>
+                                      ))}
+                                      <div className="text-xs font-body text-text-secondary">
+                                        Select the radio button for the correct option.
+                                      </div>
+                                    </div>
+                                  )}
+                                  <input
+                                    value={editQuestionTags}
+                                    onChange={(event) => setEditQuestionTags(event.target.value)}
+                                    placeholder="Tags (comma separated)"
+                                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                  />
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      onClick={() => handleUpdateQuestion(question.id)}
+                                      disabled={busy}
+                                      className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEditQuestion}
+                                      disabled={busy}
+                                      className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="min-w-0 whitespace-pre-wrap break-words text-sm font-semibold font-heading text-text-primary">
+                                    {question.text}
+                                  </div>
+                                  {!isQuestionPreviewOpen && (
+                                    <div className="min-w-0 whitespace-pre-wrap break-words text-xs text-text-secondary">
+                                      Answer: {question.answer}
+                                    </div>
+                                  )}
+                                  {isQuestionPreviewOpen && (
+                                    <div className="mt-2 grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                                      <div>
+                                        <div className="text-xs font-body text-text-secondary">Prompt</div>
+                                        <RichContent content={question.text} className="mt-1" />
+                                      </div>
+                                      <div>
+                                        <div className="text-xs font-body text-text-secondary">Answer</div>
+                                        <RichContent content={question.answer} className="mt-1" />
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <div className="text-xs text-text-muted">Linked nodes:</div>
+                                    {linkedNodes.length === 0 && (
+                                      <div className="text-xs text-text-secondary">None</div>
+                                    )}
+                                    {linkedNodes.map((node) => (
+                                      <span
+                                        key={node.id}
+                                        className="rounded-full border border-border-default bg-bg-elevated px-2 py-0.5 text-xs font-body text-text-primary"
+                                      >
+                                        {node.topic_name}
+                                      </span>
+                                    ))}
+                                    <button
+                                      onClick={() => beginEditQuestionNodes(question)}
+                                      disabled={busy}
+                                      className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                      title="Edit linked nodes"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setQuestionPreviewIds((prev) =>
+                                          prev.includes(question.id)
+                                            ? prev.filter((id) => id !== question.id)
+                                            : [...prev, question.id]
+                                        );
+                                      }}
+                                      className="inline-flex items-center rounded-lg border border-border-default px-2 py-1 text-xs text-text-primary transition hover:border-border-accent"
+                                      title={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
+                                      aria-label={isQuestionPreviewOpen ? "Hide preview" : "Preview"}
+                                    >
+                                      {isQuestionPreviewOpen ? (
+                                        <EyeOff className="h-3.5 w-3.5" />
+                                      ) : (
+                                        <Eye className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={() => beginEditQuestion(question)}
+                                      disabled={busy}
+                                      className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteQuestion(question.id)}
+                                      disabled={busy}
+                                      className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                  {isEditingNodes && (
+                                    <div className="mt-3 grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <div
+                                          ref={editQuestionSuggestSettingsRef}
+                                          className="relative inline-flex rounded-lg border border-accent/60"
+                                        >
+                                          <button
+                                            onClick={() => handleSuggestQuestionNodes(question.id)}
+                                            disabled={busy || questionSuggestionLoading}
+                                            className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                          >
+                                            {questionSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setShowEditQuestionSuggestSettings((prev) => !prev)}
+                                            disabled={busy || questionSuggestionLoading}
+                                            className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                            aria-label="Toggle suggestion settings"
+                                          >
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 transition ${showEditQuestionSuggestSettings ? "rotate-180" : ""
+                                                }`}
+                                            />
+                                          </button>
+                                          {showEditQuestionSuggestSettings && (
+                                            <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
+                                              <div className="grid gap-3">
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
+                                                  Threshold: {suggestionThreshold.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.01}
+                                                    value={suggestionThreshold}
+                                                    onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.threshold}
+                                                  />
+                                                </label>
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
+                                                  Semantic weight: {semanticWeight.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.05}
+                                                    value={semanticWeight}
+                                                    onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.semantic}
+                                                  />
+                                                </label>
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
+                                                  Keyword weight: {keywordWeight.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.05}
+                                                    value={keywordWeight}
+                                                    onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.keyword}
+                                                  />
+                                                </label>
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
+                                                  Dedup threshold: {dedupThreshold.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.01}
+                                                    value={dedupThreshold}
+                                                    onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.dedup}
+                                                  />
+                                                </label>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="text-xs font-body text-text-secondary">
+                                          Adjust threshold + weights before suggesting.
+                                        </div>
+                                      </div>
+                                      {questionSuggestionError && (
+                                        <div className="text-xs text-pkr-low">{questionSuggestionError}</div>
+                                      )}
+                                      {questionSuggestionData.strong.length > 0 && (
+                                        <div className="text-xs font-body text-text-secondary">
+                                          Strong suggestions preselected: {questionSuggestionData.strong.length}
+                                        </div>
+                                      )}
+                                      {questionNewSuggestions.length > 0 && (
+                                        <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                                          New candidates (click to add):
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const titles = questionNewSuggestions
+                                                .map((item) => item.suggested_title?.trim())
+                                                .filter((title): title is string => Boolean(title));
+                                              setQuestionNewNodeSelection(Array.from(new Set(titles)));
+                                            }}
+                                            className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
+                                          >
+                                            Select all
+                                          </button>
+                                          {questionNewSuggestions.map((item, index) => {
+                                            const title = item.suggested_title?.trim();
+                                            if (!title) {
+                                              return null;
+                                            }
+                                            const isSelected = questionNewNodeSelection.includes(title);
+                                            return (
+                                              <button
+                                                key={`${title}-${index}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  setQuestionNewNodeSelection((prev) =>
+                                                    prev.includes(title)
+                                                      ? prev.filter((entry) => entry !== title)
+                                                      : [...prev, title]
+                                                  );
+                                                }}
+                                                className={`rounded-full border px-2 py-0.5 transition ${isSelected
+                                                  ? "border-amber-400 bg-amber-500/20 text-amber-100"
+                                                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
+                                                  }`}
+                                              >
+                                                {title}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                                        Selected nodes (click to toggle):
+                                        {Array.from(
+                                          new Set([
+                                            ...linkedNodes.map((node) => node.id),
+                                            ...questionNodeSelection,
+                                          ])
+                                        ).map((nodeId) => {
+                                          const node = nodeLookup.get(nodeId);
+                                          const label = node?.topic_name ?? nodeId;
+                                          const isSelected = questionNodeSelection.includes(nodeId);
+                                          return (
+                                            <button
+                                              key={nodeId}
+                                              type="button"
+                                              onClick={() => {
+                                                setQuestionNodeSelection((prev) =>
+                                                  prev.includes(nodeId)
+                                                    ? prev.filter((id) => id !== nodeId)
+                                                    : [...prev, nodeId]
+                                                );
+                                              }}
+                                              className={`rounded-full border px-2 py-0.5 transition ${isSelected
+                                                ? "border-accent bg-accent/20 text-text-primary"
+                                                : "border-border-default bg-bg-elevated text-text-secondary hover:border-border-accent"
+                                                }`}
+                                            >
+                                              {label}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                      <input
+                                        value={questionNodeSearch}
+                                        onChange={(event) => setQuestionNodeSearch(event.target.value)}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter" && event.shiftKey) {
+                                            event.preventDefault();
+                                            handleAddNodeFromQuestionSearch();
+                                          }
+                                        }}
+                                        placeholder="Search nodes"
+                                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                      />
+                                      {questionNodeSearch.trim() &&
+                                        !nodes.some(
+                                          (node) =>
+                                            node.topic_name.toLowerCase() ===
+                                            questionNodeSearch.trim().toLowerCase()
+                                        ) && (
+                                          <button
+                                            type="button"
+                                            onClick={handleAddNodeFromQuestionSearch}
+                                            disabled={busy}
+                                            className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                          >
+                                            <span>Add "{questionNodeSearch.trim()}"</span>
+                                            <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
+                                          </button>
+                                        )}
+                                      <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
+                                        {questionFilteredNodes.map((node) => {
+                                          const isSelected = questionNodeSelection.includes(node.id);
+                                          const isStrongSuggested = questionStrongIds.has(node.id);
+                                          const isWeakSuggested = questionWeakIds.has(node.id);
+                                          return (
+                                            <button
+                                              key={node.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setQuestionNodeSelection((prev) =>
+                                                  prev.includes(node.id)
+                                                    ? prev.filter((id) => id !== node.id)
+                                                    : [...prev, node.id]
+                                                );
+                                              }}
+                                              className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${isSelected
+                                                ? "bg-accent/20 text-text-primary"
+                                                : isStrongSuggested
+                                                  ? "bg-accent/10 text-text-primary"
+                                                  : isWeakSuggested
+                                                    ? "bg-bg-hover text-text-primary"
+                                                    : "text-text-primary hover:bg-bg-hover"
+                                                }`}
+                                            >
+                                              <span className="font-medium">{node.topic_name}</span>
+                                              <span className="text-xs font-body text-text-muted">{node.id}</span>
+                                            </button>
+                                          );
+                                        })}
+                                        {questionFilteredNodes.length === 0 && (
+                                          <div className="px-3 py-2 text-xs text-text-muted">
+                                            No matching nodes.
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        <button
+                                          onClick={() => handleSaveQuestionNodes(question.id)}
+                                          disabled={busy}
+                                          className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                          Save links
+                                        </button>
+                                        <button
+                                          onClick={cancelEditQuestionNodes}
+                                          disabled={busy}
+                                          className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           );
                         })}
+                        {questions.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
+                            No questions yet for this project.
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                      Selected nodes (click to toggle):
-                      {createMaterialNodeSelection.map((nodeId) => {
-                        const node = nodeLookup.get(nodeId);
-                        const label = node?.topic_name ?? nodeId;
-                        return (
-                          <button
-                            key={`create-material-selected-${nodeId}`}
-                            type="button"
-                            onClick={() => {
-                              setCreateMaterialNodeSelection((prev) => prev.filter((id) => id !== nodeId));
-                            }}
-                            className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                      {createMaterialNodeSelection.length === 0 && (
-                        <span className="text-xs font-body text-text-muted">None selected</span>
-                      )}
                     </div>
-                    <input
-                      value={createMaterialNodeSearch}
-                      onChange={(event) => setCreateMaterialNodeSearch(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && event.shiftKey) {
-                          event.preventDefault();
-                          handleAddNodeFromCreateMaterialSearch();
-                        }
-                      }}
-                      placeholder="Search nodes"
-                      className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                    />
-                    {createMaterialNodeSearch.trim() &&
-                      !nodes.some(
-                        (node) => node.topic_name.toLowerCase() === createMaterialNodeSearch.trim().toLowerCase()
-                      ) && (
-                        <button
-                          type="button"
-                          onClick={handleAddNodeFromCreateMaterialSearch}
-                          disabled={busy}
-                          className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <span>Add "{createMaterialNodeSearch.trim()}"</span>
-                          <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
-                        </button>
-                      )}
-                    <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
-                      {createMaterialFilteredNodes.map((node) => {
-                        const isSelected = createMaterialNodeSelection.includes(node.id);
-                        const isStrongSuggested = createMaterialStrongIds.has(node.id);
-                        const isWeakSuggested = createMaterialWeakIds.has(node.id);
-                        return (
-                          <button
-                            key={`create-material-node-${node.id}`}
-                            type="button"
-                            onClick={() => {
-                              setCreateMaterialNodeSelection((prev) =>
-                                prev.includes(node.id)
-                                  ? prev.filter((id) => id !== node.id)
-                                  : [...prev, node.id]
-                              );
-                            }}
-                            className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
-                              isSelected
-                                ? "bg-accent/20 text-text-primary"
-                                : isStrongSuggested
-                                  ? "bg-accent/10 text-text-primary"
-                                  : isWeakSuggested
-                                    ? "bg-bg-hover text-text-primary"
-                                    : "text-text-primary hover:bg-bg-hover"
-                            }`}
-                          >
-                            <span className="font-medium">{node.topic_name}</span>
-                            <span className="text-xs font-body text-text-muted">{node.id}</span>
-                          </button>
-                        );
-                      })}
-                      {createMaterialFilteredNodes.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-text-muted">No matching nodes.</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                <button
-                  onClick={handleCreateMaterial}
-                  disabled={busy || createMaterialLinkInvalid}
-                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Add material
-                </button>
-              </div>
-
-              <div className="grid gap-3 rounded-xl border border-dashed border-border-default bg-bg-surface p-4">
-                <div className="label-caps text-text-muted">
-                  Upload .txt files
+                  )}
                 </div>
-                <input
-                  type="file"
-                  accept=".txt,text/plain"
-                  multiple
-                  onChange={(event) => setMaterialFiles(event.target.files)}
-                  className="text-sm text-text-secondary"
-                />
-                <button
-                  onClick={handleUploadMaterialFiles}
-                  disabled={busy}
-                  className="rounded-lg border border-border-default px-4 py-2 text-sm text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Upload files
-                </button>
-              </div>
+              )}
 
-              <div className="grid gap-2">
-                {materials.map((material) => {
-                  const isEditing = editingMaterialId === material.id;
-                  const isEditingNodes = editingMaterialNodesId === material.id;
-                  const linkedNodes = materialNodeMap.get(material.id) ?? [];
-                  const suggestionData =
-                    materialSuggestions.materialId === material.id
-                      ? materialSuggestions
-                      : { materialId: null, strong: [], weak: [] };
-                  const strongSuggestionIds = new Set(
-                    suggestionData.strong
-                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
-                      .map((item) => item.node_id as string)
-                  );
-                  const weakSuggestionIds = new Set(
-                    suggestionData.weak
-                      .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
-                      .map((item) => item.node_id as string)
-                  );
-                  const newSuggestions = suggestionData.weak.filter(
-                    (item) => item.suggestion_type === "NEW"
-                  );
-                  const searchValue = materialNodeSearch.trim().toLowerCase();
-                  const filteredNodes = nodes.filter((node) => {
-                    if (!searchValue) {
-                      return true;
-                    }
-                    return (
-                      node.topic_name.toLowerCase().includes(searchValue) ||
-                      node.id.toLowerCase().includes(searchValue)
-                    );
-                  });
-                  return (
-                    <div
-                      key={material.id}
-                      className="min-w-0 overflow-hidden rounded-lg border border-border-default bg-bg-elevated px-3 py-2"
-                    >
-                      {isEditing ? (
-                        <div className="grid gap-2">
+              {/* ── Tab: Materials ── */}
+              {activeTab === 'materials' && (
+                <div>
+                  {!currentProjectId && (
+                    <div className="text-sm text-text-secondary">Select a project to manage materials.</div>
+                  )}
+                  {currentProjectId && (
+                    <div className="grid gap-4">
+                      <div className="grid min-w-0 gap-3 overflow-hidden rounded-xl border border-border-default bg-bg-elevated p-4">
+                        <input
+                          value={materialTitle}
+                          onChange={(event) => setMaterialTitle(event.target.value)}
+                          placeholder="Material title"
+                          className="w-full min-w-0 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                        />
+                        <div className="flex w-full min-w-0 items-center gap-2">
                           <input
-                            value={editMaterialTitle}
-                            onChange={(event) => setEditMaterialTitle(event.target.value)}
-                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                          />
-                          <input
-                            value={editMaterialSourceUrl}
+                            value={materialSourceUrl}
                             onChange={(event) => {
-                              const nextValue = event.target.value;
-                              setEditMaterialSourceUrl(nextValue);
-                              setEditMaterialCheckedTranscriptText(null);
-                              setEditMaterialCheckedTranscriptSegments(null);
-                              setEditMaterialTranscriptText("");
-                              if (editingMaterialId) {
-                                updateMaterialSuggestionDraft(editingMaterialId, { transcript: "" });
-                              }
-                              setEditMaterialTranscriptStatus(
-                                nextValue.trim()
-                                  ? "URL changed. Use Check transcript, then Save to persist the new transcript."
-                                  : "Transcript will be cleared when you save."
-                              );
+                              setMaterialSourceUrl(event.target.value);
+                              setMaterialCheckedTranscriptText(null);
+                              setMaterialCheckedTranscriptSegments([]);
+                              setMaterialTranscriptStatus(null);
                             }}
-                            placeholder="YouTube/source link"
-                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                            placeholder="YouTube link (optional if text provided)"
+                            className="min-w-0 flex-1 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
                           />
-                          <div className={`text-xs font-body ${editMaterialLinkInvalid ? "text-pkr-low" : "text-text-muted"}`}>
-                            {editMaterialLinkInvalid
-                              ? "Invalid YouTube URL format"
-                              : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => loadEditMaterialTranscript(editMaterialSourceUrl)}
-                              disabled={busy || editMaterialTranscriptChecking || !editMaterialSourceUrl.trim() || editMaterialLinkInvalid}
-                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {editMaterialTranscriptChecking ? "Checking transcript..." : "Check transcript"}
-                            </button>
-                            {editMaterialTranscriptStatus && (
-                              <div className="text-xs font-body text-text-secondary">{editMaterialTranscriptStatus}</div>
-                            )}
-                          </div>
-                          <div className="grid gap-1">
-                            <div className="text-xs font-body text-text-secondary">Notes</div>
+                          <button
+                            onClick={handleCheckMaterialTranscript}
+                            disabled={busy || materialTranscriptChecking || !materialSourceUrl.trim() || createMaterialLinkInvalid}
+                            className="whitespace-nowrap rounded-lg border border-border-default px-3 py-2 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {materialTranscriptChecking ? "Fetching..." : "Fetch transcript"}
+                          </button>
+                        </div>
+                        <div className={`text-xs ${createMaterialLinkInvalid ? "text-pkr-low" : "text-text-muted"}`}>
+                          {createMaterialLinkInvalid
+                            ? "Invalid YouTube URL format"
+                            : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
+                        </div>
+                        {materialTranscriptStatus ? (
+                          <div className="text-xs text-text-secondary">{materialTranscriptStatus}</div>
+                        ) : null}
+                        {Boolean(createTranscriptPreview.trim()) && (
+                          <div className="grid gap-1 rounded-lg border border-border-default bg-bg-elevated p-3">
+                            <div className="text-xs font-body text-text-secondary">Fetched transcript preview</div>
                             <textarea
-                              value={editMaterialText}
-                              onChange={(event) => {
-                                const nextValue = event.target.value;
-                                setEditMaterialText(nextValue);
-                                if (editingMaterialId) {
-                                  updateMaterialSuggestionDraft(editingMaterialId, { notes: nextValue });
-                                }
-                              }}
-                              className="min-h-[90px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                              value={createTranscriptPreview}
+                              readOnly
+                              className="min-h-[180px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary focus:outline-none"
                             />
                           </div>
-                          {(editMaterialTranscriptChecking || Boolean(editTranscriptPreview.trim())) && (
-                            <div className="grid gap-1">
-                              <div className="text-xs font-body text-text-secondary">Transcript (YouTube)</div>
-                              <textarea
-                                value={
-                                  editMaterialTranscriptChecking
-                                    ? "Loading transcript..."
-                                    : editTranscriptPreview
-                                }
-                                readOnly
-                                className="min-h-[90px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary focus:outline-none"
-                              />
-                            </div>
-                          )}
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              onClick={() => handleUpdateMaterial(material.id)}
-                              disabled={busy || editMaterialLinkInvalid}
-                              className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEditMaterial}
-                              disabled={busy}
-                              className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              Cancel
-                            </button>
+                        )}
+                        <textarea
+                          value={materialText}
+                          onChange={(event) => setMaterialText(event.target.value)}
+                          placeholder="Paste notes or study material (optional if YouTube link provided)"
+                          className="w-full min-h-[100px] min-w-0 rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingMaterialNodesId(null);
+                              setCreateMaterialSuggestionError(null);
+                              setMaterialSuggestions({ materialId: null, strong: [], weak: [] });
+                              setIsCreateMaterialNodesOpen((prev) => !prev);
+                            }}
+                            disabled={busy}
+                            className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {isCreateMaterialNodesOpen ? "Hide node picker" : "Add nodes"}
+                          </button>
+                          <div className="text-xs text-text-secondary">
+                            {createMaterialNodeSelection.length} node{createMaterialNodeSelection.length === 1 ? "" : "s"} selected
                           </div>
                         </div>
-                      ) : (
-                        <div className="grid min-w-0 gap-3">
-                          <div className="flex flex-wrap items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="break-words text-sm font-semibold font-heading text-text-primary">{material.title}</div>
-                              <div className="text-xs text-text-secondary">
-                                {material.chunk_count} chunks
-                              </div>
-                              {material.source_url ? (
-                                <a
-                                  href={material.source_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="break-all text-xs text-accent hover:text-accent-hover"
+                        {isCreateMaterialNodesOpen && (
+                          <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div
+                                ref={createMaterialSuggestSettingsRef}
+                                className="relative inline-flex rounded-lg border border-accent/60"
+                              >
+                                <button
+                                  onClick={handleSuggestDraftMaterialNodes}
+                                  disabled={busy || createMaterialSuggestionLoading}
+                                  className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  Source link
-                                </a>
-                              ) : null}
-                            </div>
-                            <div className="flex flex-wrap items-center justify-end gap-2">
-                              <button
-                                onClick={() => beginEditMaterial(material)}
-                                disabled={busy}
-                                className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                Edit
-                              </button>
-                              <GenerateQuestionsButton
-                                onClick={() => setQuestionGeneratorMaterial(material)}
-                                disabled={busy}
-                              />
-                              <button
-                                onClick={() => handleDeleteMaterial(material.id)}
-                                disabled={busy}
-                                className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-xs text-text-muted">Linked nodes:</div>
-                            {linkedNodes.length === 0 && (
-                              <div className="text-xs text-text-secondary">None</div>
-                            )}
-                            {linkedNodes.map((node) => (
-                              <span
-                                key={node.id}
-                                className="max-w-full break-all rounded-full border border-border-default bg-bg-elevated px-2 py-0.5 text-xs font-body text-text-primary"
-                              >
-                                {node.topic_name}
-                              </span>
-                            ))}
-                            <button
-                              onClick={() => beginEditMaterialNodes(material)}
-                              disabled={busy}
-                              className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                              title="Edit linked nodes"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          {isEditingNodes && (
-                            <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div
-                                  ref={editMaterialSuggestSettingsRef}
-                                  className="relative inline-flex rounded-lg border border-accent/60"
+                                  {createMaterialSuggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowCreateMaterialSuggestSettings((prev) => !prev)}
+                                  disabled={busy || createMaterialSuggestionLoading}
+                                  className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                  aria-label="Toggle suggestion settings"
                                 >
-                                  <button
-                                    onClick={() => handleSuggestMaterialNodes(material.id)}
-                                    disabled={busy || suggestionLoading}
-                                    className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {suggestionLoading ? "Suggesting..." : "Suggest nodes"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowEditMaterialSuggestSettings((prev) => !prev)}
-                                    disabled={busy || suggestionLoading}
-                                    className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                    aria-label="Toggle suggestion settings"
-                                  >
-                                    <ChevronDown
-                                      className={`h-3.5 w-3.5 transition ${
-                                        showEditMaterialSuggestSettings ? "rotate-180" : ""
+                                  <ChevronDown
+                                    className={`h-3.5 w-3.5 transition ${showCreateMaterialSuggestSettings ? "rotate-180" : ""
                                       }`}
-                                    />
+                                  />
+                                </button>
+                                {showCreateMaterialSuggestSettings && (
+                                  <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
+                                    <div className="grid gap-3">
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
+                                        Threshold: {suggestionThreshold.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.01}
+                                          value={suggestionThreshold}
+                                          onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.threshold}
+                                        />
+                                      </label>
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
+                                        Semantic weight: {semanticWeight.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.05}
+                                          value={semanticWeight}
+                                          onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.semantic}
+                                        />
+                                      </label>
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
+                                        Keyword weight: {keywordWeight.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.05}
+                                          value={keywordWeight}
+                                          onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.keyword}
+                                        />
+                                      </label>
+                                      <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
+                                        Dedup threshold: {dedupThreshold.toFixed(2)}
+                                        <input
+                                          type="range"
+                                          min={0}
+                                          max={1}
+                                          step={0.01}
+                                          value={dedupThreshold}
+                                          onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                          className="w-full"
+                                          title={SLIDER_HELP.dedup}
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-xs font-body text-text-secondary">
+                                Uses notes + optional valid YouTube transcript.
+                              </div>
+                            </div>
+                            {createMaterialSuggestionError && (
+                              <div className="text-xs text-pkr-low">{createMaterialSuggestionError}</div>
+                            )}
+                            {createMaterialSuggestionData.strong.length > 0 && (
+                              <div className="text-xs font-body text-text-secondary">
+                                Strong suggestions preselected: {createMaterialSuggestionData.strong.length}
+                              </div>
+                            )}
+                            {createMaterialNewSuggestions.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                                New candidates (click to add):
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const titles = createMaterialNewSuggestions
+                                      .map((item) => item.suggested_title?.trim())
+                                      .filter((title): title is string => Boolean(title));
+                                    setCreateMaterialNewNodeSelection(Array.from(new Set(titles)));
+                                  }}
+                                  className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
+                                >
+                                  Select all
+                                </button>
+                                {createMaterialNewSuggestions.map((item, index) => {
+                                  const title = item.suggested_title?.trim();
+                                  if (!title) {
+                                    return null;
+                                  }
+                                  const isSelected = createMaterialNewNodeSelection.includes(title);
+                                  return (
+                                    <button
+                                      key={`create-material-${title}-${index}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setCreateMaterialNewNodeSelection((prev) =>
+                                          prev.includes(title)
+                                            ? prev.filter((entry) => entry !== title)
+                                            : [...prev, title]
+                                        );
+                                      }}
+                                      className={`rounded-full border px-2 py-0.5 transition ${isSelected
+                                        ? "border-amber-400 bg-amber-500/20 text-amber-100"
+                                        : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
+                                        }`}
+                                    >
+                                      {title}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                              Selected nodes (click to toggle):
+                              {createMaterialNodeSelection.map((nodeId) => {
+                                const node = nodeLookup.get(nodeId);
+                                const label = node?.topic_name ?? nodeId;
+                                return (
+                                  <button
+                                    key={`create-material-selected-${nodeId}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setCreateMaterialNodeSelection((prev) => prev.filter((id) => id !== nodeId));
+                                    }}
+                                    className="rounded-full border border-accent bg-accent/20 px-2 py-0.5 text-text-primary transition"
+                                  >
+                                    {label}
                                   </button>
-                                  {showEditMaterialSuggestSettings && (
-                                    <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
-                                      <div className="grid gap-3">
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
-                                          Threshold: {suggestionThreshold.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.01}
-                                            value={suggestionThreshold}
-                                            onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.threshold}
-                                          />
-                                        </label>
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
-                                          Semantic weight: {semanticWeight.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.05}
-                                            value={semanticWeight}
-                                            onChange={(event) => setSemanticWeight(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.semantic}
-                                          />
-                                        </label>
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
-                                          Keyword weight: {keywordWeight.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.05}
-                                            value={keywordWeight}
-                                            onChange={(event) => setKeywordWeight(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.keyword}
-                                          />
-                                        </label>
-                                        <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
-                                          Dedup threshold: {dedupThreshold.toFixed(2)}
-                                          <input
-                                            type="range"
-                                            min={0}
-                                            max={1}
-                                            step={0.01}
-                                            value={dedupThreshold}
-                                            onChange={(event) => setDedupThreshold(Number(event.target.value))}
-                                            className="w-full"
-                                            title={SLIDER_HELP.dedup}
-                                          />
-                                        </label>
+                                );
+                              })}
+                              {createMaterialNodeSelection.length === 0 && (
+                                <span className="text-xs font-body text-text-muted">None selected</span>
+                              )}
+                            </div>
+                            <input
+                              value={createMaterialNodeSearch}
+                              onChange={(event) => setCreateMaterialNodeSearch(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" && event.shiftKey) {
+                                  event.preventDefault();
+                                  handleAddNodeFromCreateMaterialSearch();
+                                }
+                              }}
+                              placeholder="Search nodes"
+                              className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                            />
+                            {createMaterialNodeSearch.trim() &&
+                              !nodes.some(
+                                (node) => node.topic_name.toLowerCase() === createMaterialNodeSearch.trim().toLowerCase()
+                              ) && (
+                                <button
+                                  type="button"
+                                  onClick={handleAddNodeFromCreateMaterialSearch}
+                                  disabled={busy}
+                                  className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <span>Add "{createMaterialNodeSearch.trim()}"</span>
+                                  <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
+                                </button>
+                              )}
+                            <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
+                              {createMaterialFilteredNodes.map((node) => {
+                                const isSelected = createMaterialNodeSelection.includes(node.id);
+                                const isStrongSuggested = createMaterialStrongIds.has(node.id);
+                                const isWeakSuggested = createMaterialWeakIds.has(node.id);
+                                return (
+                                  <button
+                                    key={`create-material-node-${node.id}`}
+                                    type="button"
+                                    onClick={() => {
+                                      setCreateMaterialNodeSelection((prev) =>
+                                        prev.includes(node.id)
+                                          ? prev.filter((id) => id !== node.id)
+                                          : [...prev, node.id]
+                                      );
+                                    }}
+                                    className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${isSelected
+                                      ? "bg-accent/20 text-text-primary"
+                                      : isStrongSuggested
+                                        ? "bg-accent/10 text-text-primary"
+                                        : isWeakSuggested
+                                          ? "bg-bg-hover text-text-primary"
+                                          : "text-text-primary hover:bg-bg-hover"
+                                      }`}
+                                  >
+                                    <span className="font-medium">{node.topic_name}</span>
+                                    <span className="text-xs font-body text-text-muted">{node.id}</span>
+                                  </button>
+                                );
+                              })}
+                              {createMaterialFilteredNodes.length === 0 && (
+                                <div className="px-3 py-2 text-xs text-text-muted">No matching nodes.</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          onClick={handleCreateMaterial}
+                          disabled={busy || createMaterialLinkInvalid}
+                          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Add material
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 rounded-xl border border-dashed border-border-default bg-bg-surface p-4">
+                        <div className="label-caps text-text-muted">
+                          Upload .txt files
+                        </div>
+                        <input
+                          type="file"
+                          accept=".txt,text/plain"
+                          multiple
+                          onChange={(event) => setMaterialFiles(event.target.files)}
+                          className="text-sm text-text-secondary"
+                        />
+                        <button
+                          onClick={handleUploadMaterialFiles}
+                          disabled={busy}
+                          className="rounded-lg border border-border-default px-4 py-2 text-sm text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Upload files
+                        </button>
+                      </div>
+
+                      <div className="grid gap-2">
+                        {materials.map((material) => {
+                          const isEditing = editingMaterialId === material.id;
+                          const isEditingNodes = editingMaterialNodesId === material.id;
+                          const linkedNodes = materialNodeMap.get(material.id) ?? [];
+                          const suggestionData =
+                            materialSuggestions.materialId === material.id
+                              ? materialSuggestions
+                              : { materialId: null, strong: [], weak: [] };
+                          const strongSuggestionIds = new Set(
+                            suggestionData.strong
+                              .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                              .map((item) => item.node_id as string)
+                          );
+                          const weakSuggestionIds = new Set(
+                            suggestionData.weak
+                              .filter((item) => item.suggestion_type === "EXISTING" && item.node_id)
+                              .map((item) => item.node_id as string)
+                          );
+                          const newSuggestions = suggestionData.weak.filter(
+                            (item) => item.suggestion_type === "NEW"
+                          );
+                          const searchValue = materialNodeSearch.trim().toLowerCase();
+                          const filteredNodes = nodes.filter((node) => {
+                            if (!searchValue) {
+                              return true;
+                            }
+                            return (
+                              node.topic_name.toLowerCase().includes(searchValue) ||
+                              node.id.toLowerCase().includes(searchValue)
+                            );
+                          });
+                          return (
+                            <div
+                              key={material.id}
+                              className="min-w-0 overflow-hidden rounded-lg border border-border-default bg-bg-elevated px-3 py-2"
+                            >
+                              {isEditing ? (
+                                <div className="grid gap-2">
+                                  <input
+                                    value={editMaterialTitle}
+                                    onChange={(event) => setEditMaterialTitle(event.target.value)}
+                                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                  />
+                                  <input
+                                    value={editMaterialSourceUrl}
+                                    onChange={(event) => {
+                                      const nextValue = event.target.value;
+                                      setEditMaterialSourceUrl(nextValue);
+                                      setEditMaterialCheckedTranscriptText(null);
+                                      setEditMaterialCheckedTranscriptSegments(null);
+                                      setEditMaterialTranscriptText("");
+                                      if (editingMaterialId) {
+                                        updateMaterialSuggestionDraft(editingMaterialId, { transcript: "" });
+                                      }
+                                      setEditMaterialTranscriptStatus(
+                                        nextValue.trim()
+                                          ? "URL changed. Use Check transcript, then Save to persist the new transcript."
+                                          : "Transcript will be cleared when you save."
+                                      );
+                                    }}
+                                    placeholder="YouTube/source link"
+                                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                  />
+                                  <div className={`text-xs font-body ${editMaterialLinkInvalid ? "text-pkr-low" : "text-text-muted"}`}>
+                                    {editMaterialLinkInvalid
+                                      ? "Invalid YouTube URL format"
+                                      : "Accepted: youtube.com/watch?v=..., youtu.be/..., /shorts/..."}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => loadEditMaterialTranscript(editMaterialSourceUrl)}
+                                      disabled={busy || editMaterialTranscriptChecking || !editMaterialSourceUrl.trim() || editMaterialLinkInvalid}
+                                      className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {editMaterialTranscriptChecking ? "Checking transcript..." : "Check transcript"}
+                                    </button>
+                                    {editMaterialTranscriptStatus && (
+                                      <div className="text-xs font-body text-text-secondary">{editMaterialTranscriptStatus}</div>
+                                    )}
+                                  </div>
+                                  <div className="grid gap-1">
+                                    <div className="text-xs font-body text-text-secondary">Notes</div>
+                                    <textarea
+                                      value={editMaterialText}
+                                      onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        setEditMaterialText(nextValue);
+                                        if (editingMaterialId) {
+                                          updateMaterialSuggestionDraft(editingMaterialId, { notes: nextValue });
+                                        }
+                                      }}
+                                      className="min-h-[90px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                    />
+                                  </div>
+                                  {(editMaterialTranscriptChecking || Boolean(editTranscriptPreview.trim())) && (
+                                    <div className="grid gap-1">
+                                      <div className="text-xs font-body text-text-secondary">Transcript (YouTube)</div>
+                                      <textarea
+                                        value={
+                                          editMaterialTranscriptChecking
+                                            ? "Loading transcript..."
+                                            : editTranscriptPreview
+                                        }
+                                        readOnly
+                                        className="min-h-[90px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-secondary focus:outline-none"
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      onClick={() => handleUpdateMaterial(material.id)}
+                                      disabled={busy || editMaterialLinkInvalid}
+                                      className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEditMaterial}
+                                      disabled={busy}
+                                      className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="grid min-w-0 gap-3">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <div className="break-words text-sm font-semibold font-heading text-text-primary">{material.title}</div>
+                                      <div className="text-xs text-text-secondary">
+                                        {material.chunk_count} chunks
+                                      </div>
+                                      {material.source_url ? (
+                                        <a
+                                          href={material.source_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="break-all text-xs text-accent hover:text-accent-hover"
+                                        >
+                                          Source link
+                                        </a>
+                                      ) : null}
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                      <button
+                                        onClick={() => beginEditMaterial(material)}
+                                        disabled={busy}
+                                        className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        Edit
+                                      </button>
+                                      <GenerateQuestionsButton
+                                        onClick={() => setQuestionGeneratorMaterial(material)}
+                                        disabled={busy}
+                                      />
+                                      <button
+                                        onClick={() => handleDeleteMaterial(material.id)}
+                                        disabled={busy}
+                                        className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <div className="text-xs text-text-muted">Linked nodes:</div>
+                                    {linkedNodes.length === 0 && (
+                                      <div className="text-xs text-text-secondary">None</div>
+                                    )}
+                                    {linkedNodes.map((node) => (
+                                      <span
+                                        key={node.id}
+                                        className="max-w-full break-all rounded-full border border-border-default bg-bg-elevated px-2 py-0.5 text-xs font-body text-text-primary"
+                                      >
+                                        {node.topic_name}
+                                      </span>
+                                    ))}
+                                    <button
+                                      onClick={() => beginEditMaterialNodes(material)}
+                                      disabled={busy}
+                                      className="rounded-full border border-border-default px-2 py-0.5 text-xs font-body text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                      title="Edit linked nodes"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                      </svg>
+                                    </button>
+                                  </div>
+
+                                  {isEditingNodes && (
+                                    <div className="grid gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <div
+                                          ref={editMaterialSuggestSettingsRef}
+                                          className="relative inline-flex rounded-lg border border-accent/60"
+                                        >
+                                          <button
+                                            onClick={() => handleSuggestMaterialNodes(material.id)}
+                                            disabled={busy || suggestionLoading}
+                                            className="rounded-l-lg border-r border-accent/60 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                          >
+                                            {suggestionLoading ? "Suggesting..." : "Suggest nodes"}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setShowEditMaterialSuggestSettings((prev) => !prev)}
+                                            disabled={busy || suggestionLoading}
+                                            className="rounded-r-lg bg-accent px-2 py-1 text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                            aria-label="Toggle suggestion settings"
+                                          >
+                                            <ChevronDown
+                                              className={`h-3.5 w-3.5 transition ${showEditMaterialSuggestSettings ? "rotate-180" : ""
+                                                }`}
+                                            />
+                                          </button>
+                                          {showEditMaterialSuggestSettings && (
+                                            <div className="absolute left-0 top-full z-10 mt-1 w-72 rounded-lg border border-border-default bg-bg-elevated p-3 shadow-xl">
+                                              <div className="grid gap-3">
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.threshold}>
+                                                  Threshold: {suggestionThreshold.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.01}
+                                                    value={suggestionThreshold}
+                                                    onChange={(event) => setSuggestionThreshold(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.threshold}
+                                                  />
+                                                </label>
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.semantic}>
+                                                  Semantic weight: {semanticWeight.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.05}
+                                                    value={semanticWeight}
+                                                    onChange={(event) => setSemanticWeight(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.semantic}
+                                                  />
+                                                </label>
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.keyword}>
+                                                  Keyword weight: {keywordWeight.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.05}
+                                                    value={keywordWeight}
+                                                    onChange={(event) => setKeywordWeight(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.keyword}
+                                                  />
+                                                </label>
+                                                <label className="grid gap-1 text-xs font-body text-text-secondary" title={SLIDER_HELP.dedup}>
+                                                  Dedup threshold: {dedupThreshold.toFixed(2)}
+                                                  <input
+                                                    type="range"
+                                                    min={0}
+                                                    max={1}
+                                                    step={0.01}
+                                                    value={dedupThreshold}
+                                                    onChange={(event) => setDedupThreshold(Number(event.target.value))}
+                                                    className="w-full"
+                                                    title={SLIDER_HELP.dedup}
+                                                  />
+                                                </label>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="text-xs font-body text-text-secondary">
+                                          Adjust threshold + weights before suggesting.
+                                        </div>
+                                      </div>
+                                      {suggestionError && (
+                                        <div className="text-xs text-pkr-low">{suggestionError}</div>
+                                      )}
+                                      {suggestionData.strong.length > 0 && (
+                                        <div className="text-xs font-body text-text-secondary">
+                                          Strong suggestions preselected: {suggestionData.strong.length}
+                                        </div>
+                                      )}
+                                      {newSuggestions.length > 0 && (
+                                        <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                                          New candidates (click to add):
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const titles = newSuggestions
+                                                .map((item) => item.suggested_title?.trim())
+                                                .filter((title): title is string => Boolean(title));
+                                              setMaterialNewNodeSelection(Array.from(new Set(titles)));
+                                            }}
+                                            className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
+                                          >
+                                            Select all
+                                          </button>
+                                          {newSuggestions.map((item, index) => {
+                                            const title = item.suggested_title?.trim();
+                                            if (!title) {
+                                              return null;
+                                            }
+                                            const isSelected = materialNewNodeSelection.includes(title);
+                                            return (
+                                              <button
+                                                key={`${title}-${index}`}
+                                                type="button"
+                                                onClick={() => {
+                                                  setMaterialNewNodeSelection((prev) =>
+                                                    prev.includes(title)
+                                                      ? prev.filter((entry) => entry !== title)
+                                                      : [...prev, title]
+                                                  );
+                                                }}
+                                                className={`rounded-full border px-2 py-0.5 transition ${isSelected
+                                                  ? "border-amber-400 bg-amber-500/20 text-amber-100"
+                                                  : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
+                                                  }`}
+                                              >
+                                                {title}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                      <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
+                                        Selected nodes (click to toggle):
+                                        {Array.from(
+                                          new Set([
+                                            ...linkedNodes.map((node) => node.id),
+                                            ...materialNodeSelection,
+                                          ])
+                                        ).map((nodeId) => {
+                                          const node = nodeLookup.get(nodeId);
+                                          const label = node?.topic_name ?? nodeId;
+                                          const isSelected = materialNodeSelection.includes(nodeId);
+                                          return (
+                                            <button
+                                              key={nodeId}
+                                              type="button"
+                                              onClick={() => {
+                                                setMaterialNodeSelection((prev) =>
+                                                  prev.includes(nodeId)
+                                                    ? prev.filter((id) => id !== nodeId)
+                                                    : [...prev, nodeId]
+                                                );
+                                              }}
+                                              className={`rounded-full border px-2 py-0.5 transition ${isSelected
+                                                ? "border-accent bg-accent/20 text-text-primary"
+                                                : "border-border-default bg-bg-elevated text-text-secondary hover:border-border-accent"
+                                                }`}
+                                            >
+                                              {label}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                      <input
+                                        value={materialNodeSearch}
+                                        onChange={(event) => setMaterialNodeSearch(event.target.value)}
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter" && event.shiftKey) {
+                                            event.preventDefault();
+                                            handleAddNodeFromMaterialSearch();
+                                          }
+                                        }}
+                                        placeholder="Search nodes"
+                                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                      />
+                                      {materialNodeSearch.trim() &&
+                                        !nodes.some(
+                                          (node) =>
+                                            node.topic_name.toLowerCase() ===
+                                            materialNodeSearch.trim().toLowerCase()
+                                        ) && (
+                                          <button
+                                            type="button"
+                                            onClick={handleAddNodeFromMaterialSearch}
+                                            disabled={busy}
+                                            className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
+                                          >
+                                            <span>Add "{materialNodeSearch.trim()}"</span>
+                                            <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
+                                          </button>
+                                        )}
+                                      <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
+                                        {filteredNodes.map((node) => {
+                                          const isSelected = materialNodeSelection.includes(node.id);
+                                          const isStrongSuggested = strongSuggestionIds.has(node.id);
+                                          const isWeakSuggested = weakSuggestionIds.has(node.id);
+                                          return (
+                                            <button
+                                              key={node.id}
+                                              type="button"
+                                              onClick={() => {
+                                                setMaterialNodeSelection((prev) =>
+                                                  prev.includes(node.id)
+                                                    ? prev.filter((id) => id !== node.id)
+                                                    : [...prev, node.id]
+                                                );
+                                              }}
+                                              className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${isSelected
+                                                ? "bg-accent/20 text-text-primary"
+                                                : isStrongSuggested
+                                                  ? "bg-accent/10 text-text-primary"
+                                                  : isWeakSuggested
+                                                    ? "bg-bg-hover text-text-primary"
+                                                    : "text-text-primary hover:bg-bg-hover"
+                                                }`}
+                                            >
+                                              <span className="font-medium">{node.topic_name}</span>
+                                              <span className="text-xs font-body text-text-muted">{node.id}</span>
+                                            </button>
+                                          );
+                                        })}
+                                        {filteredNodes.length === 0 && (
+                                          <div className="px-3 py-2 text-xs text-text-muted">
+                                            No matching nodes.
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        <button
+                                          onClick={() => handleSaveMaterialNodes(material.id)}
+                                          disabled={busy}
+                                          className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                          Save links
+                                        </button>
+                                        <button
+                                          onClick={cancelEditMaterialNodes}
+                                          disabled={busy}
+                                          className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                          Cancel
+                                        </button>
                                       </div>
                                     </div>
                                   )}
                                 </div>
-                                <div className="text-xs font-body text-text-secondary">
-                                  Adjust threshold + weights before suggesting.
-                                </div>
-                              </div>
-                              {suggestionError && (
-                                <div className="text-xs text-pkr-low">{suggestionError}</div>
                               )}
-                              {suggestionData.strong.length > 0 && (
-                                <div className="text-xs font-body text-text-secondary">
-                                  Strong suggestions preselected: {suggestionData.strong.length}
-                                </div>
-                              )}
-                              {newSuggestions.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                                  New candidates (click to add):
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const titles = newSuggestions
-                                        .map((item) => item.suggested_title?.trim())
-                                        .filter((title): title is string => Boolean(title));
-                                      setMaterialNewNodeSelection(Array.from(new Set(titles)));
-                                    }}
-                                    className="rounded-full border border-amber-400/50 bg-amber-500/10 px-2 py-0.5 text-xs font-body text-amber-100 transition hover:border-amber-400"
-                                  >
-                                    Select all
-                                  </button>
-                                  {newSuggestions.map((item, index) => {
-                                    const title = item.suggested_title?.trim();
-                                    if (!title) {
-                                      return null;
-                                    }
-                                    const isSelected = materialNewNodeSelection.includes(title);
-                                    return (
-                                      <button
-                                        key={`${title}-${index}`}
-                                        type="button"
-                                        onClick={() => {
-                                          setMaterialNewNodeSelection((prev) =>
-                                            prev.includes(title)
-                                              ? prev.filter((entry) => entry !== title)
-                                              : [...prev, title]
-                                          );
-                                        }}
-                                        className={`rounded-full border px-2 py-0.5 transition ${
-                                          isSelected
-                                            ? "border-amber-400 bg-amber-500/20 text-amber-100"
-                                            : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
-                                        }`}
-                                      >
-                                        {title}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                              <div className="flex flex-wrap items-center gap-2 text-xs font-body text-text-secondary">
-                                Selected nodes (click to toggle):
-                                {Array.from(
-                                  new Set([
-                                    ...linkedNodes.map((node) => node.id),
-                                    ...materialNodeSelection,
-                                  ])
-                                ).map((nodeId) => {
-                                  const node = nodeLookup.get(nodeId);
-                                  const label = node?.topic_name ?? nodeId;
-                                  const isSelected = materialNodeSelection.includes(nodeId);
-                                  return (
-                                    <button
-                                      key={nodeId}
-                                      type="button"
-                                      onClick={() => {
-                                        setMaterialNodeSelection((prev) =>
-                                          prev.includes(nodeId)
-                                            ? prev.filter((id) => id !== nodeId)
-                                            : [...prev, nodeId]
-                                        );
-                                      }}
-                                      className={`rounded-full border px-2 py-0.5 transition ${
-                                        isSelected
-                                          ? "border-accent bg-accent/20 text-text-primary"
-                                          : "border-border-default bg-bg-elevated text-text-secondary hover:border-border-accent"
-                                      }`}
-                                    >
-                                      {label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              <input
-                                value={materialNodeSearch}
-                                onChange={(event) => setMaterialNodeSearch(event.target.value)}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter" && event.shiftKey) {
-                                    event.preventDefault();
-                                    handleAddNodeFromMaterialSearch();
-                                  }
-                                }}
-                                placeholder="Search nodes"
-                                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                              />
-                              {materialNodeSearch.trim() &&
-                                !nodes.some(
-                                  (node) =>
-                                    node.topic_name.toLowerCase() ===
-                                    materialNodeSearch.trim().toLowerCase()
-                                ) && (
-                                  <button
-                                    type="button"
-                                    onClick={handleAddNodeFromMaterialSearch}
-                                    disabled={busy}
-                                    className="flex w-full items-center justify-between rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-left text-xs text-text-primary transition hover:border-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    <span>Add "{materialNodeSearch.trim()}"</span>
-                                    <span className="text-xs font-body text-text-secondary">Shift + Enter</span>
-                                  </button>
-                                )}
-                              <div className="max-h-40 overflow-y-auto rounded-lg border border-border-default bg-bg-elevated">
-                                {filteredNodes.map((node) => {
-                                  const isSelected = materialNodeSelection.includes(node.id);
-                                  const isStrongSuggested = strongSuggestionIds.has(node.id);
-                                  const isWeakSuggested = weakSuggestionIds.has(node.id);
-                                  return (
-                                    <button
-                                      key={node.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setMaterialNodeSelection((prev) =>
-                                          prev.includes(node.id)
-                                            ? prev.filter((id) => id !== node.id)
-                                            : [...prev, node.id]
-                                        );
-                                      }}
-                                      className={`flex w-full items-center justify-between gap-3 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
-                                        isSelected
-                                          ? "bg-accent/20 text-text-primary"
-                                          : isStrongSuggested
-                                            ? "bg-accent/10 text-text-primary"
-                                            : isWeakSuggested
-                                              ? "bg-bg-hover text-text-primary"
-                                              : "text-text-primary hover:bg-bg-hover"
-                                      }`}
-                                    >
-                                      <span className="font-medium">{node.topic_name}</span>
-                                      <span className="text-xs font-body text-text-muted">{node.id}</span>
-                                    </button>
-                                  );
-                                })}
-                                {filteredNodes.length === 0 && (
-                                  <div className="px-3 py-2 text-xs text-text-muted">
-                                    No matching nodes.
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  onClick={() => handleSaveMaterialNodes(material.id)}
-                                  disabled={busy}
-                                  className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Save links
-                                </button>
-                                <button
-                                  onClick={cancelEditMaterialNodes}
-                                  disabled={busy}
-                                  className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
                             </div>
-                          )}
+                          );
+                        })}
+                        {materials.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
+                            No materials yet for this project.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Tab: Communities ── */}
+              {activeTab === 'communities' && (
+                <div>
+                  <div className="grid gap-4">
+                    <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
+                      <input
+                        value={communityName}
+                        onChange={(event) => setCommunityName(event.target.value)}
+                        placeholder="Community name"
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                      />
+                      <textarea
+                        value={communityDescription}
+                        onChange={(event) => setCommunityDescription(event.target.value)}
+                        placeholder="Community description"
+                        className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                      />
+                      <input
+                        value={communityProjectIds}
+                        onChange={(event) => setCommunityProjectIds(event.target.value)}
+                        placeholder="Project ids (comma separated)"
+                        className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
+                      />
+                      <button
+                        onClick={handleCreateCommunity}
+                        disabled={busy}
+                        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Add community
+                      </button>
+                    </div>
+
+                    <div className="grid gap-2">
+                      {communities.map((community) => {
+                        const isEditing = editingCommunityId === community.id;
+                        return (
+                          <div
+                            key={community.id}
+                            className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2"
+                          >
+                            {isEditing ? (
+                              <div className="grid gap-2">
+                                <input
+                                  value={editCommunityName}
+                                  onChange={(event) => setEditCommunityName(event.target.value)}
+                                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                />
+                                <textarea
+                                  value={editCommunityDescription}
+                                  onChange={(event) => setEditCommunityDescription(event.target.value)}
+                                  className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                />
+                                <input
+                                  value={editCommunityProjectIds}
+                                  onChange={(event) => setEditCommunityProjectIds(event.target.value)}
+                                  placeholder="Project ids (comma separated)"
+                                  className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
+                                />
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    onClick={() => handleUpdateCommunity(community.id)}
+                                    disabled={busy}
+                                    className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={cancelEditCommunity}
+                                    disabled={busy}
+                                    className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="text-sm font-semibold font-heading text-text-primary">{community.name}</div>
+                                  <div className="text-xs text-text-secondary">
+                                    {community.description || "No description"}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => beginEditCommunity(community)}
+                                    disabled={busy}
+                                    className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteCommunity(community.id)}
+                                    disabled={busy}
+                                    className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {communities.length === 0 && (
+                        <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
+                          No communities yet.
                         </div>
                       )}
                     </div>
-                  );
-                })}
-                {materials.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
-                    No materials yet for this project.
                   </div>
-                )}
-              </div>
-            </div>
-          )}
-            </div>
-          )}
-
-          {/* ── Tab: Communities ── */}
-          {activeTab === 'communities' && (
-            <div>
-          <div className="grid gap-4">
-            <div className="grid gap-3 rounded-xl border border-border-default bg-bg-elevated p-4">
-              <input
-                value={communityName}
-                onChange={(event) => setCommunityName(event.target.value)}
-                placeholder="Community name"
-                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-              />
-              <textarea
-                value={communityDescription}
-                onChange={(event) => setCommunityDescription(event.target.value)}
-                placeholder="Community description"
-                className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-              />
-              <input
-                value={communityProjectIds}
-                onChange={(event) => setCommunityProjectIds(event.target.value)}
-                placeholder="Project ids (comma separated)"
-                className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-sm text-text-primary focus:border-accent-dim focus:outline-none"
-              />
-              <button
-                onClick={handleCreateCommunity}
-                disabled={busy}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Add community
-              </button>
-            </div>
-
-            <div className="grid gap-2">
-              {communities.map((community) => {
-                const isEditing = editingCommunityId === community.id;
-                return (
-                  <div
-                    key={community.id}
-                    className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2"
-                  >
-                    {isEditing ? (
-                      <div className="grid gap-2">
-                        <input
-                          value={editCommunityName}
-                          onChange={(event) => setEditCommunityName(event.target.value)}
-                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                        />
-                        <textarea
-                          value={editCommunityDescription}
-                          onChange={(event) => setEditCommunityDescription(event.target.value)}
-                          className="min-h-[70px] rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                        />
-                        <input
-                          value={editCommunityProjectIds}
-                          onChange={(event) => setEditCommunityProjectIds(event.target.value)}
-                          placeholder="Project ids (comma separated)"
-                          className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2 text-xs text-text-primary focus:border-accent-dim focus:outline-none"
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => handleUpdateCommunity(community.id)}
-                            disabled={busy}
-                            className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={cancelEditCommunity}
-                            disabled={busy}
-                            className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-semibold font-heading text-text-primary">{community.name}</div>
-                          <div className="text-xs text-text-secondary">
-                            {community.description || "No description"}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => beginEditCommunity(community)}
-                            disabled={busy}
-                            className="rounded-lg border border-border-default px-3 py-1 text-xs text-text-primary transition hover:border-border-accent disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCommunity(community.id)}
-                            disabled={busy}
-                            className="rounded-lg border border-pkr-low/60 px-3 py-1 text-xs text-pkr-low transition hover:border-pkr-low disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {communities.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border-default p-4 text-xs text-text-muted">
-                  No communities yet.
                 </div>
               )}
-            </div>
-          </div>
-            </div>
-          )}
-          </>
+            </>
           )}
         </div>
       </div>

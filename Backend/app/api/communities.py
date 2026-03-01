@@ -1,5 +1,6 @@
 """Community management API endpoints."""
 
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from app.db.session import get_db
 from app.models import Community as CommunityModel, AppUser as AppUserModel, Node as NodeModel
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _serialize_community(community: CommunityModel) -> dict:
@@ -167,18 +169,22 @@ async def get_community_progress(community_id: str, db: AsyncSession = Depends(g
     )
 
     total_nodes = 0
+    avg_knowledge = 0.0
     if project_ids:
         result = await db.execute(
-            select(func.count(NodeModel.id)).where(NodeModel.project_id.in_(project_ids))
+            select(
+                func.count(NodeModel.id),
+                func.coalesce(func.avg(NodeModel.proven_knowledge_rating), 0.0),
+            ).where(NodeModel.project_id.in_(project_ids))
         )
-        total_nodes = result.scalar_one() or 0
-
-    overall_progress = override_count / total_nodes if total_nodes else 0.0
+        row = result.one()
+        total_nodes = row[0] or 0
+        avg_knowledge = float(row[1])
 
     return {
         "community_id": community_id,
-        "overall_progress": overall_progress,
-        "relevant_topics": override_count,
+        "overall_progress": avg_knowledge,
+        "relevant_topics": total_nodes,
     }
 
 

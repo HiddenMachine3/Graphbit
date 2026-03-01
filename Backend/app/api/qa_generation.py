@@ -1,6 +1,7 @@
 """Question-answer pair generation endpoint backed by Gemini API."""
 
 import json
+import logging
 from typing import Literal
 
 import httpx
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class QAGenerationRequest(BaseModel):
@@ -132,6 +134,7 @@ async def generate_qa_pairs(
     """Generate QA pairs using Gemini API with structured JSON output."""
     api_key = settings.GEMINI_API_KEY
     if not api_key:
+        logger.error("QA generation failed: GEMINI_API_KEY not configured")
         raise HTTPException(
             status_code=500,
             detail="GEMINI_API_KEY is not configured",
@@ -170,10 +173,15 @@ async def generate_qa_pairs(
             "required": ["question_type", "qa_pairs"],
         }
         instruction = (
-            "Generate exactly "
-            f"{request.n} multiple-choice study question-answer pairs from the text below. "
-            "Each pair must have question_type='mcq', a clear question, 4 concise options, and an answer "
-            "that exactly matches one of the options. Avoid duplicate questions."
+            "You are an expert curriculum developer. Generate exactly "
+            f"{request.n} multiple-choice study question-answer pairs from the text below.\n"
+            "CRITICAL CONSTRAINTS:\n"
+            f"1. You MUST generate exactly {request.n} questions. No more, no less.\n"
+            "2. Each pair must have question_type='mcq'.\n"
+            "3. The questions MUST be deep, analytical, and highly conceptual. They must test true understanding, synthesis of ideas, or application of concepts, NOT trivial facts or rote memorization.\n"
+            "4. The 4 options must include highly plausible distractors that require careful thought to eliminate. Do not use obvious throwaway options.\n"
+            "5. The 'answer' field must EXACTLY match one of the string options.\n"
+            "6. Avoid duplicate topics. Ensure maximum coverage of the text's most critical concepts."
         )
     elif request.question_type == "flashcard":
         schema = {
@@ -197,9 +205,14 @@ async def generate_qa_pairs(
             "required": ["question_type", "qa_pairs"],
         }
         instruction = (
-            "Generate exactly "
-            f"{request.n} flashcard study question-answer pairs from the text below. "
-            "Each pair must have question_type='flashcard'. Use short, direct prompt-answer style and avoid duplicates."
+            "You are an expert curriculum developer. Generate exactly "
+            f"{request.n} flashcard study question-answer pairs from the text below.\n"
+            "CRITICAL CONSTRAINTS:\n"
+            f"1. You MUST generate exactly {request.n} flashcards. No more, no less.\n"
+            "2. Each pair must have question_type='flashcard'.\n"
+            "3. Each flashcard should capture a core concept, key principle, or fundamental relationship, avoiding trivial dates or disconnected facts unless central to the topic.\n"
+            "4. Keep the question/prompt concise and direct. The answer must be a clear, unambiguous exposition of the concept.\n"
+            "5. Avoid duplicate topics. Synthesize the most important information."
         )
     else:
         schema = {
@@ -223,9 +236,14 @@ async def generate_qa_pairs(
             "required": ["question_type", "qa_pairs"],
         }
         instruction = (
-            "Generate exactly "
-            f"{request.n} concise open-ended study question-answer pairs from the text below. "
-            "Each pair must have question_type='open'. Use factual, direct wording and avoid duplicates."
+            "You are an expert curriculum developer. Generate exactly "
+            f"{request.n} concise open-ended study question-answer pairs from the text below.\n"
+            "CRITICAL CONSTRAINTS:\n"
+            f"1. You MUST generate exactly {request.n} questions. No more, no less.\n"
+            "2. Each pair must have question_type='open'.\n"
+            "3. The questions MUST require the student to explain 'why' or 'how', evaluate a concept, or synthesize information. Avoid simple factual recall ('what is X').\n"
+            "4. The answer should be a comprehensive, yet concise, reference explanation for a human grader to evaluate against.\n"
+            "5. Avoid duplicate topics. Ensure maximum coverage of the critical concepts."
         )
 
     payload = {
@@ -236,6 +254,7 @@ async def generate_qa_pairs(
                     {
                         "text": (
                             f"Question type: {request.question_type}\n"
+                            f"Required count: {request.n}\n"
                             "Return JSON that strictly follows the response schema.\n\n"
                             f"{instruction}\n\n"
                             f"Text:\n{request.text}"
@@ -270,8 +289,10 @@ async def generate_qa_pairs(
                     detail="Gemini response missing candidates content",
                 ) from exc
 
+            logger.info("QA generated: type=%s requested=%d", request.question_type, request.n)
             return _coerce_qa_output(raw_json, request.question_type)
     except httpx.HTTPError as exc:
+        logger.exception("Gemini QA API call failed: %s", exc)
         raise HTTPException(
             status_code=502,
             detail=f"Failed to call Gemini QA endpoint: {exc}",

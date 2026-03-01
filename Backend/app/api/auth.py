@@ -5,6 +5,7 @@ Provides endpoints:
 - POST /auth/login - Authenticate and receive JWT token  
 - GET /auth/me - Get current user information (protected)
 """
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ from app.models import User
 from app.schemas import UserCreate, UserResponse, Token, LoginRequest
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -47,6 +49,7 @@ async def register(
     existing_user = result.scalar_one_or_none()
     
     if existing_user:
+        logger.warning("Registration failed: email already exists email=%s", user_data.email)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered"
@@ -65,6 +68,7 @@ async def register(
     await db.commit()
     await db.refresh(new_user)
     
+    logger.info("User registered: email=%s", user_data.email)
     return new_user
 
 
@@ -99,6 +103,7 @@ async def login(
     
     # Verify user exists and password is correct
     if not user or not verify_password(form_data.password, user.hashed_password):
+        logger.warning("Login failed: invalid credentials email=%s", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -117,6 +122,7 @@ async def login(
         data={"sub": user.email, "user_id": user.id}
     )
     
+    logger.info("Login success: email=%s user_id=%s", user.email, user.id)
     return {
         "access_token": access_token,
         "token_type": "bearer"

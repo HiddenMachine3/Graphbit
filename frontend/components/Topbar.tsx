@@ -83,8 +83,8 @@ export default function Topbar() {
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const hasExactNodeMatch = normalizedQuery
     ? searchResults.nodes.some(
-        (item) => item.title.trim().toLowerCase() === normalizedQuery
-      )
+      (item) => item.title.trim().toLowerCase() === normalizedQuery
+    )
     : false;
 
   useEffect(() => {
@@ -121,7 +121,7 @@ export default function Topbar() {
     <header className="border-b border-border-default bg-bg-surface/85 backdrop-blur-md px-4 py-4">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
         <div className="flex min-w-0 items-center gap-4">
-          <div className="flex items-center gap-3">
+          <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#b2264c]/20 ring-1 ring-[#b2264c]/40">
               <svg
                 viewBox="0 0 64 64"
@@ -138,7 +138,7 @@ export default function Topbar() {
             <div className="leading-tight">
               <div className="text-xl font-bold font-heading text-text-primary">Graphbit</div>
             </div>
-          </div>
+          </a>
 
           <div className="ml-auto">
             <ProjectSwitcher />
@@ -252,7 +252,7 @@ export default function Topbar() {
               </a>
             </nav>
             <button className="flex items-center gap-2 rounded-full border border-border-default bg-bg-elevated px-2 py-1 text-sm font-body text-text-secondary transition hover:border-border-accent">
-                <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-bg-hover">
+              <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-bg-hover">
                 {currentUser?.avatar_url ? (
                   <img
                     src={currentUser.avatar_url}
@@ -260,7 +260,7 @@ export default function Topbar() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                    <span className="text-xs font-semibold font-body text-text-secondary">
+                  <span className="text-xs font-semibold font-body text-text-secondary">
                     {(currentUser?.name ?? currentUser?.username ?? "U").slice(0, 1)}
                   </span>
                 )}

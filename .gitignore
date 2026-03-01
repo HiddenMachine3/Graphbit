@@ -50,3 +50,8 @@ frontend/.turbo/
 Backend/.conda_pg
 Backend/.tmp
 Backend/.local_pgvector_db
+
+# Secrets
+.env
+.env.*
+!.env.example

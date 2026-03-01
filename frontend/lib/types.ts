@@ -4,7 +4,7 @@ export interface ProjectDTO {
   id: string;
   name: string;
   description: string;
-  owner_id: string;
+  owner_id?: string;
   created_by: string;
   visibility: ProjectVisibility;
   created_at: string;

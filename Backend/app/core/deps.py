@@ -1,10 +1,5 @@
-"""Authentication dependencies for protecting routes.
-
-This module provides FastAPI dependencies that:
-- Extract and validate JWT tokens from Authorization headers
-- Fetch the current user from the database
-- Ensure the user is active
-"""
+"""Authentication dependencies for protecting routes."""
+import logging
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -18,6 +13,7 @@ from app.models import User
 # OAuth2PasswordBearer extracts the token from "Authorization: Bearer <token>" header
 # tokenUrl is where clients get tokens (our login endpoint)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/login")
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -56,6 +52,7 @@ async def get_current_user(
     # Decode the JWT token
     payload = decode_access_token(token)
     if payload is None:
+        logger.warning("Auth failed: invalid token")
         raise credentials_exception
     
     # Extract user_id from token payload
@@ -68,6 +65,7 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     
     if user is None:
+        logger.warning("Auth failed: user not found user_id=%s", user_id)
         raise credentials_exception
     
     return user

@@ -9,51 +9,20 @@ This file:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import os
+import logging
 from sqlalchemy import text
+# Centralised logging — call first so all modules inherit the format
+from app.core.logging_config import setup_logging
+setup_logging()
 # Load .env early so all modules see environment variables (GEMINI_API_KEY, etc.)
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 from app.core.config import settings
 from app.api import api_router
 from app.db.session import async_engine
-from app.models import Base
+from app.models import Base, AppUser as AppUserModel
 
-
-def _log_hf_model_probe() -> None:
-    """Log Hugging Face keyphrase model reachability to terminal only."""
-    model_name = (settings.HF_KEYPHRASE_MODEL or "").strip()
-    base_url = os.environ.get(
-        "HF_INFERENCE_BASE_URL",
-        "https://router.huggingface.co/hf-inference",
-    ).rstrip("/")
-    token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
-
-    if not model_name:
-        print("[HF_CHECK] Skipped: HF_KEYPHRASE_MODEL is empty.")
-        return
-
-    if not token:
-        print(f"[HF_CHECK] Skipped: HF_TOKEN missing. model={model_name}")
-        return
-
-    try:
-        from huggingface_hub import InferenceClient
-    except Exception as exc:
-        print(f"[HF_CHECK] Skipped: huggingface_hub unavailable. error={exc}")
-        return
-
-    model_target = model_name
-    if not model_name.startswith(("http://", "https://")):
-        model_target = f"{base_url}/models/{model_name}"
-
-    try:
-        client = InferenceClient(token=token, base_url=base_url)
-        sample_text = "Depth first search explores one branch before backtracking."
-        entities = client.token_classification(sample_text, model=model_target) or []
-        print(f"[HF_CHECK] OK model={model_name} target={model_target} entities={len(entities)}")
-    except Exception as exc:
-        print(f"[HF_CHECK] FAIL model={model_name} target={model_target} error={exc}")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -63,9 +32,6 @@ async def lifespan(app: FastAPI):
     Manages startup and shutdown events:
     - Startup: Create database tables if they don't exist
     - Shutdown: Close database connections cleanly
-    
-    Why: This ensures the database is ready before accepting requests
-    and resources are properly cleaned up on shutdown.
     """
     # Startup: Create database tables
     async with async_engine.begin() as conn:
@@ -80,14 +46,33 @@ async def lifespan(app: FastAPI):
             await conn.execute(
                 text("ALTER TABLE IF EXISTS materials ADD COLUMN IF NOT EXISTS transcript_segments JSONB")
             )
-    _log_hf_model_probe()
-    print("✓ Database tables created/verified")
+            # Enable trigram fuzzy search extension (used by /search endpoint)
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    logger.info("Database tables created/verified")
+
+    # Seed a default AppUser if none exists (required by graph/materials/projects)
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import select
+    async_session = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
+        result = await session.execute(select(AppUserModel).limit(1))
+        if result.scalar_one_or_none() is None:
+            default_user = AppUserModel(
+                id="demo-user",
+                username="demo",
+                name="Demo User",
+                password_hash="not-used",
+            )
+            session.add(default_user)
+            await session.commit()
+            logger.info("Seeded default AppUser: id=demo-user username=demo")
     
     yield
     
     # Shutdown: cleanup
     await async_engine.dispose()
-    print("✓ Database connections closed")
+    logger.info("Database connections closed")
 
 
 app = FastAPI(

@@ -3,7 +3,7 @@ import type { QuestionDTO } from "../types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
-export type GeneratedQAQuestionType = "open" | "mcq";
+export type GeneratedQAQuestionType = "open" | "mcq" | "flashcard";
 
 export type GeneratedOpenQAPair = {
   question_type: "open";
@@ -28,7 +28,18 @@ export type GeneratedMcqQAResponse = {
   qa_pairs: GeneratedMcqQAPair[];
 };
 
-export type GeneratedQAResponse = GeneratedOpenQAResponse | GeneratedMcqQAResponse;
+export type GeneratedFlashcardQAPair = {
+  question_type: "flashcard";
+  question: string;
+  answer: string;
+};
+
+export type GeneratedFlashcardQAResponse = {
+  question_type: "flashcard";
+  qa_pairs: GeneratedFlashcardQAPair[];
+};
+
+export type GeneratedQAResponse = GeneratedOpenQAResponse | GeneratedMcqQAResponse | GeneratedFlashcardQAResponse;
 
 export async function generateQuestionsFromText(payload: {
   text: string;

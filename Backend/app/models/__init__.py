@@ -93,6 +93,7 @@ class RevisionSession(Base):
     questions_answered = Column(Integer, default=0, nullable=False)
     question_index = Column(Integer, default=0, nullable=False)
     current_question_id = Column(String, nullable=True)
+    question_ids = Column(JSON, nullable=True, default=lambda: [])  # Locked question IDs for session
     started_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     ended_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

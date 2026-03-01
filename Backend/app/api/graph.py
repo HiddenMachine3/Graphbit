@@ -4,8 +4,9 @@ from datetime import datetime
 from typing import Optional
 import asyncio
 import hashlib
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import delete, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ from app.models import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 class CreateNodeRequest(BaseModel):
     project_id: str
@@ -242,6 +244,198 @@ async def _update_node_search_vector(db: AsyncSession, node_id: str) -> None:
         ),
         {"node_id": node_id},
     )
+
+
+async def _auto_generate_questions_for_node(
+    project_id: str,
+    node_id: str,
+    topic_name: str,
+    created_by: str,
+    transcript_context: str = "",
+    material_id: str = "",
+):
+    """Background task to auto-generate a mixed question bank for a topic node.
+    
+    Generates: 2 MCQ + 1 OPEN + 1 FLASHCARD = 4 questions per topic.
+    Uses transcript context for content-aware questions when available.
+    """
+    try:
+        from app.api.qa_generation import QAGenerationRequest, generate_qa_pairs
+        from app.models import Question as QuestionModel
+        from app.db.session import AsyncSessionLocal
+        import uuid
+        from datetime import datetime
+
+        # Build content-aware prompt
+        if transcript_context:
+            context_text = (
+                f"Topic: {topic_name}\n\n"
+                f"The following is the actual lecture/video content covering this topic:\n"
+                f"{transcript_context[:3000]}"  # Cap at 3000 chars per topic
+            )
+        else:
+            context_text = f"Topic: {topic_name}. Generate questions that test deep understanding of this concept."
+
+        # Dedup check: fetch existing questions for this node
+        async with AsyncSessionLocal() as db:
+            existing_result = await db.execute(
+                select(QuestionModel).where(
+                    QuestionModel.project_id == project_id,
+                )
+            )
+            existing_questions = existing_result.scalars().all()
+            existing_texts = set()
+            for q in existing_questions:
+                if node_id in (q.covered_node_ids or []):
+                    existing_texts.add(q.text.strip().lower()[:80])
+
+        source_mats = [material_id] if material_id else []
+        generation_plan = [
+            ("mcq", 2),
+            ("open", 1),
+            ("flashcard", 1),
+        ]
+
+        all_new_questions = []
+        for q_type, count in generation_plan:
+            try:
+                request = QAGenerationRequest(text=context_text, n=count, question_type=q_type)
+                response = await generate_qa_pairs(request)
+                if not response or not response.qa_pairs:
+                    continue
+
+                for pair in response.qa_pairs:
+                    # Dedup: skip if similar question already exists
+                    q_text = (pair.question or "").strip()
+                    if q_text.lower()[:80] in existing_texts:
+                        continue
+                    existing_texts.add(q_text.lower()[:80])
+
+                    q_id = f"question-{uuid.uuid4().hex[:12]}"
+                    all_new_questions.append(QuestionModel(
+                        id=q_id,
+                        project_id=project_id,
+                        created_by=created_by,
+                        text=q_text,
+                        answer=pair.answer or "",
+                        options=pair.options if hasattr(pair, 'options') else None,
+                        option_explanations=None,
+                        question_type=pair.question_type.upper(),
+                        knowledge_type="CONCEPT",
+                        covered_node_ids=[node_id],
+                        difficulty=2,
+                        tags=[topic_name],
+                        question_metadata={
+                            "created_by": created_by,
+                            "created_at": datetime.now().isoformat(),
+                            "importance": 0.5,
+                            "hits": 0,
+                            "misses": 0,
+                            "review_interval_days": 1.0,
+                            "auto_generated": True,
+                        },
+                        source_material_ids=source_mats,
+                    ))
+            except Exception as e:
+                logger.warning("Failed to generate %s questions for node %s: %s", q_type, node_id, e)
+
+        if all_new_questions:
+            async with AsyncSessionLocal() as db:
+                for q in all_new_questions:
+                    db.add(q)
+                await db.commit()
+                logger.info(
+                    "Auto-generated %d questions for topic node %s (%s): %s",
+                    len(all_new_questions), node_id, topic_name,
+                    ", ".join(q.question_type for q in all_new_questions),
+                )
+    except Exception as e:
+        logger.error("Failed to auto-generate questions for node %s: %s", node_id, e)
+
+
+async def _auto_generate_questions_for_chapter(
+    project_id: str,
+    chapter_node_id: str,
+    chapter_title: str,
+    created_by: str,
+    transcript_text: str = "",
+    material_id: str = "",
+):
+    """Background task to auto-generate questions for a chapter (video) node.
+    
+    Generates: 2 MCQ + 2 OPEN = 4 questions per chapter.
+    Uses the full chapter transcript for deep, comprehensive questions.
+    """
+    try:
+        from app.api.qa_generation import QAGenerationRequest, generate_qa_pairs
+        from app.models import Question as QuestionModel
+        from app.db.session import AsyncSessionLocal
+        import uuid
+        from datetime import datetime
+
+        if transcript_text:
+            context_text = (
+                f"Video/Chapter: {chapter_title}\n\n"
+                f"Full transcript of this chapter:\n"
+                f"{transcript_text[:4000]}"  # Cap at 4000 chars for chapters
+            )
+        else:
+            context_text = f"Chapter: {chapter_title}. Generate comprehensive questions covering the key concepts of this chapter."
+
+        source_mats = [material_id] if material_id else []
+        generation_plan = [
+            ("mcq", 2),
+            ("open", 2),
+        ]
+
+        all_new_questions = []
+        for q_type, count in generation_plan:
+            try:
+                request = QAGenerationRequest(text=context_text, n=count, question_type=q_type)
+                response = await generate_qa_pairs(request)
+                if not response or not response.qa_pairs:
+                    continue
+
+                for pair in response.qa_pairs:
+                    q_id = f"question-{uuid.uuid4().hex[:12]}"
+                    all_new_questions.append(QuestionModel(
+                        id=q_id,
+                        project_id=project_id,
+                        created_by=created_by,
+                        text=(pair.question or "").strip(),
+                        answer=pair.answer or "",
+                        options=pair.options if hasattr(pair, 'options') else None,
+                        option_explanations=None,
+                        question_type=pair.question_type.upper(),
+                        knowledge_type="CONCEPT",
+                        covered_node_ids=[chapter_node_id],
+                        difficulty=3,
+                        tags=[chapter_title],
+                        question_metadata={
+                            "created_by": created_by,
+                            "created_at": datetime.now().isoformat(),
+                            "importance": 0.7,
+                            "hits": 0,
+                            "misses": 0,
+                            "review_interval_days": 1.0,
+                            "auto_generated": True,
+                        },
+                        source_material_ids=source_mats,
+                    ))
+            except Exception as e:
+                logger.warning("Failed to generate %s questions for chapter %s: %s", q_type, chapter_node_id, e)
+
+        if all_new_questions:
+            async with AsyncSessionLocal() as db:
+                for q in all_new_questions:
+                    db.add(q)
+                await db.commit()
+                logger.info(
+                    "Auto-generated %d questions for chapter node %s (%s)",
+                    len(all_new_questions), chapter_node_id, chapter_title,
+                )
+    except Exception as e:
+        logger.error("Failed to auto-generate questions for chapter %s: %s", chapter_node_id, e)
 
 
 def _get_or_create_material(project_id: str, video_url: str, title: str, channel: Optional[str]) -> Material:
@@ -480,7 +674,11 @@ async def list_questions(
 
 
 @router.post("/graph/nodes")
-async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get_db)):
+async def create_node(
+    request: CreateNodeRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
     """Create a new knowledge node."""
     node_id = f"node_{int(datetime.now().timestamp() * 1000)}"
     default_user = await _get_default_user(db)
@@ -501,6 +699,14 @@ async def create_node(request: CreateNodeRequest, db: AsyncSession = Depends(get
     await db.commit()
     await db.refresh(node)
     await _update_node_search_vector(db, node.id)
+
+    background_tasks.add_task(
+        _auto_generate_questions_for_node,
+        project_id=request.project_id,
+        node_id=node.id,
+        topic_name=request.topic_name,
+        created_by=created_by,
+    )
     
     return {
         "id": node.id,
@@ -534,6 +740,7 @@ async def update_node(
     )
     node = result.scalar_one_or_none()
     if not node:
+        logger.warning("Node update failed: not found node_id=%s project_id=%s", node_id, request.project_id)
         raise HTTPException(status_code=404, detail="Node not found")
     
     if request.topic_name is not None:
@@ -747,7 +954,7 @@ async def bulk_delete_nodes(request: DeleteNodesRequest, db: AsyncSession = Depe
 
 
 @router.post("/graph/ingest/video")
-async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(get_db)):
+async def ingest_video(request: VideoIngestRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Ingest a video transcript, extract topics, and merge into the graph."""
     if not request.video_url.strip():
         raise HTTPException(status_code=400, detail="video_url is required")
@@ -765,6 +972,7 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
     if not topics:
         topics = await asyncio.to_thread(extract_topics_from_text, transcript, request.title)
     topics = [topic.strip() for topic in topics if topic.strip()]
+    logger.info("Video ingest: project_id=%s title=%s topics=%s", request.project_id, request.title, len(topics))
 
     if not topics:
         raise HTTPException(status_code=400, detail="No topics extracted")
@@ -784,6 +992,18 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
     topics_result = []
     edges_added = 0
     pending_edge_ids: set[str] = set()  # track edges added in this batch to avoid duplicates
+
+    # Generate questions for the chapter node (video-level comprehension)
+    if chapter_created:
+        background_tasks.add_task(
+            _auto_generate_questions_for_chapter,
+            project_id=request.project_id,
+            chapter_node_id=chapter_node_id,
+            chapter_title=request.title,
+            created_by=created_by,
+            transcript_text=transcript or "",
+            material_id=material.id,
+        )
 
     for topic in topics:
         topic_key = _normalize_topic_key(topic)
@@ -844,6 +1064,17 @@ async def ingest_video(request: VideoIngestRequest, db: AsyncSession = Depends(g
                 edges_added += 1
 
         _topic_chapter_index.setdefault((request.project_id, topic_node_id), set()).add(chapter_node_id)
+
+        if existing_topic_id is None:
+            background_tasks.add_task(
+                _auto_generate_questions_for_node,
+                project_id=request.project_id,
+                node_id=topic_node_id,
+                topic_name=topic,
+                created_by=created_by,
+                transcript_context=transcript or "",
+                material_id=material.id,
+            )
 
         topics_result.append(
             {

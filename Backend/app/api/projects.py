@@ -1,5 +1,6 @@
 """Project management API endpoints."""
 
+import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -9,6 +10,7 @@ from app.db.session import get_db
 from app.models import Project as ProjectModel, AppUser as AppUserModel
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _serialize_project(project: ProjectModel) -> dict:
@@ -78,6 +80,7 @@ async def create_project(data: dict, db: AsyncSession = Depends(get_db)):
     db.add(project)
     await db.commit()
     await db.refresh(project)
+    logger.info("Project created: project_id=%s name=%s", project.id, project.name)
     return _serialize_project(project)
 
 
@@ -109,4 +112,5 @@ async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
 
     await db.delete(project)
     await db.commit()
+    logger.info("Project deleted: project_id=%s", project_id)
     return {"status": "deleted"}

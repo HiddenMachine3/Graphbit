@@ -8,6 +8,9 @@ type MaterialNodeProps = {
     youtubeThumbnailUrl?: string | null;
     youtubeEmbedUrl?: string | null;
     onOpenVideo?: () => void;
+    isExpanded?: boolean;
+    hasChildren?: boolean;
+    onToggleExpand?: (nodeId: string) => void;
   };
   selected: boolean;
 };
@@ -18,9 +21,8 @@ export default function MaterialNode({ data, selected }: MaterialNodeProps) {
   return (
     <div
       title={`Material: ${data.topic_name}`}
-      className={`group relative flex h-14 w-14 flex-col items-center justify-center rounded-2xl border text-center text-xs shadow-sm transition ${
-        selected ? "ring-2 ring-border-accent" : ""
-      }`}
+      className={`group relative flex h-24 w-24 flex-col items-center justify-center rounded-2xl border text-center text-xs shadow-sm transition ${selected ? "ring-2 ring-border-accent" : ""
+        }`}
       style={{
         backgroundColor: "rgba(255, 255, 255, 0.08)",
         borderColor: "rgba(255, 255, 255, 0.15)",

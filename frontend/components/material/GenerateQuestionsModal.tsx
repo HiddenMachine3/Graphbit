@@ -260,8 +260,8 @@ export default function GenerateQuestionsModal({
 
       const drafts =
         response.question_type === "mcq"
-          ? (response.qa_pairs ?? []).map((item, index) => toDraftQuestionFromMcq(item, index))
-          : (response.qa_pairs ?? []).map((item, index) => toDraftQuestionFromOpen(item, index));
+          ? (response.qa_pairs ?? []).map((item, index) => toDraftQuestionFromMcq(item as GeneratedMcqQAPair, index))
+          : (response.qa_pairs ?? []).map((item, index) => toDraftQuestionFromOpen(item as GeneratedOpenQAPair, index));
       setDraftQuestions(drafts);
       setHasGeneratedOnce(true);
     } catch (error) {
@@ -822,11 +822,10 @@ export default function GenerateQuestionsModal({
                                         : [...draft.newNodeTitles, title],
                                     }))
                                   }
-                                  className={`rounded-full border px-2 py-0.5 transition ${
-                                    isSelected
+                                  className={`rounded-full border px-2 py-0.5 transition ${isSelected
                                       ? "border-amber-400 bg-amber-500/20 text-amber-100"
                                       : "border-border-default bg-bg-elevated text-text-primary hover:border-border-accent"
-                                  }`}
+                                    }`}
                                 >
                                   {title}
                                 </button>
@@ -919,15 +918,14 @@ export default function GenerateQuestionsModal({
                                       : [...draft.selectedNodeIds, node.id],
                                   }))
                                 }
-                                className={`flex w-full items-center justify-between gap-2 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${
-                                  isSelected
+                                className={`flex w-full items-center justify-between gap-2 border-b border-border-default px-3 py-2 text-left text-xs transition last:border-b-0 ${isSelected
                                     ? "bg-accent/20 text-text-primary"
                                     : isStrongSuggested
                                       ? "bg-accent/10 text-text-primary"
                                       : isWeakSuggested
                                         ? "bg-bg-hover text-text-primary"
                                         : "text-text-primary hover:bg-bg-hover"
-                                }`}
+                                  }`}
                               >
                                 <span className="font-medium">{node.topic_name}</span>
                                 <span className="text-xs font-body text-text-muted">{node.id}</span>

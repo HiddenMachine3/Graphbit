@@ -31,11 +31,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour token lifetime
 
-    # HuggingFace
-    HF_TOKEN: str | None = None
-    HF_EMBED_MODEL: str = "BAAI/bge-base-en-v1.5"
-    HF_KEYPHRASE_MODEL: str = "dslim/bert-base-NER"
-
     # Gemini
     GEMINI_API_KEY: str | None = None
     GEMINI_QA_MODEL: str = "gemini-2.5-flash"

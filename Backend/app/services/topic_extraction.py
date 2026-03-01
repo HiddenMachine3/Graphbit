@@ -1,144 +1,111 @@
-"""Topic extraction for transcript text."""
+"""Topic extraction for transcript text — Gemini-first with keyword fallback."""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from collections import Counter
 from typing import Iterable
 
+import requests
+import certifi
+
+logger = logging.getLogger(__name__)
+
 
 def extract_topics_from_text(
     text: str,
     title: str | None = None,
-    max_topics: int = 8,
+    max_topics: int = 15,
 ) -> list[str]:
     """Extract topic labels from text.
 
-    Uses a local HF model if configured, otherwise OpenAI if OPENAI_API_KEY is set.
+    Uses Gemini API if GEMINI_API_KEY is set.
     Falls back to keyword extraction otherwise.
     """
-    hf_model_name = os.getenv("HF_TOPIC_MODEL")
-    if hf_model_name:
-        topics = _extract_topics_with_local_model(
-            text, title=title, max_topics=max_topics, model_name=hf_model_name
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        topics = _extract_topics_with_gemini(
+            text, title=title, max_topics=max_topics, api_key=gemini_key
         )
         if topics:
+            logger.info("Topics extracted via Gemini: count=%d", len(topics))
             return topics
+        logger.warning("Gemini returned no topics, falling back to keywords")
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if api_key:
-        topics = _extract_topics_with_llm(text, title=title, max_topics=max_topics)
-        if topics:
-            return topics
-
+    else:
+        logger.info("GEMINI_API_KEY not set, using keyword fallback")
     return _extract_topics_fallback(text, max_topics=max_topics)
 
 
-def _extract_topics_with_llm(
+def _extract_topics_with_gemini(
     text: str,
     title: str | None,
     max_topics: int,
+    api_key: str,
 ) -> list[str]:
+    """Extract topics using Gemini API with structured JSON output."""
+    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent?key={api_key}"
+    )
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "topics": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 1,
+            }
+        },
+        "required": ["topics"],
+    }
+
     prompt = (
         "You extract concise study topics from lecture transcripts.\n"
         "Return JSON only with a list of topics.\n\n"
         f"Title: {title or 'Unknown'}\n"
         "Transcript:\n"
         f"{text}\n\n"
-        f"Respond with: {{\"topics\": [\"Topic 1\", ...]}} (max {max_topics})"
+        "IMPORTANT: Only return topics that are genuinely distinct and "
+        "important concepts from this content. Do NOT pad with generic or "
+        "tangential topics. Quality over quantity.\n"
+        f"Return between 3 and {max_topics} topics, based on the actual "
+        "content richness."
     )
 
-    try:
-        import openai
+    body = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}],
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "maxOutputTokens": 512,
+            "response_mime_type": "application/json",
+            "response_schema": schema,
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+    }
 
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=200,
-        )
-        raw = response.choices[0].message.content
-        result = json.loads(raw)
-        topics = result.get("topics", [])
+    try:
+        resp = requests.post(endpoint, json=body, timeout=20, verify=certifi.where())
+        resp.raise_for_status()
+        data = resp.json()
+
+        raw_json = data["candidates"][0]["content"]["parts"][0]["text"]
+        parsed = json.loads(raw_json)
+        topics = parsed.get("topics", [])
         return _clean_topics(topics, max_topics=max_topics)
-    except Exception:
+    except Exception as exc:
+        logger.exception("Gemini topic extraction failed: %s", exc)
         return []
-
-
-def _extract_topics_with_local_model(
-    text: str,
-    title: str | None,
-    max_topics: int,
-    model_name: str,
-) -> list[str]:
-    prompt = (
-        "You extract concise study topics from lecture transcripts. "
-        "Return JSON only with a list of topics.\n\n"
-        f"Title: {title or 'Unknown'}\n"
-        "Transcript:\n"
-        f"{text}\n\n"
-        f"Respond with: {{\"topics\": [\"Topic 1\", ...]}} (max {max_topics})"
-    )
-
-    try:
-        tokenizer, model = _get_local_model(model_name)
-        messages = [{"role": "user", "content": prompt}]
-        inputs = tokenizer.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(model.device)
-        outputs = model.generate(**inputs, max_new_tokens=200, do_sample=False)
-        generated = tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[-1] :],
-            skip_special_tokens=True,
-        )
-        topics = _parse_topics_from_json(generated)
-        return _clean_topics(topics, max_topics=max_topics)
-    except Exception:
-        return []
-
-
-_LOCAL_MODEL_CACHE: tuple[object, object] | None = None
-_LOCAL_MODEL_NAME: str | None = None
-
-
-def _get_local_model(model_name: str) -> tuple[object, object]:
-    global _LOCAL_MODEL_CACHE, _LOCAL_MODEL_NAME
-    if _LOCAL_MODEL_CACHE and _LOCAL_MODEL_NAME == model_name:
-        return _LOCAL_MODEL_CACHE
-
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        device_map="auto",
-        torch_dtype="auto",
-    )
-    _LOCAL_MODEL_CACHE = (tokenizer, model)
-    _LOCAL_MODEL_NAME = model_name
-    return _LOCAL_MODEL_CACHE
-
-
-def _parse_topics_from_json(raw: str) -> list[str]:
-    try:
-        parsed = json.loads(raw)
-        return parsed.get("topics", []) if isinstance(parsed, dict) else []
-    except Exception:
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if not match:
-            return []
-        try:
-            parsed = json.loads(match.group(0))
-            return parsed.get("topics", []) if isinstance(parsed, dict) else []
-        except Exception:
-            return []
 
 
 def _extract_topics_fallback(text: str, max_topics: int) -> list[str]:

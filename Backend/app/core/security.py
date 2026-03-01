@@ -1,10 +1,5 @@
-"""Security utilities for password hashing and JWT token management.
-
-This module provides core authentication functions:
-- Password hashing using bcrypt
-- Password verification
-- JWT token creation and decoding
-"""
+"""Security utilities for password hashing and JWT token management."""
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from passlib.context import CryptContext
@@ -14,6 +9,7 @@ from app.core.config import settings
 # Password hashing context using bcrypt
 # Why bcrypt? It's specifically designed for password hashing with built-in salt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger(__name__)
 
 
 def hash_password(password: str) -> str:
@@ -97,5 +93,6 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError:
+    except JWTError as exc:
+        logger.warning("JWT decode failed: %s", exc)
         return None

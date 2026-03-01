@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   addEdge,
-  Controls,
   MiniMap,
   ReactFlowProvider,
   type Connection,
@@ -25,6 +24,7 @@ import GraphEdge from "./GraphEdge";
 import GraphNode from "./GraphNode";
 import MaterialNode from "./MaterialNode";
 import useForceLayout from "../../lib/graph/useForceLayout";
+import FABCluster from "../FABCluster";
 
 export type KnowledgeGraphViewProps = {
   nodes: GraphNodeDTO[];
@@ -107,6 +107,9 @@ function buildFlowNodes(
   nodes: GraphNodeDTO[],
   brightnessAttribute: keyof GraphNodeDTO,
   materialSourceUrlById: Record<string, string | null | undefined>,
+  expandedNodeIds: Set<string>,
+  hasChildrenMap: Map<string, boolean>,
+  onToggleExpand: (nodeId: string) => void,
   onOpenNodeVideo?: (payload: { nodeId: string; nodeTitle: string; embedUrl: string }) => void
 ): Node[] {
   return nodes.map((node) => {
@@ -142,14 +145,17 @@ function buildFlowNodes(
         brightnessAttribute,
         youtubeThumbnailUrl,
         youtubeEmbedUrl,
+        isExpanded: expandedNodeIds.has(node.id),
+        hasChildren: hasChildrenMap.get(node.id) || false,
+        onToggleExpand,
         onOpenVideo:
           youtubeEmbedUrl && onOpenNodeVideo
             ? () =>
-                onOpenNodeVideo({
-                  nodeId: node.id,
-                  nodeTitle: node.topic_name,
-                  embedUrl: youtubeEmbedUrl as string,
-                })
+              onOpenNodeVideo({
+                nodeId: node.id,
+                nodeTitle: node.topic_name,
+                embedUrl: youtubeEmbedUrl as string,
+              })
             : undefined,
       },
       selected: false,
@@ -180,12 +186,128 @@ export default function KnowledgeGraphView({
   onGraphUpdated,
   fitTrigger,
 }: KnowledgeGraphViewProps) {
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set());
+
+  const handleToggleExpand = useCallback((nodeId: string) => {
+    setExpandedNodeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const { visibleNodes, visibleEdges, hasChildrenMap } = useMemo(() => {
+    const inDegree = new Map<string, number>();
+    const outEdges = new Map<string, string[]>();
+    const nodeMap = new Map<string, GraphNodeDTO>();
+
+    nodes.forEach(n => {
+      inDegree.set(n.id, 0);
+      outEdges.set(n.id, []);
+      nodeMap.set(n.id, n);
+    });
+
+    edges.forEach(e => {
+      if (inDegree.has(e.target)) {
+        inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
+      }
+      if (outEdges.has(e.source)) {
+        outEdges.get(e.source)!.push(e.target);
+      }
+    });
+
+    const isVisible = new Set<string>();
+
+    for (const [nodeId, degree] of inDegree.entries()) {
+      if (degree === 0) {
+        isVisible.add(nodeId);
+      }
+    }
+
+    nodes.forEach(n => {
+      if (n.node_type === 'material' || n.node_type === 'chapter') {
+        isVisible.add(n.id);
+      }
+    });
+
+    if (isVisible.size === 0 && nodes.length > 0) {
+      isVisible.add(nodes[0].id);
+    }
+
+    const reachableFromDefault = new Set<string>(isVisible);
+    const reachQueue = [...isVisible];
+    while (reachQueue.length > 0) {
+      const curr = reachQueue.shift()!;
+      for (const child of (outEdges.get(curr) || [])) {
+        if (!reachableFromDefault.has(child)) {
+          reachableFromDefault.add(child);
+          reachQueue.push(child);
+        }
+      }
+    }
+
+    for (const n of nodes) {
+      if (!reachableFromDefault.has(n.id)) {
+        isVisible.add(n.id);
+        reachableFromDefault.add(n.id);
+        const cycleQueue: string[] = [n.id];
+        while (cycleQueue.length > 0) {
+          const curr = cycleQueue.shift()!;
+          for (const child of (outEdges.get(curr) || [])) {
+            if (!reachableFromDefault.has(child)) {
+              reachableFromDefault.add(child);
+              cycleQueue.push(child);
+            }
+          }
+        }
+      }
+    }
+
+    const expandQueue = [...isVisible].filter(id => expandedNodeIds.has(id));
+    while (expandQueue.length > 0) {
+      const currentId = expandQueue.shift()!;
+      const children = outEdges.get(currentId) || [];
+      for (const childId of children) {
+        if (!isVisible.has(childId)) {
+          isVisible.add(childId);
+          if (expandedNodeIds.has(childId)) {
+            expandQueue.push(childId);
+          }
+        }
+      }
+    }
+
+    const hasChildrenReturnMap = new Map<string, boolean>();
+    nodes.forEach(n => {
+      let hasHideableChildren = false;
+      const children = outEdges.get(n.id) || [];
+      for (const childId of children) {
+        const childNode = nodeMap.get(childId);
+        // We only consider a child "hideable" if it wouldn't be visible by default.
+        if (childNode?.node_type !== 'material' && childNode?.node_type !== 'chapter' && inDegree.get(childId)! > 0) {
+          hasHideableChildren = true;
+          break;
+        }
+      }
+      hasChildrenReturnMap.set(n.id, hasHideableChildren);
+    });
+
+    const finalNodes = nodes.filter(n => isVisible.has(n.id));
+    const finalEdges = edges.filter(e => isVisible.has(e.source) && isVisible.has(e.target));
+
+    return { visibleNodes: finalNodes, visibleEdges: finalEdges, hasChildrenMap: hasChildrenReturnMap };
+  }, [nodes, edges, expandedNodeIds]);
+
   const sourceUrlById = materialSourceUrlById || {};
   const baseNodes = useMemo(
-    () => buildFlowNodes(nodes, brightnessAttribute, sourceUrlById, onOpenNodeVideo),
-    [nodes, brightnessAttribute, sourceUrlById, onOpenNodeVideo]
+    () => buildFlowNodes(visibleNodes, brightnessAttribute, sourceUrlById, expandedNodeIds, hasChildrenMap, handleToggleExpand, onOpenNodeVideo),
+    [visibleNodes, brightnessAttribute, sourceUrlById, expandedNodeIds, hasChildrenMap, handleToggleExpand, onOpenNodeVideo]
   );
-  const baseEdges = useMemo(() => buildFlowEdges(edges), [edges]);
+  const baseEdges = useMemo(() => buildFlowEdges(visibleEdges), [visibleEdges]);
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
   const [flowEdges, setFlowEdges, onFlowEdgesChange] = useEdgesState(baseEdges);
   const layoutNodes = useMemo(
@@ -202,21 +324,18 @@ export default function KnowledgeGraphView({
   const initialRepulsionDoneRef = useRef(false);
   useEffect(() => {
     setFlowNodes((current) => {
-      if (current.length === 0 || current.length !== baseNodes.length) {
-        return baseNodes;
-      }
-
       const baseNodeMap = new Map(baseNodes.map((node) => [node.id, node]));
-      return current.map((node) => {
-        const baseNode = baseNodeMap.get(node.id);
-        if (!baseNode) {
-          return node;
+      const currentMap = new Map(current.map((node) => [node.id, node]));
+
+      const nextNodes = baseNodes.map((baseNode) => {
+        const existingNode = currentMap.get(baseNode.id);
+        if (existingNode) {
+          return { ...existingNode, data: baseNode.data };
         }
-        return {
-          ...node,
-          data: baseNode.data,
-        };
+        return baseNode;
       });
+
+      return nextNodes;
     });
   }, [baseNodes, setFlowNodes]);
 
@@ -241,176 +360,7 @@ export default function KnowledgeGraphView({
   }, [baseNodes.length]);
 
   const applyMaterialRepulsion = useCallback((current: Node[]) => {
-    const repulsors = current.filter((node) => node.type === "materialNode");
-    if (repulsors.length === 0) {
-      return current;
-    }
-
-    const minDistance = 200;
-    const minNodeDistance = 120;
-    const minMaterialDistance = 160;
-    const minMaterialTopicDistance = 110;
-
-    const unitVectorForPair = (aId: string, bId: string) => {
-      const input = `${aId}|${bId}`;
-      let hash = 0;
-      for (let i = 0; i < input.length; i += 1) {
-        hash = (hash * 31 + input.charCodeAt(i)) % 360;
-      }
-      const angle = (hash * Math.PI) / 180;
-      return { x: Math.cos(angle), y: Math.sin(angle) };
-    };
-
-    const nextNodes = current.map((node) => ({
-      ...node,
-      position: {
-        x: node.position?.x ?? 0,
-        y: node.position?.y ?? 0,
-      },
-    }));
-
-    const materialAdjusted = nextNodes.map((node) => {
-      if (node.type === "materialNode") {
-        return node;
-      }
-
-      let pushX = 0;
-      let pushY = 0;
-      const nodeX = node.position?.x ?? 0;
-      const nodeY = node.position?.y ?? 0;
-
-      repulsors.forEach((repulsor) => {
-        const repX = repulsor.position?.x ?? 0;
-        const repY = repulsor.position?.y ?? 0;
-        const dx = nodeX - repX;
-        const dy = nodeY - repY;
-        const distance = Math.hypot(dx, dy) || 1;
-        if (distance >= minDistance) {
-          return;
-        }
-        const strength = (minDistance - distance) / distance;
-        pushX += dx * strength;
-        pushY += dy * strength;
-      });
-
-      if (pushX === 0 && pushY === 0) {
-        return node;
-      }
-
-      return {
-        ...node,
-        position: {
-          x: nodeX + pushX,
-          y: nodeY + pushY,
-        },
-      };
-    });
-
-    const materialNodes = materialAdjusted.filter((node) => node.type === "materialNode");
-    const topicNodes = materialAdjusted.filter((node) => node.type !== "materialNode");
-
-    // Small-radius directional repulsion from material -> topic nodes,
-    // with only slight counter-movement on material nodes.
-    for (let i = 0; i < materialNodes.length; i += 1) {
-      const materialNode = materialNodes[i];
-      for (let j = 0; j < topicNodes.length; j += 1) {
-        const topicNode = topicNodes[j];
-
-        const mx = materialNode.position?.x ?? 0;
-        const my = materialNode.position?.y ?? 0;
-        const tx = topicNode.position?.x ?? 0;
-        const ty = topicNode.position?.y ?? 0;
-
-        let dx = mx - tx;
-        let dy = my - ty;
-        let distance = Math.hypot(dx, dy);
-
-        if (distance < 1) {
-          const unit = unitVectorForPair(materialNode.id, topicNode.id);
-          dx = unit.x;
-          dy = unit.y;
-          distance = 1;
-        }
-
-        if (distance >= minMaterialTopicDistance) {
-          continue;
-        }
-
-        const overlap = minMaterialTopicDistance - distance;
-        const ux = dx / distance;
-        const uy = dy / distance;
-
-        const topicPush = overlap * 0.8;
-        const materialPush = overlap * 0.2;
-
-        materialNode.position = {
-          x: mx + ux * materialPush,
-          y: my + uy * materialPush,
-        };
-        topicNode.position = {
-          x: tx - ux * topicPush,
-          y: ty - uy * topicPush,
-        };
-      }
-    }
-
-    for (let i = 0; i < topicNodes.length; i += 1) {
-      for (let j = i + 1; j < topicNodes.length; j += 1) {
-        const a = topicNodes[i];
-        const b = topicNodes[j];
-        const ax = a.position?.x ?? 0;
-        const ay = a.position?.y ?? 0;
-        const bx = b.position?.x ?? 0;
-        const by = b.position?.y ?? 0;
-        let dx = bx - ax;
-        let dy = by - ay;
-        let distance = Math.hypot(dx, dy);
-        if (distance < 1) {
-          const unit = unitVectorForPair(a.id, b.id);
-          dx = unit.x;
-          dy = unit.y;
-          distance = 1;
-        }
-        if (distance >= minNodeDistance) {
-          continue;
-        }
-        const overlap = (minNodeDistance - distance) / 2;
-        const ux = dx / distance;
-        const uy = dy / distance;
-        a.position = { x: ax - ux * overlap, y: ay - uy * overlap };
-        b.position = { x: bx + ux * overlap, y: by + uy * overlap };
-      }
-    }
-
-    for (let i = 0; i < materialNodes.length; i += 1) {
-      for (let j = i + 1; j < materialNodes.length; j += 1) {
-        const a = materialNodes[i];
-        const b = materialNodes[j];
-        const ax = a.position?.x ?? 0;
-        const ay = a.position?.y ?? 0;
-        const bx = b.position?.x ?? 0;
-        const by = b.position?.y ?? 0;
-        let dx = bx - ax;
-        let dy = by - ay;
-        let distance = Math.hypot(dx, dy);
-        if (distance < 1) {
-          const unit = unitVectorForPair(a.id, b.id);
-          dx = unit.x;
-          dy = unit.y;
-          distance = 1;
-        }
-        if (distance >= minMaterialDistance) {
-          continue;
-        }
-        const overlap = (minMaterialDistance - distance) / 2;
-        const ux = dx / distance;
-        const uy = dy / distance;
-        a.position = { x: ax - ux * overlap, y: ay - uy * overlap };
-        b.position = { x: bx + ux * overlap, y: by + uy * overlap };
-      }
-    }
-
-    return materialAdjusted;
+    return current;
   }, []);
 
   const { onNodeDrag, onNodeDragEnd } = useForceLayout(
@@ -509,7 +459,7 @@ export default function KnowledgeGraphView({
   );
 
   return (
-    <div className="h-full w-full rounded-lg border border-border-default bg-bg-base overflow-hidden">
+    <div className="h-full w-full rounded-lg border border-border-default bg-bg-base overflow-hidden relative">
       <ReactFlowProvider>
         <GraphFlowCanvas
           nodes={flowNodes}
@@ -518,8 +468,10 @@ export default function KnowledgeGraphView({
           onEdgesChange={onFlowEdgesChange}
           onConnect={onConnect}
           onSelectNode={onSelectNode}
+          onToggleExpand={handleToggleExpand}
           fitTrigger={fitTrigger}
         />
+        <FABCluster />
       </ReactFlowProvider>
     </div>
   );
@@ -532,6 +484,7 @@ type GraphFlowCanvasProps = {
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   onSelectNode: (nodeId: string) => void;
+  onToggleExpand: (nodeId: string) => void;
   fitTrigger?: number;
 };
 
@@ -542,6 +495,7 @@ function GraphFlowCanvas({
   onEdgesChange,
   onConnect,
   onSelectNode,
+  onToggleExpand,
   fitTrigger,
 }: GraphFlowCanvasProps) {
   const { fitView } = useReactFlow();
@@ -611,11 +565,13 @@ function GraphFlowCanvas({
           data: node.data,
         });
         onSelectNode(node.id);
+        if (node.data?.hasChildren) {
+          onToggleExpand(node.id);
+        }
       }}
       fitView
     >
       <MiniMap position="top-left" pannable zoomable />
-      <Controls position="top-left" style={{ marginTop: 8, marginLeft: 8 }} />
     </ReactFlow>
   );
 }

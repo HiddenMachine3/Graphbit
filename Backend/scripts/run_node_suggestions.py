@@ -1,7 +1,6 @@
 """Example script to trigger node suggestions for a material."""
 
 import argparse
-import os
 
 import httpx
 
@@ -16,9 +15,6 @@ def main() -> int:
     parser.add_argument("--keyword-weight", type=float, default=0.4)
     parser.add_argument("--top-k", type=int, default=20)
     args = parser.parse_args()
-
-    if not os.environ.get("HF_TOKEN"):
-        raise SystemExit("HF_TOKEN is required in the environment")
 
     payload = {
         "project_id": args.project_id,

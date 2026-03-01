@@ -38,6 +38,7 @@ export default function SessionContainer({
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
+  const [maxQuestions, setMaxQuestions] = useState(10);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
   const autoStartAttemptedRef = useRef(false);
   const isEmbeddedMode = hideStartButton;
@@ -48,12 +49,13 @@ export default function SessionContainer({
     setFeedback(null);
     setAnswer("");
     setCompleted(false);
+    setAnsweredCount(0);
     try {
       if (!currentProjectId) {
         setError("Select a project to start a session");
         return;
       }
-      const newSession = await startSession(currentProjectId);
+      const newSession = await startSession(currentProjectId, maxQuestions);
       setSession(newSession);
       const next = await getNextQuestion(newSession.session_id);
       setCurrentQuestion(next);
@@ -66,7 +68,7 @@ export default function SessionContainer({
     } finally {
       setLoading(false);
     }
-  }, [currentProjectId]);
+  }, [currentProjectId, maxQuestions]);
 
   const handleIDontKnow = useCallback(async () => {
     if (!session || !currentQuestion) {
@@ -201,155 +203,171 @@ export default function SessionContainer({
   return (
     <div className={`flex flex-col gap-6 ${isEmbeddedMode ? "h-full min-h-0" : ""}`}>
       <div className={isEmbeddedMode ? "min-h-0 flex-1 overflow-y-auto pr-1" : ""}>
-      {!hideStartButton && (
-        <div className="rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_18px_45px_rgba(69,13,30,0.35)] backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold font-heading text-text-primary">Revision Session</h1>
-              <p className="text-sm font-body text-text-secondary">
-                Adaptive recall guided by your knowledge graph
-              </p>
+        {!hideStartButton && (
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_18px_45px_rgba(69,13,30,0.35)] backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-semibold font-heading text-text-primary">Revision Session</h1>
+                <p className="text-sm font-body text-text-secondary">
+                  Adaptive recall guided by your knowledge graph
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {!session && (
+                  <label className="flex items-center gap-2 text-sm font-medium font-body text-text-secondary">
+                    Questions:
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={maxQuestions}
+                      onChange={(e) => setMaxQuestions(Math.max(1, Math.min(50, Number(e.target.value) || 10)))}
+                      disabled={loading}
+                      className="w-16 rounded-md border border-border-default bg-bg-surface px-2 py-1 text-sm text-text-primary"
+                    />
+                  </label>
+                )}
+                <button
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
+                  onClick={handleStartSession}
+                  disabled={loading}
+                >
+                  {session ? "Restart Session" : "Start Session"}
+                </button>
+              </div>
             </div>
-            <button
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
-              onClick={handleStartSession}
-              disabled={loading}
-            >
-              {session ? "Restart Session" : "Start Session"}
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      <SessionProgress
-        answeredCount={answeredCount}
-        maxQuestions={session?.max_questions ?? null}
-      />
+        <SessionProgress
+          answeredCount={answeredCount}
+          maxQuestions={session?.max_questions ?? null}
+        />
 
-      {error && <ErrorState message={error} />}
+        {error && <ErrorState message={error} />}
 
-      {!session && !loading && (
-        <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
-          Start a session to receive questions.
-        </div>
-      )}
+        {!session && !loading && (
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
+            Start a session to receive questions.
+          </div>
+        )}
 
-      {session && completed && (
-        <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
-          Session complete. You can restart to begin again.
-        </div>
-      )}
+        {session && completed && (
+          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 text-sm font-body text-text-secondary">
+            Session complete. You can restart to begin again.
+          </div>
+        )}
 
-      {session && currentQuestion && (
-        <div className="flex flex-col gap-4">
-          <QuestionCard
-            question={currentQuestion}
-            selectedOption={
-              currentQuestion.question_type === "MCQ" ? answer : undefined
-            }
-            onOptionSelect={
-              currentQuestion.question_type === "MCQ"
-                ? setAnswer
-                : undefined
-            }
-            disabled={loading}
-            feedback={currentQuestion.question_type === "MCQ" ? feedback : null}
-          />
+        {session && currentQuestion && (
+          <div className="flex flex-col gap-4">
+            <QuestionCard
+              question={currentQuestion}
+              selectedOption={
+                currentQuestion.question_type === "MCQ" ? answer : undefined
+              }
+              onOptionSelect={
+                currentQuestion.question_type === "MCQ"
+                  ? setAnswer
+                  : undefined
+              }
+              disabled={loading}
+              feedback={currentQuestion.question_type === "MCQ" ? feedback : null}
+            />
 
-          <div className="rounded-2xl border border-border-default bg-bg-surface p-6 backdrop-blur">
-            {currentQuestion.question_type === "OPEN" && (
-              <>
-                <label className="text-sm font-medium font-body text-text-primary">
-                  Your answer
-                </label>
-                <AnswerInput
-                  questionType={currentQuestion.question_type}
-                  value={answer}
-                  onChange={setAnswer}
-                  onSubmit={handleSubmitAnswer}
+            <div className="rounded-2xl border border-border-default bg-bg-surface p-6 backdrop-blur">
+              {currentQuestion.question_type === "OPEN" && (
+                <>
+                  <label className="text-sm font-medium font-body text-text-primary">
+                    Your answer
+                  </label>
+                  <AnswerInput
+                    questionType={currentQuestion.question_type}
+                    value={answer}
+                    onChange={setAnswer}
+                    onSubmit={handleSubmitAnswer}
+                    disabled={loading || Boolean(feedback)}
+                    autoFocus
+                    focusKey={currentQuestion.id}
+                  />
+                </>
+              )}
+              {currentQuestion.question_type === "FLASHCARD" && (
+                <SharedQuestionAnswerPanel
+                  pairs={[
+                    {
+                      question: currentQuestion.text,
+                      answer: currentQuestion.answer,
+                    },
+                  ]}
+                  title="FLASHCARD"
+                  subtitle="Rate your recall after revealing the answer"
+                  showPerformanceRating={!feedback}
                   disabled={loading || Boolean(feedback)}
-                  autoFocus
-                  focusKey={currentQuestion.id}
+                  onRatePerformance={(performance) => {
+                    void handleFlashcardPerformance(performance);
+                  }}
                 />
-              </>
+              )}
+              {!feedback && !isEmbeddedMode && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {currentQuestion.question_type !== "FLASHCARD" ? (
+                    <>
+                      <button
+                        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
+                        onClick={handleSubmitAnswer}
+                        disabled={loading || !answer.trim()}
+                      >
+                        Submit Answer
+                      </button>
+                      <button
+                        className="rounded-lg border border-border-default px-4 py-2 text-sm font-body text-text-primary transition hover:border-border-accent disabled:opacity-60"
+                        onClick={handleIDontKnow}
+                        disabled={loading}
+                      >
+                        I don't know
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            {feedback && currentQuestion.question_type === "MCQ" && (
+              <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
+                <button
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
+                  onClick={handleNextQuestion}
+                  disabled={loading}
+                >
+                  Next Question
+                </button>
+              </div>
             )}
-            {currentQuestion.question_type === "FLASHCARD" && (
-              <SharedQuestionAnswerPanel
-                pairs={[
-                  {
-                    question: currentQuestion.text,
-                    answer: currentQuestion.answer,
-                  },
-                ]}
-                title="FLASHCARD"
-                subtitle="Rate your recall after revealing the answer"
-                showPerformanceRating={!feedback}
-                disabled={loading || Boolean(feedback)}
-                onRatePerformance={(performance) => {
-                  void handleFlashcardPerformance(performance);
-                }}
+
+            {feedback && currentQuestion.question_type === "FLASHCARD" && (
+              <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
+                <div className="mb-3 text-sm font-body text-text-secondary">
+                  Performance recorded: <span className="font-semibold text-text-primary">{feedback.performance ?? "ok"}</span>
+                </div>
+                <button
+                  className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
+                  onClick={handleNextQuestion}
+                  disabled={loading}
+                >
+                  Next Question
+                </button>
+              </div>
+            )}
+
+            {feedback && currentQuestion.question_type === "OPEN" && (
+              <FeedbackPanel
+                feedback={feedback}
+                onNext={handleNextQuestion}
+                disabled={loading}
               />
             )}
-            {!feedback && !isEmbeddedMode && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {currentQuestion.question_type !== "FLASHCARD" ? (
-                  <>
-                    <button
-                      className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
-                      onClick={handleSubmitAnswer}
-                      disabled={loading || !answer.trim()}
-                    >
-                      Submit Answer
-                    </button>
-                    <button
-                      className="rounded-lg border border-border-default px-4 py-2 text-sm font-body text-text-primary transition hover:border-border-accent disabled:opacity-60"
-                      onClick={handleIDontKnow}
-                      disabled={loading}
-                    >
-                      I don't know
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            )}
           </div>
-
-          {feedback && currentQuestion.question_type === "MCQ" && (
-            <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
-              <button
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
-                onClick={handleNextQuestion}
-                disabled={loading}
-              >
-                Next Question
-              </button>
-            </div>
-          )}
-
-          {feedback && currentQuestion.question_type === "FLASHCARD" && (
-            <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
-              <div className="mb-3 text-sm font-body text-text-secondary">
-                Performance recorded: <span className="font-semibold text-text-primary">{feedback.performance ?? "ok"}</span>
-              </div>
-              <button
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
-                onClick={handleNextQuestion}
-                disabled={loading}
-              >
-                Next Question
-              </button>
-            </div>
-          )}
-
-          {feedback && currentQuestion.question_type === "OPEN" && (
-            <FeedbackPanel
-              feedback={feedback}
-              onNext={handleNextQuestion}
-              disabled={loading}
-            />
-          )}
-        </div>
-      )}
+        )}
       </div>
 
       {showFixedSubmitBar && (

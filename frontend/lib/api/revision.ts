@@ -1,10 +1,10 @@
 import { apiFetch } from "./client";
 import type { QuestionDTO, RevisionFeedbackDTO, RevisionSessionDTO } from "../types";
 
-export async function startSession(projectId: string): Promise<RevisionSessionDTO> {
+export async function startSession(projectId: string, maxQuestions: number = 10): Promise<RevisionSessionDTO> {
   return apiFetch<RevisionSessionDTO>("/revision/sessions", {
     method: "POST",
-    body: JSON.stringify({ project_id: projectId }),
+    body: JSON.stringify({ project_id: projectId, max_questions: maxQuestions }),
   });
 }
 
@@ -15,7 +15,14 @@ export async function getNextQuestion(
     return null;
   }
   try {
-    return await apiFetch<QuestionDTO>(`/revision/sessions/${sessionId}/next-question`);
+    const response = await apiFetch<QuestionDTO & { session_complete?: boolean }>(
+      `/revision/sessions/${sessionId}/next-question`
+    );
+    // Backend returns {session_complete: true} when all questions are done
+    if (response && (response as any).session_complete) {
+      return null;
+    }
+    return response;
   } catch {
     return null;
   }

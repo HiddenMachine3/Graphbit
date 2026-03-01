@@ -635,23 +635,16 @@ async def suggest_nodes_for_question_text(data: dict, db: AsyncSession = Depends
     if not text_value:
         return {"strong": [], "weak": []}
 
-    hf_token = settings.HF_TOKEN or os.environ.get("HF_TOKEN")
-    if not hf_token:
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_key:
         logger.warning(
-            "Question suggestion skipped due to missing HF_TOKEN: project_id=%s",
+            "Question suggestion skipped due to missing GEMINI_API_KEY: project_id=%s",
             project_id,
         )
         return {"strong": [], "weak": []}
 
-    from huggingface_hub import InferenceClient
-
-    hf_base_url = os.environ.get(
-        "HF_INFERENCE_BASE_URL",
-        "https://router.huggingface.co/hf-inference",
-    )
-    client = InferenceClient(token=hf_token, base_url=hf_base_url)
-    embedding_service = EmbeddingService(client, expected_dim=768)
-    keyword_service = KeywordExtractionService(client)
+    embedding_service = EmbeddingService()
+    keyword_service = KeywordExtractionService()
     repository = PostgresNodeSuggestionRepository(db)
     service = NodeSuggestionService(repository, embedding_service, keyword_service)
 

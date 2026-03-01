@@ -18,6 +18,7 @@ import type { Edge, Node } from "reactflow";
 
 type LayoutNode = SimulationNodeDatum & {
   id: string;
+  type?: string;
   data: Node["data"];
   x: number;
   y: number;
@@ -108,7 +109,7 @@ function computeInitialPositions(nodes: Node[], edges: Edge[]) {
 
   positions.set(root.id, { x: 0, y: 0 });
 
-  const ringSpacing = 140;
+  const ringSpacing = 280;
   for (let h = 1; h <= maxHop; h++) {
     const lvl = (levels.get(h) ?? []).filter((n) => n.id !== root.id);
     if (lvl.length === 0) continue;
@@ -173,18 +174,45 @@ export default function useForceLayout(
 
     const initPos = computeInitialPositions(nodes, edges);
 
+    const materialNodesList = nodes.filter(n => n.type === "materialNode").sort((a, b) => a.id.localeCompare(b.id));
+
     const simulationNodes: LayoutNode[] = nodes.map((node) => {
       /* Reuse existing position when available (non-zero) */
       const hasPos = node.position.x !== 0 || node.position.y !== 0;
       const fallback = initPos.get(node.id);
+
+      const isChapter = node.data?.node_type === "chapter";
+      const isMaterial = node.type === "materialNode";
+      const seq = node.data?.sequence_number ?? 1;
+
+      let initialX = hasPos ? node.position.x : (fallback?.x ?? (Math.random() - 0.5) * 200);
+      let initialY = hasPos ? node.position.y : (fallback?.y ?? (Math.random() - 0.5) * 200);
+      let fx: number | undefined | null = undefined;
+      let fy: number | undefined | null = undefined;
+
+      // Lock chapters on the horizontal timeline, distribute materials vertically
+      if (isChapter) {
+        const targetX = (seq - 1) * 800;
+        initialX = targetX;
+        initialY = 0;
+        fx = targetX;
+        fy = 0;
+      } else if (isMaterial) {
+        const matIdx = materialNodesList.findIndex(n => n.id === node.id);
+        const targetX = -800;
+        const targetY = (matIdx - (materialNodesList.length - 1) / 2) * 600;
+        initialX = targetX;
+        initialY = targetY;
+        fx = targetX;
+        fy = targetY;
+      }
+
       return {
         ...node,
-        x: hasPos
-          ? node.position.x
-          : (fallback?.x ?? (Math.random() - 0.5) * 200),
-        y: hasPos
-          ? node.position.y
-          : (fallback?.y ?? (Math.random() - 0.5) * 200),
+        x: initialX,
+        y: initialY,
+        fx,
+        fy,
       };
     });
 
@@ -197,12 +225,12 @@ export default function useForceLayout(
 
     const linkForce = forceLink<LayoutNode, LayoutLink>(linkData)
       .id((d) => d.id)
-      .distance(120)
-      .strength(0.25);
+      .distance(300)
+      .strength(0.4);
 
     const chargeForce = forceManyBody<LayoutNode>()
-      .strength(-250)
-      .distanceMax(500);
+      .strength(-800)
+      .distanceMax(1200);
 
     const centerForce = forceCenter(0, 0).strength(0.04);
 
@@ -210,7 +238,8 @@ export default function useForceLayout(
     const gravityX = forceX<LayoutNode>(0).strength(0.02);
     const gravityY = forceY<LayoutNode>(0).strength(0.02);
 
-    const collideForce = forceCollide<LayoutNode>(30).strength(0.7);
+    /* Increase collision radius to prevent overlapping labels */
+    const collideForce = forceCollide<LayoutNode>(150).strength(0.9);
 
     const simulation = forceSimulation(simulationNodes)
       .force("link", linkForce)
@@ -233,29 +262,43 @@ export default function useForceLayout(
       if (tickCount % 3 !== 0) return; /* update every 3rd tick for perf */
 
       setNodesRef.current((current) =>
-        (postProcessRef.current
-          ? postProcessRef.current(
-              current.map((node) => {
-                const sim = simulationNodes.find((n) => n.id === node.id);
-                if (!sim) return node;
-                /* Don't override nodes currently pinned (being dragged) */
-                if (sim.fx != null) return node;
-                return {
-                  ...node,
-                  position: { x: sim.x ?? 0, y: sim.y ?? 0 },
-                };
-              })
-            )
-          : current.map((node) => {
-              const sim = simulationNodes.find((n) => n.id === node.id);
-              if (!sim) return node;
-              /* Don't override nodes currently pinned (being dragged) */
-              if (sim.fx != null) return node;
-              return {
-                ...node,
-                position: { x: sim.x ?? 0, y: sim.y ?? 0 },
-              };
-            }))
+      (postProcessRef.current
+        ? postProcessRef.current(
+          current.map((node) => {
+            const sim = simulationNodes.find((n) => n.id === node.id);
+            if (!sim) return node;
+
+            // Skip updating position for timeline anchors to prevent jitter
+            if (node.data?.node_type === "chapter" || node.data?.node_type === "material") {
+              return { ...node, position: { x: sim.x ?? 0, y: sim.y ?? 0 } };
+            }
+
+            /* Don't override nodes currently pinned (being dragged) */
+            if (sim.fx != null && !(node.data?.node_type === "chapter" || node.data?.node_type === "material")) return node;
+
+            return {
+              ...node,
+              position: { x: sim.x ?? 0, y: sim.y ?? 0 },
+            };
+          })
+        )
+        : current.map((node) => {
+          const sim = simulationNodes.find((n) => n.id === node.id);
+          if (!sim) return node;
+
+          // Skip updating position for timeline anchors to prevent jitter
+          if (node.data?.node_type === "chapter" || node.data?.node_type === "material") {
+            return { ...node, position: { x: sim.x ?? 0, y: sim.y ?? 0 } };
+          }
+
+          /* Don't override nodes currently pinned (being dragged) */
+          if (sim.fx != null && !(node.data?.node_type === "chapter" || node.data?.node_type === "material")) return node;
+
+          return {
+            ...node,
+            position: { x: sim.x ?? 0, y: sim.y ?? 0 },
+          };
+        }))
       );
     });
 
@@ -284,8 +327,12 @@ export default function useForceLayout(
   const onNodeDragEnd = useCallback((nodeId: string) => {
     const sim = simNodesRef.current.find((n) => n.id === nodeId);
     if (sim) {
-      sim.fx = null;
-      sim.fy = null;
+      // Don't unpin chapters/materials on drag end
+      const isAnchor = sim.data?.node_type === "chapter" || sim.data?.node_type === "material";
+      if (!isAnchor) {
+        sim.fx = null;
+        sim.fy = null;
+      }
     }
   }, []);
 
