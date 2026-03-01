@@ -377,6 +377,7 @@ async function addMaterial() {
         title: tab.title || "YouTube Material",
         source_url: tab.url,
         content_text: "",
+        ingest_include_chapter_node: false,
       };
       addedTitle = payload.title;
     } else {
@@ -849,6 +850,7 @@ async function ingestVideoToGraph() {
         project_id: projectId,
         video_url: tab.url,
         title: tab.title || "YouTube Video",
+        include_chapter_node: false,
       }),
     });
 

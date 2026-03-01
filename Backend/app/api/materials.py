@@ -316,11 +316,14 @@ async def create_material(
     if imported_from_youtube and source_url:
         try:
             from app.api.graph import ingest_video as _ingest_video, VideoIngestRequest
+            include_chapter_node = bool(data.get("ingest_include_chapter_node", True))
             ingest_request = VideoIngestRequest(
                 project_id=project_id,
                 video_url=source_url,
                 title=title,
                 transcript=content_text or transcript_text,
+                material_id=material.id,
+                include_chapter_node=include_chapter_node,
             )
             await _ingest_video(ingest_request, background_tasks, db)
             logger.info(

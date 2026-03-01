@@ -12,7 +12,6 @@ from sqlalchemy import delete, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain import EdgeType
-from app.domain.material import Material, MaterialRegistry, MaterialType
 from app.services.topic_extraction import extract_topics_from_text
 from app.services.video_transcripts import fetch_youtube_transcript
 from app.db.session import get_db
@@ -63,12 +62,10 @@ class VideoIngestRequest(BaseModel):
     transcript: Optional[str] = None
     channel: Optional[str] = None
     topics: Optional[list[str]] = None
+    material_id: Optional[str] = None
+    include_chapter_node: bool = True
 
 
-# In-memory storage for materials and ingest indexes
-_material_counter = 0
-_material_registry = MaterialRegistry()
-_material_index_by_source: dict[str, str] = {}
 _topic_index_by_key: dict[tuple[str, str], str] = {}
 _chapter_index_by_source: dict[tuple[str, str], str] = {}
 _topic_chapter_index: dict[tuple[str, str], set[str]] = {}
@@ -438,33 +435,66 @@ async def _auto_generate_questions_for_chapter(
         logger.error("Failed to auto-generate questions for chapter %s: %s", chapter_node_id, e)
 
 
-def _get_or_create_material(project_id: str, video_url: str, title: str, channel: Optional[str]) -> Material:
-    global _material_counter
+async def _get_or_create_material(
+    db: AsyncSession,
+    project_id: str,
+    video_url: str,
+    title: str,
+    channel: Optional[str],
+    created_by: str = "",
+    material_id: Optional[str] = None,
+) -> MaterialModel:
+    if material_id:
+        result = await db.execute(
+            select(MaterialModel).where(
+                MaterialModel.project_id == project_id,
+                MaterialModel.id == material_id,
+            )
+        )
+        existing_by_id = result.scalar_one_or_none()
+        if existing_by_id:
+            if video_url and not existing_by_id.source_url:
+                existing_by_id.source_url = video_url
+            if title and existing_by_id.title != title:
+                existing_by_id.title = title
+            existing_by_id.updated_at = datetime.now()
+            return existing_by_id
 
-    existing_id = _material_index_by_source.get(video_url)
-    if existing_id and _material_registry.has_material(existing_id):
-        return _material_registry.get_material(existing_id)
-
-    _material_counter += 1
-    material_id = f"material-{_material_counter}"
-    material = Material(
-        id=material_id,
-        project_id=project_id,
-        title=title,
-        material_type=MaterialType.VIDEO,
-        source=video_url,
-        created_at=datetime.now(),
-        metadata={"channel": channel or ""},
+    result = await db.execute(
+        select(MaterialModel).where(
+            MaterialModel.project_id == project_id,
+            MaterialModel.source_url == video_url,
+        )
     )
-    _material_registry.add_material(material)
-    _material_index_by_source[video_url] = material_id
+    existing = result.scalar_one_or_none()
+    if existing:
+        if title and existing.title != title:
+            existing.title = title
+            existing.updated_at = datetime.now()
+        return existing
+
+    new_material_id = material_id or f"material-{int(datetime.now().timestamp() * 1000)}"
+    material = MaterialModel(
+        id=new_material_id,
+        project_id=project_id,
+        created_by=created_by,
+        title=title,
+        source_url=video_url,
+        content_text="",
+        transcript_text=None,
+        transcript_segments=None,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+    db.add(material)
+    await db.flush()
     return material
 
 
 async def _get_or_create_chapter_node(
     db: AsyncSession,
     project_id: str,
-    material: Material,
+    material_id: str,
     title: str,
     video_url: str,
     created_by: str = "",
@@ -501,7 +531,7 @@ async def _get_or_create_chapter_node(
 
     # --- DB-level dedup: check if a chapter for this material already exists (handles restarts) ---
     for ch in existing_chapters:
-        if material.id in (ch.source_material_ids or []):
+        if material_id in (ch.source_material_ids or []):
             chapter_ids = [c.id for c in existing_chapters]
             seq = (chapter_ids.index(ch.id) + 1) if ch.id in chapter_ids else 1
             _chapter_index_by_source[index_key] = ch.id  # repopulate cache
@@ -521,7 +551,7 @@ async def _get_or_create_chapter_node(
         importance=0.9,
         relevance=1.0,
         view_frequency=1,
-        source_material_ids=[material.id],
+        source_material_ids=[material_id],
     )
     db.add(chapter_node)
     await db.flush()
@@ -977,24 +1007,36 @@ async def ingest_video(request: VideoIngestRequest, background_tasks: Background
     if not topics:
         raise HTTPException(status_code=400, detail="No topics extracted")
 
-    material = _get_or_create_material(request.project_id, request.video_url, request.title, request.channel)
-
-    chapter_created = (request.project_id, request.video_url) not in _chapter_index_by_source
-    chapter_node_id, sequence_number = await _get_or_create_chapter_node(
+    material = await _get_or_create_material(
         db,
         request.project_id,
-        material,
-        request.title,
         request.video_url,
+        request.title,
+        request.channel,
         created_by=created_by,
+        material_id=request.material_id,
     )
+
+    chapter_created = False
+    chapter_node_id: str | None = None
+    sequence_number: int | None = None
+    if request.include_chapter_node:
+        chapter_created = (request.project_id, request.video_url) not in _chapter_index_by_source
+        chapter_node_id, sequence_number = await _get_or_create_chapter_node(
+            db,
+            request.project_id,
+            material.id,
+            request.title,
+            request.video_url,
+            created_by=created_by,
+        )
 
     topics_result = []
     edges_added = 0
     pending_edge_ids: set[str] = set()  # track edges added in this batch to avoid duplicates
 
     # Generate questions for the chapter node (video-level comprehension)
-    if chapter_created:
+    if chapter_created and chapter_node_id:
         background_tasks.add_task(
             _auto_generate_questions_for_chapter,
             project_id=request.project_id,
@@ -1017,53 +1059,54 @@ async def ingest_video(request: VideoIngestRequest, background_tasks: Background
             created_by=created_by,
         )
 
-        edge_id = f"{chapter_node_id}-{topic_node_id}-{EdgeType.SUBCONCEPT_OF.value}"
-        if edge_id not in pending_edge_ids and not await _edge_exists(
-            db,
-            request.project_id,
-            chapter_node_id,
-            topic_node_id,
-            EdgeType.SUBCONCEPT_OF,
-        ):
-            edge = EdgeModel(
-                id=edge_id,
-                project_id=request.project_id,
-                source=chapter_node_id,
-                target=topic_node_id,
-                type=EdgeType.SUBCONCEPT_OF.value,
-                weight=0.9,
-            )
-            db.add(edge)
-            pending_edge_ids.add(edge_id)
-            edges_added += 1
-
-        chapter_neighbors = _topic_chapter_index.get((request.project_id, topic_node_id), set())
-        for other_chapter_id in sorted(chapter_neighbors):
-            if other_chapter_id == chapter_node_id:
-                continue
-            edge_id = f"{other_chapter_id}-{chapter_node_id}-{EdgeType.APPLIED_WITH.value}"
-            if edge_id in pending_edge_ids:
-                continue
-            if not await _edge_exists(
+        if chapter_node_id:
+            edge_id = f"{chapter_node_id}-{topic_node_id}-{EdgeType.SUBCONCEPT_OF.value}"
+            if edge_id not in pending_edge_ids and not await _edge_exists(
                 db,
                 request.project_id,
-                other_chapter_id,
                 chapter_node_id,
-                EdgeType.APPLIED_WITH,
+                topic_node_id,
+                EdgeType.SUBCONCEPT_OF,
             ):
                 edge = EdgeModel(
                     id=edge_id,
                     project_id=request.project_id,
-                    source=other_chapter_id,
-                    target=chapter_node_id,
-                    type=EdgeType.APPLIED_WITH.value,
-                    weight=0.4,
+                    source=chapter_node_id,
+                    target=topic_node_id,
+                    type=EdgeType.SUBCONCEPT_OF.value,
+                    weight=0.9,
                 )
                 db.add(edge)
                 pending_edge_ids.add(edge_id)
                 edges_added += 1
 
-        _topic_chapter_index.setdefault((request.project_id, topic_node_id), set()).add(chapter_node_id)
+            chapter_neighbors = _topic_chapter_index.get((request.project_id, topic_node_id), set())
+            for other_chapter_id in sorted(chapter_neighbors):
+                if other_chapter_id == chapter_node_id:
+                    continue
+                edge_id = f"{other_chapter_id}-{chapter_node_id}-{EdgeType.APPLIED_WITH.value}"
+                if edge_id in pending_edge_ids:
+                    continue
+                if not await _edge_exists(
+                    db,
+                    request.project_id,
+                    other_chapter_id,
+                    chapter_node_id,
+                    EdgeType.APPLIED_WITH,
+                ):
+                    edge = EdgeModel(
+                        id=edge_id,
+                        project_id=request.project_id,
+                        source=other_chapter_id,
+                        target=chapter_node_id,
+                        type=EdgeType.APPLIED_WITH.value,
+                        weight=0.4,
+                    )
+                    db.add(edge)
+                    pending_edge_ids.add(edge_id)
+                    edges_added += 1
+
+            _topic_chapter_index.setdefault((request.project_id, topic_node_id), set()).add(chapter_node_id)
 
         if existing_topic_id is None:
             background_tasks.add_task(
