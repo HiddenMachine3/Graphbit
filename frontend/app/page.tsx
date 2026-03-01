@@ -10,8 +10,135 @@ import GraphLegend from "../components/graph/GraphLegend";
 import NodeManagementPanel from "../components/graph/NodeManagementPanel";
 import EdgeManagementPanel from "../components/graph/EdgeManagementPanel";
 import { fetchGraphSummary, deleteNode, bulkDeleteNodes } from "../lib/api/graph";
+import { listMaterials } from "../lib/api/material";
 import { useAppStore } from "../lib/store";
-import type { GraphNodeDTO, GraphSummaryDTO } from "../lib/types";
+import type { GraphNodeDTO, GraphSummaryDTO, MaterialDTO } from "../lib/types";
+
+function extractYoutubeVideoId(url: string): string | null {
+  const rawInput = (url || "").trim();
+  const input = /^https?:\/\//i.test(rawInput) ? rawInput : `https://${rawInput}`;
+  if (!input) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(input);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.replace(/^\/+/, "");
+
+    if ((host === "youtu.be" || host === "www.youtu.be") && path) {
+      return path.split("/")[0] || null;
+    }
+
+    if (
+      host === "youtube.com" ||
+      host === "www.youtube.com" ||
+      host === "m.youtube.com" ||
+      host === "music.youtube.com" ||
+      host === "youtube-nocookie.com" ||
+      host === "www.youtube-nocookie.com"
+    ) {
+      if (path === "watch") {
+        return parsed.searchParams.get("v") || parsed.searchParams.get("vi") || null;
+      }
+      if (path.startsWith("shorts/") || path.startsWith("embed/")) {
+        return path.split("/")[1] || null;
+      }
+      if (path.startsWith("live/")) {
+        return path.split("/")[1] || null;
+      }
+    }
+  } catch {
+    // fall through to regex fallback
+  }
+
+  const regexFallbacks = [
+    /(?:youtube\.com\/watch\?.*?[?&]v=)([\w-]{11})/i,
+    /(?:youtube\.com\/(?:embed|shorts|live)\/)([\w-]{11})/i,
+    /(?:youtu\.be\/)([\w-]{11})/i,
+    /(?:^|[^\w-])([\w-]{11})(?:[^\w-]|$)/,
+  ];
+
+  for (const pattern of regexFallbacks) {
+    const match = rawInput.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+function toYoutubeEmbedUrl(url: string): string | null {
+  const videoId = extractYoutubeVideoId(url);
+  if (!videoId) {
+    return null;
+  }
+  return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&rel=0`;
+}
+
+function getNodeYoutubeSourceInfo(
+  node: GraphNodeDTO | null | undefined,
+  materialsById: Record<string, MaterialDTO>
+): {
+  isValid: boolean;
+  materialId: string | null;
+  sourceUrl: string | null;
+  videoId: string | null;
+  embedUrl: string | null;
+  candidateMaterialIds: string[];
+} {
+  if (!node) {
+    return {
+      isValid: false,
+      materialId: null,
+      sourceUrl: null,
+      videoId: null,
+      embedUrl: null,
+      candidateMaterialIds: [],
+    };
+  }
+
+  const candidateMaterialIds = new Set<string>(node.source_material_ids || []);
+  if (node.id.startsWith("material:")) {
+    candidateMaterialIds.add(node.id.replace("material:", ""));
+  }
+
+  for (const materialId of candidateMaterialIds) {
+    const sourceUrl = materialsById[materialId]?.source_url || null;
+    if (!sourceUrl) {
+      continue;
+    }
+
+    const videoId = extractYoutubeVideoId(sourceUrl);
+    if (!videoId) {
+      continue;
+    }
+
+    const embedUrl = toYoutubeEmbedUrl(sourceUrl);
+    if (!embedUrl) {
+      continue;
+    }
+
+    return {
+      isValid: true,
+      materialId,
+      sourceUrl,
+      videoId,
+      embedUrl,
+      candidateMaterialIds: Array.from(candidateMaterialIds),
+    };
+  }
+
+  return {
+    isValid: false,
+    materialId: null,
+    sourceUrl: null,
+    videoId: null,
+    embedUrl: null,
+    candidateMaterialIds: Array.from(candidateMaterialIds),
+  };
+}
 
 export default function HomePage() {
   const [summary, setSummary] = useState<GraphSummaryDTO | null>(null);
@@ -28,6 +155,9 @@ export default function HomePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [activityCollapsed, setActivityCollapsed] = useState(false);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
+  const [materialsById, setMaterialsById] = useState<Record<string, MaterialDTO>>({});
+  const [activeVideoEmbedUrl, setActiveVideoEmbedUrl] = useState<string | null>(null);
+  const [activeVideoTitle, setActiveVideoTitle] = useState<string>("");
   const [graphFitTrigger, setGraphFitTrigger] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +168,7 @@ export default function HomePage() {
   const loadGraph = useCallback(async () => {
     if (!currentProjectId) {
       setSummary(null);
+      setMaterialsById({});
       setSelectedNodeId(null);
       setIsLoading(false);
       return;
@@ -46,8 +177,14 @@ export default function HomePage() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await fetchGraphSummary(currentProjectId);
+      const [data, materials] = await Promise.all([
+        fetchGraphSummary(currentProjectId),
+        listMaterials(currentProjectId),
+      ]);
       setSummary(data);
+      setMaterialsById(
+        Object.fromEntries(materials.map((material) => [material.id, material]))
+      );
       setSelectedNodeId((current) => current ?? data.nodes[0]?.id ?? null);
     } catch (fetchError) {
       const message = fetchError instanceof Error ? fetchError.message : "Failed to load graph";
@@ -117,8 +254,109 @@ export default function HomePage() {
         )
     : [];
 
+  const materialSourceUrlById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(materialsById).map(([id, material]) => [id, material?.source_url ?? null])
+      ),
+    [materialsById]
+  );
+
   const selectedNode: GraphNodeDTO | null =
     visibleNodes.find((node) => node.id === selectedNodeId) ?? null;
+
+  const selectedNodeYoutubeInfo = useMemo(
+    () => getNodeYoutubeSourceInfo(selectedNode, materialsById),
+    [selectedNode, materialsById]
+  );
+
+  const selectedNodeYoutubeEmbedUrl = useMemo(() => {
+    if (!selectedNode) {
+      return null;
+    }
+
+    if (selectedNode.node_type !== "chapter" && selectedNode.node_type !== "material") {
+      return null;
+    }
+
+    return selectedNodeYoutubeInfo.embedUrl;
+  }, [selectedNode, selectedNodeYoutubeInfo]);
+
+  const selectedNodeVideoActionLabel =
+    selectedNode?.node_type === "material" ? "View" : "Watch";
+
+  const shouldShowMissingYoutubeHint =
+    Boolean(selectedNode) &&
+    (selectedNode?.node_type === "material" || selectedNode?.node_type === "chapter") &&
+    !selectedNodeYoutubeEmbedUrl;
+
+  const openSelectedVideo = useCallback(() => {
+    if (!selectedNodeYoutubeEmbedUrl || !selectedNode) {
+      return;
+    }
+    setActiveVideoEmbedUrl(selectedNodeYoutubeEmbedUrl);
+    setActiveVideoTitle(selectedNode.topic_name);
+  }, [selectedNodeYoutubeEmbedUrl, selectedNode]);
+
+  const closeVideoPlayer = useCallback(() => {
+    setActiveVideoEmbedUrl(null);
+    setActiveVideoTitle("");
+  }, []);
+
+  const handleOpenNodeVideo = useCallback(
+    ({ nodeTitle, embedUrl }: { nodeId: string; nodeTitle: string; embedUrl: string }) => {
+      if (!embedUrl) {
+        return;
+      }
+      setActiveVideoEmbedUrl(embedUrl);
+      setActiveVideoTitle(nodeTitle || "YouTube Video");
+    },
+    []
+  );
+
+  const debugNodeVideoResolution = useCallback(
+    (node: GraphNodeDTO | null | undefined) => {
+      if (!node) {
+        console.log("[Graphbit][NodeClick] Node not found");
+        return;
+      }
+
+      const youtubeInfo = getNodeYoutubeSourceInfo(node, materialsById);
+
+      const candidateMaterialIds = new Set<string>(node.source_material_ids || []);
+      if (node.id.startsWith("material:")) {
+        candidateMaterialIds.add(node.id.replace("material:", ""));
+      }
+
+      const materialDebugRows = Array.from(candidateMaterialIds).map((materialId) => {
+        const sourceUrl = materialsById[materialId]?.source_url || null;
+        const videoId = sourceUrl ? extractYoutubeVideoId(sourceUrl) : null;
+        const embedUrl = sourceUrl ? toYoutubeEmbedUrl(sourceUrl) : null;
+        return {
+          materialId,
+          sourceUrl,
+          videoId,
+          hasEmbedUrl: Boolean(embedUrl),
+        };
+      });
+
+      console.groupCollapsed(`[Graphbit][NodeClick] ${node.id} (${node.node_type ?? "unknown"})`);
+      console.log("node", {
+        id: node.id,
+        nodeType: node.node_type,
+        topic: node.topic_name,
+        sourceMaterialIds: node.source_material_ids || [],
+      });
+      console.log("hasValidYoutubeSource", youtubeInfo.isValid);
+      console.log("youtubeSourceInfo", youtubeInfo);
+      console.log("materialsById keys", Object.keys(materialsById));
+      console.table(materialDebugRows);
+      const firstResolvable = materialDebugRows.find((row) => row.hasEmbedUrl);
+      console.log("resolvedEmbedUrl", firstResolvable ? toYoutubeEmbedUrl(firstResolvable.sourceUrl || "") : null);
+      console.groupEnd();
+    },
+    [materialsById]
+  );
 
   const handleEditClick = () => {
     if (selectedNodeId) {
@@ -128,9 +366,11 @@ export default function HomePage() {
   };
 
   const handleNodeClick = (nodeId: string) => {
+    const clickedNode = visibleNodes.find((node) => node.id === nodeId);
+    debugNodeVideoResolution(clickedNode);
+
     if (deleteModeActive) {
       setDeleteError(null);
-      const clickedNode = visibleNodes.find((node) => node.id === nodeId);
       if (!clickedNode || clickedNode.node_type === "material" || nodeId.startsWith("material:")) {
         setDeleteError("Material nodes cannot be deleted");
         return;
@@ -250,9 +490,11 @@ export default function HomePage() {
         <KnowledgeGraphView
           nodes={visibleNodes}
           edges={visibleEdges}
+          materialSourceUrlById={materialSourceUrlById}
           projectId={currentProjectId}
           selectedNodeId={clickModeActive || deleteModeActive ? null : selectedNodeId}
           onSelectNode={handleNodeClick}
+          onOpenNodeVideo={handleOpenNodeVideo}
           highlightedNodeIds={
             deleteModeActive
               ? selectedNodesForDelete
@@ -285,7 +527,15 @@ export default function HomePage() {
                   node={selectedNode}
                   onEdit={handleEditClick}
                   onDelete={handleDeleteSingleNode}
+                  onWatch={selectedNodeYoutubeEmbedUrl ? openSelectedVideo : undefined}
+                  watchLabel={selectedNodeVideoActionLabel}
                 />
+
+                {shouldShowMissingYoutubeHint && (
+                  <div className="rounded-2xl border border-border-default bg-bg-surface p-3 text-xs font-body text-text-muted">
+                    No valid YouTube source link resolved from associated source materials for this node.
+                  </div>
+                )}
 
                 {editingNodeId === selectedNodeId ? (
                   <NodeManagementPanel
@@ -459,6 +709,37 @@ export default function HomePage() {
         </div>
       </div>
       </div>
+
+      {activeVideoEmbedUrl && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-border-default bg-bg-surface shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border-default px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold font-heading text-text-primary">
+                <Play className="h-4 w-4" />
+                <span className="truncate">{activeVideoTitle || "YouTube Video"}</span>
+              </div>
+              <button
+                type="button"
+                onClick={closeVideoPlayer}
+                className="rounded border border-border-default bg-bg-elevated p-1 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                aria-label="Close video player"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="aspect-video w-full bg-black">
+              <iframe
+                src={activeVideoEmbedUrl}
+                title={activeVideoTitle || "YouTube player"}
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {sessionPanelOpen && (
         <div className="h-full min-w-0 border-l border-border-default bg-bg-surface">

@@ -5,9 +5,17 @@ type NodeDetailPanelProps = {
   node: GraphNodeDTO | null;
   onEdit?: () => void;
   onDelete?: (nodeId: string) => void;
+  onWatch?: () => void;
+  watchLabel?: string;
 };
 
-export default function NodeDetailPanel({ node, onEdit, onDelete }: NodeDetailPanelProps) {
+export default function NodeDetailPanel({
+  node,
+  onEdit,
+  onDelete,
+  onWatch,
+  watchLabel = "Watch",
+}: NodeDetailPanelProps) {
   if (!node) {
     return (
       <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-sm font-body text-text-muted">
@@ -20,12 +28,25 @@ export default function NodeDetailPanel({ node, onEdit, onDelete }: NodeDetailPa
   const forgetting = node.forgetting_score;
   const forgettingClass = forgetting > 0.6 ? 'text-pkr-low' : forgetting > 0.3 ? 'text-pkr-medium' : 'text-text-secondary';
   const canDelete = node.node_type !== "material" && !node.id.startsWith("material:");
+  const canWatch =
+    (node.node_type === "chapter" || node.node_type === "material") &&
+    typeof onWatch === "function";
 
   return (
     <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-sm font-body text-text-secondary">
       <div className="flex items-start justify-between">
         <div className="text-base font-semibold font-heading text-text-primary">{node.topic_name}</div>
         <div className="flex items-center gap-2">
+          {canWatch && (
+            <button
+              onClick={onWatch}
+              className="rounded border border-accent/70 bg-accent px-3 py-1 text-xs font-semibold font-body text-text-primary shadow-sm transition hover:bg-accent-hover"
+              title="Watch linked YouTube video"
+              type="button"
+            >
+              {watchLabel}
+            </button>
+          )}
           {canDelete && onDelete && (
             <button
               onClick={() => onDelete(node.id)}

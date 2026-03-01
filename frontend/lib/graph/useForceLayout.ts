@@ -133,11 +133,14 @@ function computeInitialPositions(nodes: Node[], edges: Edge[]) {
 export default function useForceLayout(
   nodes: Node[],
   edges: Edge[],
-  setNodes: (payload: Node[] | ((nodes: Node[]) => Node[])) => void
+  setNodes: (payload: Node[] | ((nodes: Node[]) => Node[])) => void,
+  postProcess?: (nodes: Node[]) => Node[]
 ): ForceLayoutHandlers {
   /* Keep latest setter in a ref so the tick callback never goes stale */
   const setNodesRef = useRef(setNodes);
   setNodesRef.current = setNodes;
+  const postProcessRef = useRef(postProcess);
+  postProcessRef.current = postProcess;
 
   /* Simulation + its internal node array survive across renders */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -230,16 +233,29 @@ export default function useForceLayout(
       if (tickCount % 3 !== 0) return; /* update every 3rd tick for perf */
 
       setNodesRef.current((current) =>
-        current.map((node) => {
-          const sim = simulationNodes.find((n) => n.id === node.id);
-          if (!sim) return node;
-          /* Don't override nodes currently pinned (being dragged) */
-          if (sim.fx != null) return node;
-          return {
-            ...node,
-            position: { x: sim.x ?? 0, y: sim.y ?? 0 },
-          };
-        })
+        (postProcessRef.current
+          ? postProcessRef.current(
+              current.map((node) => {
+                const sim = simulationNodes.find((n) => n.id === node.id);
+                if (!sim) return node;
+                /* Don't override nodes currently pinned (being dragged) */
+                if (sim.fx != null) return node;
+                return {
+                  ...node,
+                  position: { x: sim.x ?? 0, y: sim.y ?? 0 },
+                };
+              })
+            )
+          : current.map((node) => {
+              const sim = simulationNodes.find((n) => n.id === node.id);
+              if (!sim) return node;
+              /* Don't override nodes currently pinned (being dragged) */
+              if (sim.fx != null) return node;
+              return {
+                ...node,
+                position: { x: sim.x ?? 0, y: sim.y ?? 0 },
+              };
+            }))
       );
     });
 

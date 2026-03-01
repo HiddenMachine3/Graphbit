@@ -29,9 +29,11 @@ import useForceLayout from "../../lib/graph/useForceLayout";
 export type KnowledgeGraphViewProps = {
   nodes: GraphNodeDTO[];
   edges: GraphEdgeDTO[];
+  materialSourceUrlById?: Record<string, string | null | undefined>;
   projectId: string | null;
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+  onOpenNodeVideo?: (payload: { nodeId: string; nodeTitle: string; embedUrl: string }) => void;
   highlightedNodeIds?: string[];
   brightnessAttribute?: keyof GraphNodeDTO;
   onGraphUpdated?: () => void;
@@ -41,17 +43,118 @@ export type KnowledgeGraphViewProps = {
 const nodeTypes = { graphNode: GraphNode, materialNode: MaterialNode };
 const edgeTypes = { graphEdge: GraphEdge };
 
+function extractYoutubeVideoId(url: string): string | null {
+  const rawInput = (url || "").trim();
+  if (!rawInput) {
+    return null;
+  }
+
+  const input = /^https?:\/\//i.test(rawInput) ? rawInput : `https://${rawInput}`;
+
+  try {
+    const parsed = new URL(input);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.replace(/^\/+/, "");
+
+    if ((host === "youtu.be" || host === "www.youtu.be") && path) {
+      return path.split("/")[0] || null;
+    }
+
+    if (
+      host === "youtube.com" ||
+      host === "www.youtube.com" ||
+      host === "m.youtube.com" ||
+      host === "music.youtube.com" ||
+      host === "youtube-nocookie.com" ||
+      host === "www.youtube-nocookie.com"
+    ) {
+      if (path === "watch") {
+        return parsed.searchParams.get("v") || parsed.searchParams.get("vi") || null;
+      }
+      if (path.startsWith("shorts/") || path.startsWith("embed/") || path.startsWith("live/")) {
+        return path.split("/")[1] || null;
+      }
+    }
+  } catch {
+    // fall through to regex fallback
+  }
+
+  const regexFallbacks = [
+    /(?:youtube\.com\/watch\?.*?[?&]v=)([\w-]{11})/i,
+    /(?:youtube\.com\/(?:embed|shorts|live)\/)([\w-]{11})/i,
+    /(?:youtu\.be\/)([\w-]{11})/i,
+  ];
+
+  for (const pattern of regexFallbacks) {
+    const match = rawInput.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+function toYoutubeThumbnailUrl(url: string): string | null {
+  const videoId = extractYoutubeVideoId(url);
+  if (!videoId) {
+    return null;
+  }
+  return `https://img.youtube.com/vi/${encodeURIComponent(videoId)}/mqdefault.jpg`;
+}
+
 function buildFlowNodes(
   nodes: GraphNodeDTO[],
-  brightnessAttribute: keyof GraphNodeDTO
+  brightnessAttribute: keyof GraphNodeDTO,
+  materialSourceUrlById: Record<string, string | null | undefined>,
+  onOpenNodeVideo?: (payload: { nodeId: string; nodeTitle: string; embedUrl: string }) => void
 ): Node[] {
-  return nodes.map((node) => ({
-    id: node.id,
-    type: node.node_type === "material" ? "materialNode" : "graphNode",
-    position: { x: 0, y: 0 },
-    data: { ...node, brightnessAttribute },
-    selected: false,
-  }));
+  return nodes.map((node) => {
+    const candidateMaterialIds = new Set<string>(node.source_material_ids || []);
+    if (node.id.startsWith("material:")) {
+      candidateMaterialIds.add(node.id.replace("material:", ""));
+    }
+
+    let youtubeThumbnailUrl: string | null = null;
+    let youtubeEmbedUrl: string | null = null;
+    for (const materialId of candidateMaterialIds) {
+      const sourceUrl = materialSourceUrlById[materialId];
+      if (!sourceUrl) {
+        continue;
+      }
+      const nextThumbnail = toYoutubeThumbnailUrl(sourceUrl);
+      const nextEmbed = extractYoutubeVideoId(sourceUrl)
+        ? `https://www.youtube.com/embed/${encodeURIComponent(extractYoutubeVideoId(sourceUrl) as string)}?autoplay=1&rel=0`
+        : null;
+      if (nextThumbnail && nextEmbed) {
+        youtubeThumbnailUrl = nextThumbnail;
+        youtubeEmbedUrl = nextEmbed;
+        break;
+      }
+    }
+
+    return {
+      id: node.id,
+      type: node.node_type === "material" ? "materialNode" : "graphNode",
+      position: { x: 0, y: 0 },
+      data: {
+        ...node,
+        brightnessAttribute,
+        youtubeThumbnailUrl,
+        youtubeEmbedUrl,
+        onOpenVideo:
+          youtubeEmbedUrl && onOpenNodeVideo
+            ? () =>
+                onOpenNodeVideo({
+                  nodeId: node.id,
+                  nodeTitle: node.topic_name,
+                  embedUrl: youtubeEmbedUrl as string,
+                })
+            : undefined,
+      },
+      selected: false,
+    };
+  });
 }
 
 function buildFlowEdges(edges: GraphEdgeDTO[]): Edge[] {
@@ -67,17 +170,20 @@ function buildFlowEdges(edges: GraphEdgeDTO[]): Edge[] {
 export default function KnowledgeGraphView({
   nodes,
   edges,
+  materialSourceUrlById,
   projectId,
   selectedNodeId,
   onSelectNode,
+  onOpenNodeVideo,
   highlightedNodeIds,
   brightnessAttribute = "proven_knowledge_rating",
   onGraphUpdated,
   fitTrigger,
 }: KnowledgeGraphViewProps) {
+  const sourceUrlById = materialSourceUrlById || {};
   const baseNodes = useMemo(
-    () => buildFlowNodes(nodes, brightnessAttribute),
-    [nodes, brightnessAttribute]
+    () => buildFlowNodes(nodes, brightnessAttribute, sourceUrlById, onOpenNodeVideo),
+    [nodes, brightnessAttribute, sourceUrlById, onOpenNodeVideo]
   );
   const baseEdges = useMemo(() => buildFlowEdges(edges), [edges]);
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState(baseNodes);
@@ -134,12 +240,6 @@ export default function KnowledgeGraphView({
     initialRepulsionDoneRef.current = false;
   }, [baseNodes.length]);
 
-  const { onNodeDrag, onNodeDragEnd } = useForceLayout(
-    layoutNodes,
-    layoutEdges,
-    setFlowNodes
-  );
-
   const applyMaterialRepulsion = useCallback((current: Node[]) => {
     const repulsors = current.filter((node) => node.type === "materialNode");
     if (repulsors.length === 0) {
@@ -149,6 +249,7 @@ export default function KnowledgeGraphView({
     const minDistance = 200;
     const minNodeDistance = 120;
     const minMaterialDistance = 160;
+    const minMaterialTopicDistance = 110;
 
     const unitVectorForPair = (aId: string, bId: string) => {
       const input = `${aId}|${bId}`;
@@ -207,6 +308,52 @@ export default function KnowledgeGraphView({
 
     const materialNodes = materialAdjusted.filter((node) => node.type === "materialNode");
     const topicNodes = materialAdjusted.filter((node) => node.type !== "materialNode");
+
+    // Small-radius directional repulsion from material -> topic nodes,
+    // with only slight counter-movement on material nodes.
+    for (let i = 0; i < materialNodes.length; i += 1) {
+      const materialNode = materialNodes[i];
+      for (let j = 0; j < topicNodes.length; j += 1) {
+        const topicNode = topicNodes[j];
+
+        const mx = materialNode.position?.x ?? 0;
+        const my = materialNode.position?.y ?? 0;
+        const tx = topicNode.position?.x ?? 0;
+        const ty = topicNode.position?.y ?? 0;
+
+        let dx = mx - tx;
+        let dy = my - ty;
+        let distance = Math.hypot(dx, dy);
+
+        if (distance < 1) {
+          const unit = unitVectorForPair(materialNode.id, topicNode.id);
+          dx = unit.x;
+          dy = unit.y;
+          distance = 1;
+        }
+
+        if (distance >= minMaterialTopicDistance) {
+          continue;
+        }
+
+        const overlap = minMaterialTopicDistance - distance;
+        const ux = dx / distance;
+        const uy = dy / distance;
+
+        const topicPush = overlap * 0.8;
+        const materialPush = overlap * 0.2;
+
+        materialNode.position = {
+          x: mx + ux * materialPush,
+          y: my + uy * materialPush,
+        };
+        topicNode.position = {
+          x: tx - ux * topicPush,
+          y: ty - uy * topicPush,
+        };
+      }
+    }
+
     for (let i = 0; i < topicNodes.length; i += 1) {
       for (let j = i + 1; j < topicNodes.length; j += 1) {
         const a = topicNodes[i];
@@ -265,6 +412,13 @@ export default function KnowledgeGraphView({
 
     return materialAdjusted;
   }, []);
+
+  const { onNodeDrag, onNodeDragEnd } = useForceLayout(
+    layoutNodes,
+    layoutEdges,
+    setFlowNodes,
+    applyMaterialRepulsion
+  );
 
   useEffect(() => {
     if (initialRepulsionDoneRef.current) {
@@ -450,7 +604,14 @@ function GraphFlowCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
-      onNodeClick={(_, node) => onSelectNode(node.id)}
+      onNodeClick={(_, node) => {
+        console.log("[Graphbit][GraphClick]", {
+          id: node.id,
+          type: node.type,
+          data: node.data,
+        });
+        onSelectNode(node.id);
+      }}
       fitView
     >
       <MiniMap position="top-left" pannable zoomable />

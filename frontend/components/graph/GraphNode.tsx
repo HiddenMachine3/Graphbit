@@ -4,7 +4,12 @@ import type { GraphNodeDTO } from "../../lib/types";
 import { getPKRRgba } from "../../lib/colors";
 
 type GraphNodeProps = {
-  data: GraphNodeDTO & { brightnessAttribute?: keyof GraphNodeDTO };
+  data: GraphNodeDTO & {
+    brightnessAttribute?: keyof GraphNodeDTO;
+    youtubeThumbnailUrl?: string | null;
+    youtubeEmbedUrl?: string | null;
+    onOpenVideo?: () => void;
+  };
   selected: boolean;
 };
 
@@ -58,6 +63,7 @@ const handles = (
 
 export default function GraphNode({ data, selected }: GraphNodeProps) {
   const brightnessAttribute = data.brightnessAttribute || 'proven_knowledge_rating';
+  const thumbnailUrl = data.youtubeThumbnailUrl || null;
   const brightnessValue = toNumber(data[brightnessAttribute], 0);
   const brightness = normalizeValue(brightnessValue, brightnessAttribute);
   const importance = clamp(data.importance);
@@ -74,7 +80,7 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
     return (
       <div
         title={`Video #${data.sequence_number ?? "?"}: ${data.topic_name}`}
-        className={`flex flex-col items-center justify-center rounded-full border-2 text-center shadow-sm transition ${
+        className={`group relative flex flex-col items-center justify-center rounded-full border-2 text-center shadow-sm transition ${
           selected ? "ring-2 ring-white/50" : ""
         }`}
         style={{
@@ -85,6 +91,25 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
           boxShadow: `0 0 ${glowStrength}px ${palette.glow}, 0 0 ${glowStrength * 2}px ${palette.glow}`,
         }}
       >
+        {thumbnailUrl && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              data.onOpenVideo?.();
+            }}
+            className="absolute bottom-full left-1/2 z-20 mb-2 hidden w-32 -translate-x-1/2 overflow-hidden rounded-md border border-border-default bg-bg-surface shadow-lg group-hover:block"
+            title="Open video"
+          >
+            <img
+              src={thumbnailUrl}
+              alt="YouTube thumbnail preview"
+              className="h-20 w-full object-cover"
+              loading="lazy"
+            />
+          </button>
+        )}
         <div className="text-xs font-extrabold leading-none" style={{ color: palette.border }}>
           #{data.sequence_number ?? "?"}
         </div>
