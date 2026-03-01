@@ -4,6 +4,7 @@ This extension captures material from the current browser tab and sends it to Gr
 
 - On YouTube tabs: sends `source_url` (backend auto-imports transcript).
 - On other pages (including `file://` HTML): sends page text as `content_text`.
+- On YouTube tabs: can also run **in-video quizzes** (25-minute transcript chunks, 2 questions per chunk).
 
 ## Files
 
@@ -36,6 +37,19 @@ This extension captures material from the current browser tab and sends it to Gr
 2. Click the extension icon.
 3. Click **Add Current Page as Material**.
 4. Confirm success in status message and **Last Added** card.
+
+### In-video quiz on YouTube
+
+1. Open a YouTube video tab.
+2. Click the extension icon.
+3. Click **Start In-Video Quiz**.
+4. The extension fetches transcript segments, splits them into chunks of at most 25 minutes, and calls `POST /qa/generate` with `n=2` for each chunk.
+5. During playback, the video pauses at each chunk boundary and prompts 2 questions, then resumes.
+
+You can change both values in the popup under **Quiz Settings**:
+
+- **Chunk Size (minutes)**
+- **Questions per Chunk**
 
 ## Local HTML files (`file://`)
 

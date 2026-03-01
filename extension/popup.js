@@ -10,6 +10,10 @@ const createdByEl = document.getElementById("createdBy");
 const saveBtn = document.getElementById("saveBtn");
 const captureBtn = document.getElementById("captureBtn");
 const ingestBtn = document.getElementById("ingestBtn");
+const quizBtn = document.getElementById("quizBtn");
+const quizSettingsCardEl = document.getElementById("quizSettingsCard");
+const quizChunkMinutesEl = document.getElementById("quizChunkMinutes");
+const quizQuestionsPerChunkEl = document.getElementById("quizQuestionsPerChunk");
 const lastAddedCardEl = document.getElementById("lastAddedCard");
 const lastAddedTextEl = document.getElementById("lastAddedText");
 const ingestResultCardEl = document.getElementById("ingestResultCard");
@@ -20,6 +24,8 @@ const openInGraphbitEl = document.getElementById("openInGraphbit");
 let statusResetTimer = null;
 const CREATE_PROJECT_OPTION = "__create_new_project__";
 let lastSelectedProjectId = "";
+const DEFAULT_QUIZ_CHUNK_MINUTES = 25;
+const DEFAULT_QUIZ_QUESTIONS_PER_CHUNK = 2;
 
 function setStatus(message, level = "info") {
   STATUS_EL.textContent = message;
@@ -95,8 +101,12 @@ function updateLastAddedUI(lastAdded) {
 function updateYouTubeOnlyUI(isYouTube) {
   if (isYouTube) {
     ingestBtn.classList.remove("hidden");
+    quizBtn.classList.remove("hidden");
+    quizSettingsCardEl.classList.remove("hidden");
   } else {
     ingestBtn.classList.add("hidden");
+    quizBtn.classList.add("hidden");
+    quizSettingsCardEl.classList.add("hidden");
     ingestResultCardEl.classList.add("hidden");
   }
 }
@@ -138,17 +148,37 @@ async function getPageContent(tabId) {
 }
 
 async function loadSettings() {
-  const { backendUrl, frontendUrl, selectedProjectId, createdBy, lastAdded } = await chrome.storage.sync.get([
+  const {
+    backendUrl,
+    frontendUrl,
+    selectedProjectId,
+    createdBy,
+    lastAdded,
+    quizChunkMinutes,
+    quizQuestionsPerChunk,
+  } = await chrome.storage.sync.get([
     "backendUrl",
     "frontendUrl",
     "selectedProjectId",
     "createdBy",
     "lastAdded",
+    "quizChunkMinutes",
+    "quizQuestionsPerChunk",
   ]);
 
   backendUrlEl.value = backendUrl || DEFAULT_BACKEND;
   frontendUrlEl.value = frontendUrl || DEFAULT_FRONTEND;
   createdByEl.value = createdBy || "browser-extension";
+  quizChunkMinutesEl.value = String(
+    Number.isFinite(Number(quizChunkMinutes)) && Number(quizChunkMinutes) >= 1
+      ? Math.floor(Number(quizChunkMinutes))
+      : DEFAULT_QUIZ_CHUNK_MINUTES
+  );
+  quizQuestionsPerChunkEl.value = String(
+    Number.isFinite(Number(quizQuestionsPerChunk)) && Number(quizQuestionsPerChunk) >= 1
+      ? Math.floor(Number(quizQuestionsPerChunk))
+      : DEFAULT_QUIZ_QUESTIONS_PER_CHUNK
+  );
   updateLastAddedUI(lastAdded);
 
   await updatePageContextBadge();
@@ -160,6 +190,7 @@ async function saveSettings() {
   const selectedProjectId = projectSelectEl.value || "";
   const backendUrl = normalizeApiBase(backendUrlEl.value);
   const frontendUrl = (frontendUrlEl.value || "").trim().replace(/\/+$/, "") || DEFAULT_FRONTEND;
+  const { chunkMinutes, questionsPerChunk } = getQuizSettings();
   backendUrlEl.value = backendUrl;
   frontendUrlEl.value = frontendUrl;
   try {
@@ -168,6 +199,8 @@ async function saveSettings() {
       frontendUrl,
       selectedProjectId,
       createdBy: createdByEl.value.trim(),
+      quizChunkMinutes: chunkMinutes,
+      quizQuestionsPerChunk: questionsPerChunk,
     });
     setStatus("Defaults saved.", "success");
   } finally {
@@ -214,6 +247,32 @@ function renderProjectOptions(projects, preferredId = "") {
   }
 
   lastSelectedProjectId = projectSelectEl.value;
+}
+
+function parseBoundedInt(rawValue, fallback, minValue, maxValue) {
+  const parsed = Number.parseInt(String(rawValue ?? "").trim(), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maxValue, Math.max(minValue, parsed));
+}
+
+function getQuizSettings() {
+  const chunkMinutes = parseBoundedInt(
+    quizChunkMinutesEl.value,
+    DEFAULT_QUIZ_CHUNK_MINUTES,
+    1,
+    120
+  );
+  const questionsPerChunk = parseBoundedInt(
+    quizQuestionsPerChunkEl.value,
+    DEFAULT_QUIZ_QUESTIONS_PER_CHUNK,
+    1,
+    10
+  );
+
+  quizChunkMinutesEl.value = String(chunkMinutes);
+  quizQuestionsPerChunkEl.value = String(questionsPerChunk);
+
+  return { chunkMinutes, questionsPerChunk };
 }
 
 async function loadProjects(preferredId = "") {
@@ -385,6 +444,286 @@ function renderTopicChips(topics) {
   });
 }
 
+function toFiniteNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function chunkTranscriptSegmentsByTime(segments, maxChunkSeconds) {
+  const sorted = [...(segments || [])]
+    .map((segment) => ({
+      text: String(segment?.text || "").trim(),
+      start: toFiniteNumber(segment?.start),
+      duration: toFiniteNumber(segment?.duration),
+    }))
+    .filter((segment) => segment.text)
+    .sort((a, b) => {
+      const aStart = a.start ?? Number.POSITIVE_INFINITY;
+      const bStart = b.start ?? Number.POSITIVE_INFINITY;
+      return aStart - bStart;
+    });
+
+  if (!sorted.length) {
+    return [];
+  }
+
+  const chunks = [];
+  let cursorStart = sorted[0].start ?? 0;
+  let current = {
+    startSec: cursorStart,
+    endSec: cursorStart,
+    textParts: [],
+  };
+
+  for (const segment of sorted) {
+    const segmentStart = segment.start ?? current.endSec;
+    const segmentDuration = segment.duration ?? 3;
+    const segmentEnd = Math.max(segmentStart, segmentStart + Math.max(segmentDuration, 0));
+
+    if (current.textParts.length > 0 && segmentStart - current.startSec >= maxChunkSeconds) {
+      chunks.push({
+        startSec: current.startSec,
+        endSec: Math.max(current.endSec, current.startSec),
+        text: current.textParts.join(" ").trim(),
+      });
+      current = {
+        startSec: segmentStart,
+        endSec: segmentEnd,
+        textParts: [],
+      };
+    }
+
+    current.textParts.push(segment.text);
+    current.endSec = Math.max(current.endSec, segmentEnd);
+  }
+
+  if (current.textParts.length > 0) {
+    chunks.push({
+      startSec: current.startSec,
+      endSec: Math.max(current.endSec, current.startSec),
+      text: current.textParts.join(" ").trim(),
+    });
+  }
+
+  return chunks.filter((chunk) => chunk.text);
+}
+
+function splitTextIntoFallbackChunks(text, maxChars = 9000) {
+  const source = String(text || "").trim();
+  if (!source) return [];
+
+  const paragraphs = source.split(/\n\s*\n/g).map((part) => part.trim()).filter(Boolean);
+  const blocks = paragraphs.length ? paragraphs : source.split(/(?<=[.!?])\s+/g).map((part) => part.trim()).filter(Boolean);
+
+  const chunks = [];
+  let current = "";
+  for (const block of blocks) {
+    const candidate = current ? `${current}\n\n${block}` : block;
+    if (candidate.length > maxChars && current) {
+      chunks.push(current);
+      current = block;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function buildTranscriptChunksForQuiz(transcriptText, transcriptSegments) {
+  const { chunkMinutes } = getQuizSettings();
+  const maxChunkSeconds = chunkMinutes * 60;
+  const timedChunks = chunkTranscriptSegmentsByTime(transcriptSegments, maxChunkSeconds);
+  if (timedChunks.length > 0) {
+    return timedChunks;
+  }
+
+  const fallbackTextChunks = splitTextIntoFallbackChunks(transcriptText);
+  return fallbackTextChunks.map((text, index) => {
+    const startSec = index * maxChunkSeconds;
+    const endSec = (index + 1) * maxChunkSeconds;
+    return { startSec, endSec, text };
+  });
+}
+
+async function generateQuizQuestionsForChunks(backendUrl, chunks, questionsPerChunk) {
+  const chunkQuizzes = [];
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
+    const response = await fetch(`${backendUrl}/qa/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: chunk.text,
+        n: questionsPerChunk,
+      }),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new Error(`Chunk ${index + 1} QA failed (HTTP ${response.status}): ${responseText}`);
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(responseText);
+    } catch {
+      throw new Error(`Chunk ${index + 1} QA returned invalid JSON.`);
+    }
+
+    const qaPairs = Array.isArray(parsed?.qa_pairs) ? parsed.qa_pairs : [];
+    const normalizedPairs = qaPairs
+      .map((pair) => ({
+        question: String(pair?.question || "").trim(),
+        answer: String(pair?.answer || "").trim(),
+      }))
+      .filter((pair) => pair.question)
+      .slice(0, questionsPerChunk);
+
+    if (normalizedPairs.length > 0) {
+      chunkQuizzes.push({
+        startSec: chunk.startSec,
+        endSec: chunk.endSec,
+        qaPairs: normalizedPairs,
+      });
+    }
+  }
+
+  return chunkQuizzes;
+}
+
+async function startInVideoQuiz() {
+  setBusy(quizBtn, "Preparing quiz…", true);
+  try {
+    const tab = await getActiveTab();
+    if (!tab || !tab.id || !tab.url || !isYouTubeUrl(tab.url)) {
+      setStatus("Open a YouTube video first.", "error");
+      return;
+    }
+
+    const backendUrl = normalizeApiBase(backendUrlEl.value);
+    backendUrlEl.value = backendUrl;
+
+    setStatus("Fetching transcript…", "info");
+    const transcriptResponse = await fetch(`${backendUrl}/materials/youtube/transcript-check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link: tab.url }),
+    });
+
+    const transcriptText = await transcriptResponse.text();
+    if (!transcriptResponse.ok) {
+      throw new Error(`Transcript fetch failed (HTTP ${transcriptResponse.status}): ${transcriptText}`);
+    }
+
+    const transcriptPayload = JSON.parse(transcriptText);
+    const chunks = buildTranscriptChunksForQuiz(
+      transcriptPayload?.transcript_text || "",
+      transcriptPayload?.segments || []
+    );
+    const { chunkMinutes, questionsPerChunk } = getQuizSettings();
+
+    if (!chunks.length) {
+      setStatus("No transcript content found for quiz generation.", "error");
+      return;
+    }
+
+    setStatus(`Generating questions for ${chunks.length} chunk${chunks.length !== 1 ? "s" : ""}…`, "info");
+    const chunkQuizzes = await generateQuizQuestionsForChunks(backendUrl, chunks, questionsPerChunk);
+
+    if (!chunkQuizzes.length) {
+      setStatus("No quiz questions were generated.", "error");
+      return;
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      args: [chunkQuizzes, chunkMinutes, questionsPerChunk],
+      func: (chunkQuizzesArg, chunkMinutesArg, questionsPerChunkArg) => {
+        const video = document.querySelector("video");
+        if (!video) {
+          throw new Error("Could not find a YouTube video player on the page.");
+        }
+
+        if (window.__graphbitQuizState?.timerId) {
+          clearInterval(window.__graphbitQuizState.timerId);
+        }
+
+        const sortedChunks = [...chunkQuizzesArg]
+          .filter((chunk) => Array.isArray(chunk?.qaPairs) && chunk.qaPairs.length > 0)
+          .sort((a, b) => Number(a.endSec || 0) - Number(b.endSec || 0));
+
+        if (!sortedChunks.length) {
+          throw new Error("No quiz chunks available to schedule.");
+        }
+
+        let nextChunkIndex = 0;
+        const currentTime = Number(video.currentTime || 0);
+        while (nextChunkIndex < sortedChunks.length && Number(sortedChunks[nextChunkIndex].endSec || 0) <= currentTime) {
+          nextChunkIndex += 1;
+        }
+
+        const askChunkQuestions = (chunk, chunkIndex, totalChunks) => {
+          video.pause();
+          alert(`Quiz time (${chunkIndex + 1}/${totalChunks})!`);
+
+          const qaPairs = Array.isArray(chunk.qaPairs) ? chunk.qaPairs : [];
+          for (let i = 0; i < qaPairs.length; i += 1) {
+            const pair = qaPairs[i] || {};
+            const question = String(pair.question || "").trim();
+            if (!question) continue;
+
+            prompt(`Q${i + 1}: ${question}\n\nType your answer and press OK.`);
+            const expectedAnswer = String(pair.answer || "").trim();
+            if (expectedAnswer) {
+              alert(`Expected answer:\n${expectedAnswer}`);
+            }
+          }
+
+          video.play().catch(() => {});
+        };
+
+        const timerId = setInterval(() => {
+          if (nextChunkIndex >= sortedChunks.length) {
+            clearInterval(timerId);
+            window.__graphbitQuizState = null;
+            return;
+          }
+
+          const chunk = sortedChunks[nextChunkIndex];
+          const endSec = Number(chunk.endSec || 0);
+          if (Number(video.currentTime || 0) >= endSec) {
+            askChunkQuestions(chunk, nextChunkIndex, sortedChunks.length);
+            nextChunkIndex += 1;
+          }
+        }, 1000);
+
+        window.__graphbitQuizState = {
+          timerId,
+          totalChunks: sortedChunks.length,
+          startedAt: Date.now(),
+        };
+
+        alert(
+          `Graphbit in-video quiz is active. The video will pause every ${chunkMinutesArg}-minute chunk to ask ${
+            Number(questionsPerChunkArg) || sortedChunks[0]?.qaPairs?.length || 2
+          } questions.`
+        );
+      },
+    });
+
+    setStatus(
+      `In-video quiz started (${chunkQuizzes.length} chunk${chunkQuizzes.length !== 1 ? "s" : ""}, ${questionsPerChunk} question${questionsPerChunk !== 1 ? "s" : ""} each, ${chunkMinutes} minute${chunkMinutes !== 1 ? "s" : ""} per chunk).`,
+      "success"
+    );
+  } catch (error) {
+    setStatus(`Quiz setup failed: ${error.message}`, "error");
+  } finally {
+    setBusy(quizBtn, "Preparing quiz…", false);
+  }
+}
+
 async function ingestVideoToGraph() {
   setBusy(ingestBtn, "Extracting topics…", true);
   ingestResultCardEl.classList.add("hidden");
@@ -446,6 +785,7 @@ async function ingestVideoToGraph() {
 saveBtn.addEventListener("click", saveSettings);
 captureBtn.addEventListener("click", addMaterial);
 ingestBtn.addEventListener("click", ingestVideoToGraph);
+quizBtn.addEventListener("click", startInVideoQuiz);
 refreshProjectsBtn.addEventListener("click", async () => {
   setStatus("Refreshing projects...", "info");
   await loadProjects(projectSelectEl.value || "");
@@ -456,6 +796,14 @@ backendUrlEl.addEventListener("change", async () => {
 });
 createdByEl.addEventListener("change", async () => {
   await chrome.storage.sync.set({ createdBy: createdByEl.value.trim() });
+});
+quizChunkMinutesEl.addEventListener("change", async () => {
+  const { chunkMinutes } = getQuizSettings();
+  await chrome.storage.sync.set({ quizChunkMinutes: chunkMinutes });
+});
+quizQuestionsPerChunkEl.addEventListener("change", async () => {
+  const { questionsPerChunk } = getQuizSettings();
+  await chrome.storage.sync.set({ quizQuestionsPerChunk: questionsPerChunk });
 });
 projectSelectEl.addEventListener("change", async () => {
   if (projectSelectEl.value === CREATE_PROJECT_OPTION) {

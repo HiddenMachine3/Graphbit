@@ -26,6 +26,16 @@
 
       <button id="captureBtn" class="btn btn-primary" type="button">Add Current Page as Material</button>
       <button id="ingestBtn" class="btn btn-youtube hidden" type="button">Add to Graph</button>
+      <button id="quizBtn" class="btn btn-secondary hidden" type="button">Start In-Video Quiz</button>
+
+      <section id="quizSettingsCard" class="card hidden">
+        <p class="meta-title">Quiz Settings</p>
+        <label for="quizChunkMinutes">Chunk Size (minutes)</label>
+        <input id="quizChunkMinutes" type="number" min="1" max="120" step="1" value="25" />
+
+        <label for="quizQuestionsPerChunk">Questions per Chunk</label>
+        <input id="quizQuestionsPerChunk" type="number" min="1" max="10" step="1" value="2" />
+      </section>
 
       <section id="ingestResultCard" class="card subtle hidden" aria-live="polite">
         <p class="meta-title">Topics Extracted</p>
