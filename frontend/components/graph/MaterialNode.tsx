@@ -22,6 +22,8 @@ type MaterialNodeProps = {
 export default function MaterialNode({ data, selected }: MaterialNodeProps) {
   const hasYoutubeVideo = Boolean(data.youtubeEmbedUrl);
   const hasReadableMaterial = Boolean(data.materialId && data.onOpenRead);
+  const thumbnailUrl = data.youtubeThumbnailUrl || null;
+  const hasSourceLink = Boolean(data.onOpenSource && data.sourceUrl);
 
   return (
     <div
@@ -33,6 +35,30 @@ export default function MaterialNode({ data, selected }: MaterialNodeProps) {
         borderColor: "rgba(255, 255, 255, 0.15)",
       }}
     >
+      {thumbnailUrl && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (hasYoutubeVideo) {
+              data.onOpenVideo?.();
+              return;
+            }
+            data.onOpenSource?.();
+          }}
+          className="absolute bottom-full left-1/2 z-20 mb-2 hidden w-32 -translate-x-1/2 overflow-hidden rounded-md border border-border-default bg-bg-surface shadow-lg group-hover:block"
+          title={hasYoutubeVideo ? "Open linked YouTube video" : "Open source link"}
+          disabled={!hasYoutubeVideo && !hasSourceLink}
+        >
+          <img
+            src={thumbnailUrl}
+            alt="Material thumbnail preview"
+            className="h-20 w-full object-cover"
+            loading="lazy"
+          />
+        </button>
+      )}
       {selected && (
         <div className="absolute left-1/2 top-full z-20 mt-2 flex -translate-x-1/2 items-center gap-1">
           <button
