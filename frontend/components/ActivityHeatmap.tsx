@@ -10,24 +10,24 @@ interface ActivityData {
 interface ActivityHeatmapProps {
   data?: ActivityData[];
   className?: string;
-  accuracy?: number | null;
   nodesCount?: number | null;
   edgesCount?: number | null;
   streak?: number | null;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export default function ActivityHeatmap({
   data = [],
   className = "",
-  accuracy = null,
-  nodesCount = null,
-  edgesCount = null,
   streak = null,
+  collapsed = false,
+  onToggleCollapse,
 }: ActivityHeatmapProps) {
   const heatmapData = useMemo(() => {
     const today = new Date();
     const startDate = new Date(today);
-    startDate.setFullYear(startDate.getFullYear() - 1);
+    startDate.setMonth(startDate.getMonth() - 3);
 
     const days: Array<{ date: string; count: number; day: number; week: number }> = [];
     const currentDate = new Date(startDate);
@@ -61,7 +61,15 @@ export default function ActivityHeatmap({
     return "bg-accent";
   };
 
-  const weeks = Array.from({ length: 53 }, (_, i) => i);
+  const totalWeeks = useMemo(() => {
+    if (heatmapData.length === 0) {
+      return 1;
+    }
+    const maxWeek = Math.max(...heatmapData.map((d) => d.week));
+    return maxWeek + 1;
+  }, [heatmapData]);
+
+  const weeks = Array.from({ length: totalWeeks }, (_, i) => i);
   const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const currentStreak = useMemo(() => {
@@ -81,7 +89,7 @@ export default function ActivityHeatmap({
 
   return (
     <div className={`rounded-lg border border-border-default bg-bg-surface p-3 ${className}`}>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <h3 className="flex items-center space-x-2 text-sm font-medium font-heading text-text-primary">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
@@ -93,86 +101,62 @@ export default function ActivityHeatmap({
           </svg>
           <span>Recall Activity</span>
         </h3>
-        <div className="flex items-center space-x-4 text-xs font-body text-text-muted">
-          <span>Less</span>
-          <div className="flex space-x-1">
-            <div className="h-3 w-3 rounded-sm bg-bg-elevated"></div>
-            <div className="h-3 w-3 rounded-sm bg-accent-dim"></div>
-            <div className="h-3 w-3 rounded-sm bg-accent/60"></div>
-            <div className="h-3 w-3 rounded-sm bg-accent/80"></div>
-            <div className="h-3 w-3 rounded-sm bg-accent"></div>
-          </div>
-          <span>More</span>
-          <span className="text-text-secondary">Last 12 Months</span>
+        <div className="flex items-center gap-3 text-xs font-body text-text-muted">
+          <span className="text-text-secondary">Last 3 Months</span>
+          {onToggleCollapse && (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label={collapsed ? "Expand recall activity panel" : "Collapse recall activity panel"}
+              title={collapsed ? "Expand recall activity panel" : "Collapse recall activity panel"}
+              className="text-sm font-semibold text-text-secondary hover:text-text-primary"
+            >
+              {collapsed ? "^" : "v"}
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-[28px_1fr] gap-2">
-        <div className="flex flex-col space-y-1 text-xs font-body text-text-muted">
-          {daysOfWeek.map((day) => (
-            <div key={day} className="flex h-3 items-center leading-3">
-              {day}
+      {!collapsed && (
+        <>
+          <div className="mb-4 grid grid-cols-[28px_1fr] gap-2">
+            <div className="flex flex-col space-y-1 text-xs font-body text-text-muted">
+              {daysOfWeek.map((day) => (
+                <div key={day} className="flex h-3 items-center leading-3">
+                  {day}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div className="flex space-x-1">
-          {weeks.map((weekIndex) => (
-            <div key={weekIndex} className="flex flex-col space-y-1">
-              {Array.from({ length: 7 }, (_, dayIndex) => {
-                const dayData = heatmapData.find(
-                  (d) => d.week === weekIndex && d.day === dayIndex
-                );
-                return (
-                  <div
-                    key={`${weekIndex}-${dayIndex}`}
-                    className={`h-3 w-3 rounded-sm transition-colors hover:ring-1 hover:ring-border-accent ${
-                      dayData ? getIntensityClass(dayData.count) : "bg-bg-elevated"
-                    }`}
-                    title={
-                      dayData ? `${dayData.date}: ${dayData.count} sessions` : ""
-                    }
-                  ></div>
-                );
-              })}
+            <div className="flex space-x-1">
+              {weeks.map((weekIndex) => (
+                <div key={weekIndex} className="flex flex-col space-y-1">
+                  {Array.from({ length: 7 }, (_, dayIndex) => {
+                    const dayData = heatmapData.find(
+                      (d) => d.week === weekIndex && d.day === dayIndex
+                    );
+                    return (
+                      <div
+                        key={`${weekIndex}-${dayIndex}`}
+                        className={`h-3 w-3 rounded-sm transition-colors hover:ring-1 hover:ring-border-accent ${
+                          dayData ? getIntensityClass(dayData.count) : "bg-bg-elevated"
+                        }`}
+                        title={
+                          dayData ? `${dayData.date}: ${dayData.count} sessions` : ""
+                        }
+                      ></div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between text-sm">
-        <div>
-          <span className="font-medium font-body text-text-primary">Current Streak</span>
-          <div className="flex items-center space-x-1">
-            <span className="text-2xl font-bold font-heading text-accent">{currentStreak}</span>
-            <span className="font-body text-text-muted">Days</span>
           </div>
-        </div>
-        <div className="text-right">
-          <div className="font-body text-text-muted">Accuracy</div>
-          <div className="text-2xl font-bold font-heading text-pkr-high">
-            {accuracy === null || accuracy === undefined ? "—" : `${Math.round(accuracy * 100)}%`}
-          </div>
-        </div>
-      </div>
 
-      <div className="mt-3 rounded-lg bg-bg-elevated p-3">
-        <div className="flex items-center space-x-2 text-sm">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-accent"></div>
-          <span className="font-medium font-body text-accent">LIVE SYNC</span>
-        </div>
-        <div className="mt-1 text-xs font-body text-text-secondary">
-          Visualizing{" "}
-          <span className="font-medium">
-            {nodesCount === null || nodesCount === undefined ? "—" : nodesCount}
-          </span>{" "}
-          nodes and{" "}
-          <span className="font-medium">
-            {edgesCount === null || edgesCount === undefined ? "—" : edgesCount}
-          </span>{" "}
-          connections.
-        </div>
-      </div>
+          <div className="text-sm font-medium font-body text-text-primary">
+            Current streak: <span className="text-accent">{currentStreak}</span> days
+          </div>
+        </>
+      )}
     </div>
   );
 }

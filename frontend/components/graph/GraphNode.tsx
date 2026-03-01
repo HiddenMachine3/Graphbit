@@ -121,7 +121,6 @@ export default function GraphNode({ data, selected }: GraphNodeProps) {
       }}
     >
       <div className="px-2 text-xs font-semibold font-heading text-white">{data.topic_name}</div>
-      <div className="mt-1 text-xs font-normal font-body text-text-secondary">{brightnessAttribute.replace(/_/g, ' ')} {brightnessValue.toFixed(2)}</div>
       {handles}
     </div>
   );

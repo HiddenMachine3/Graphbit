@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   QuestionDTO,
@@ -21,7 +21,15 @@ import SessionProgress from "./SessionProgress";
 import { useAppStore } from "../../lib/store";
 import SharedQuestionAnswerPanel from "../quiz/SharedQuestionAnswerPanel";
 
-export default function SessionContainer() {
+type SessionContainerProps = {
+  autoStart?: boolean;
+  hideStartButton?: boolean;
+};
+
+export default function SessionContainer({
+  autoStart = false,
+  hideStartButton = false,
+}: SessionContainerProps) {
   const [session, setSession] = useState<RevisionSessionDTO | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<QuestionDTO | null>(null);
   const [answer, setAnswer] = useState("");
@@ -31,6 +39,8 @@ export default function SessionContainer() {
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
+  const autoStartAttemptedRef = useRef(false);
+  const isEmbeddedMode = hideStartButton;
 
   const handleStartSession = useCallback(async () => {
     setLoading(true);
@@ -151,6 +161,15 @@ export default function SessionContainer() {
   );
 
   useEffect(() => {
+    if (!autoStart || autoStartAttemptedRef.current || session || loading) {
+      return;
+    }
+
+    autoStartAttemptedRef.current = true;
+    void handleStartSession();
+  }, [autoStart, handleStartSession, loading, session]);
+
+  useEffect(() => {
     if (!feedback || !currentQuestion || currentQuestion.question_type !== "OPEN") {
       return;
     }
@@ -172,25 +191,35 @@ export default function SessionContainer() {
     return <Loading />;
   }
 
+  const showFixedSubmitBar =
+    isEmbeddedMode &&
+    Boolean(session) &&
+    Boolean(currentQuestion) &&
+    !feedback &&
+    currentQuestion?.question_type !== "FLASHCARD";
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_18px_45px_rgba(69,13,30,0.35)] backdrop-blur">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold font-heading text-text-primary">Revision Session</h1>
-            <p className="text-sm font-body text-text-secondary">
-              Adaptive recall guided by your knowledge graph
-            </p>
+    <div className={`flex flex-col gap-6 ${isEmbeddedMode ? "h-full min-h-0" : ""}`}>
+      <div className={isEmbeddedMode ? "min-h-0 flex-1 overflow-y-auto pr-1" : ""}>
+      {!hideStartButton && (
+        <div className="rounded-2xl border border-border-default bg-bg-surface p-5 shadow-[0_18px_45px_rgba(69,13,30,0.35)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold font-heading text-text-primary">Revision Session</h1>
+              <p className="text-sm font-body text-text-secondary">
+                Adaptive recall guided by your knowledge graph
+              </p>
+            </div>
+            <button
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
+              onClick={handleStartSession}
+              disabled={loading}
+            >
+              {session ? "Restart Session" : "Start Session"}
+            </button>
           </div>
-          <button
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
-            onClick={handleStartSession}
-            disabled={loading}
-          >
-            {session ? "Restart Session" : "Start Session"}
-          </button>
         </div>
-      </div>
+      )}
 
       <SessionProgress
         answeredCount={answeredCount}
@@ -261,7 +290,7 @@ export default function SessionContainer() {
                 }}
               />
             )}
-            {!feedback && (
+            {!feedback && !isEmbeddedMode && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {currentQuestion.question_type !== "FLASHCARD" ? (
                   <>
@@ -319,6 +348,28 @@ export default function SessionContainer() {
               disabled={loading}
             />
           )}
+        </div>
+      )}
+      </div>
+
+      {showFixedSubmitBar && (
+        <div className="border-t border-border-default bg-bg-surface p-4">
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
+              onClick={handleSubmitAnswer}
+              disabled={loading || !answer.trim()}
+            >
+              Submit Answer
+            </button>
+            <button
+              className="rounded-lg border border-border-default px-4 py-2 text-sm font-body text-text-primary transition hover:border-border-accent disabled:opacity-60"
+              onClick={handleIDontKnow}
+              disabled={loading}
+            >
+              I don't know
+            </button>
+          </div>
         </div>
       )}
     </div>

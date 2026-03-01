@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Play, Search } from "lucide-react";
-import Link from "next/link";
+import { Search } from "lucide-react";
 import ActiveCommunityBadge from "./communities/ActiveCommunityBadge";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { getCurrentUser } from "../lib/api/user";
@@ -119,7 +118,7 @@ export default function Topbar() {
   }, []);
 
   return (
-    <header className="border-b border-border-default bg-bg-surface px-4 py-4">
+    <header className="border-b border-border-default bg-bg-surface/85 backdrop-blur-md px-4 py-4">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex items-center gap-3">
@@ -140,11 +139,9 @@ export default function Topbar() {
               <div className="text-xl font-bold font-heading text-text-primary">Graphbit</div>
             </div>
           </div>
-          
-          {/* Project Switcher */}
-          <div className="flex items-center gap-3">
+
+          <div className="ml-auto">
             <ProjectSwitcher />
-            <ActiveCommunityBadge />
           </div>
         </div>
 
@@ -243,42 +240,36 @@ export default function Topbar() {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3">
-          <nav className="flex flex-wrap items-center gap-1">
-            <a href="/" className={linkClass("/")}>
-              Dashboard
-            </a>
-            <a href="/projects" className={linkClass("/projects")}>
-              Projects
-            </a>
-            <a href="/graph" className={linkClass("/graph")}>
-              Graph
-            </a>
-          </nav>
-          <Link href="/session">
-            <button className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover">
-              <Play className="h-4 w-4 fill-white" />
-              <span className="hidden sm:inline">Start Session</span>
+        <div className="flex items-center justify-between gap-3">
+          <ActiveCommunityBadge />
+          <div className="flex items-center justify-end gap-3">
+            <nav className="flex flex-wrap items-center gap-1">
+              <a href="/" className={linkClass("/")}>
+                Dashboard
+              </a>
+              <a href="/projects" className={linkClass("/projects")}>
+                Projects
+              </a>
+            </nav>
+            <button className="flex items-center gap-2 rounded-full border border-border-default bg-bg-elevated px-2 py-1 text-sm font-body text-text-secondary transition hover:border-border-accent">
+                <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-bg-hover">
+                {currentUser?.avatar_url ? (
+                  <img
+                    src={currentUser.avatar_url}
+                    alt="User avatar"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                    <span className="text-xs font-semibold font-body text-text-secondary">
+                    {(currentUser?.name ?? currentUser?.username ?? "U").slice(0, 1)}
+                  </span>
+                )}
+              </div>
+              <span className="hidden max-w-[140px] truncate sm:inline">
+                {currentUser?.name ?? currentUser?.username ?? "User"}
+              </span>
             </button>
-          </Link>
-          <button className="flex items-center gap-2 rounded-full border border-border-default bg-bg-elevated px-2 py-1 text-sm font-body text-text-secondary transition hover:border-border-accent">
-              <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-bg-hover">
-              {currentUser?.avatar_url ? (
-                <img
-                  src={currentUser.avatar_url}
-                  alt="User avatar"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                  <span className="text-xs font-semibold font-body text-text-secondary">
-                  {(currentUser?.name ?? currentUser?.username ?? "U").slice(0, 1)}
-                </span>
-              )}
-            </div>
-            <span className="hidden max-w-[140px] truncate sm:inline">
-              {currentUser?.name ?? currentUser?.username ?? "User"}
-            </span>
-          </button>
+          </div>
         </div>
       </div>
     </header>

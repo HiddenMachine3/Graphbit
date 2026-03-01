@@ -35,6 +35,7 @@ export type KnowledgeGraphViewProps = {
   highlightedNodeIds?: string[];
   brightnessAttribute?: keyof GraphNodeDTO;
   onGraphUpdated?: () => void;
+  fitTrigger?: number;
 };
 
 const nodeTypes = { graphNode: GraphNode, materialNode: MaterialNode };
@@ -72,6 +73,7 @@ export default function KnowledgeGraphView({
   highlightedNodeIds,
   brightnessAttribute = "proven_knowledge_rating",
   onGraphUpdated,
+  fitTrigger,
 }: KnowledgeGraphViewProps) {
   const baseNodes = useMemo(
     () => buildFlowNodes(nodes, brightnessAttribute),
@@ -362,6 +364,7 @@ export default function KnowledgeGraphView({
           onEdgesChange={onFlowEdgesChange}
           onConnect={onConnect}
           onSelectNode={onSelectNode}
+          fitTrigger={fitTrigger}
         />
       </ReactFlowProvider>
     </div>
@@ -375,6 +378,7 @@ type GraphFlowCanvasProps = {
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
   onSelectNode: (nodeId: string) => void;
+  fitTrigger?: number;
 };
 
 function GraphFlowCanvas({
@@ -384,6 +388,7 @@ function GraphFlowCanvas({
   onEdgesChange,
   onConnect,
   onSelectNode,
+  fitTrigger,
 }: GraphFlowCanvasProps) {
   const { fitView } = useReactFlow();
   const fitTimeoutRef = useRef<number | null>(null);
@@ -428,6 +433,14 @@ function GraphFlowCanvas({
     };
   }, [nodes.length, fitView]);
 
+  useEffect(() => {
+    if (nodes.length === 0) {
+      return;
+    }
+
+    fitView({ padding: 0.2, duration: 250 });
+  }, [fitTrigger, nodes.length, fitView]);
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -440,8 +453,8 @@ function GraphFlowCanvas({
       onNodeClick={(_, node) => onSelectNode(node.id)}
       fitView
     >
-      <MiniMap />
-      <Controls />
+      <MiniMap position="top-left" pannable zoomable />
+      <Controls position="top-left" style={{ marginTop: 8, marginLeft: 8 }} />
     </ReactFlow>
   );
 }
