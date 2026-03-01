@@ -605,13 +605,13 @@ async def seed_database(reset_db: bool = False):
     print("✅ Database seeding complete!")
     print("="*60)
     print(f"\nCreated:")
-    print(f"  • 1 user: {user.name}")
+    print(f"  • 1 user: {user['name']}")
     print(f"  • {len(projects)} projects:")
     for p in projects:
-        data = project_data[p.id]
-        print(f"    - {p.name}: {len(data['nodes'])} nodes, {len(data['questions'])} questions")
-    print(f"  • 1 community: {community.name}")
-    print(f"    - Attached to {len(community.project_ids)} projects")
+        data = project_data[p["id"]]
+        print(f"    - {p['name']}: {len(data['nodes'])} nodes, {len(data['questions'])} questions")
+    print(f"  • 1 community: {community_name}")
+    print(f"    - Attached to {len(community_project_ids)} projects")
     print(f"\nYour API is ready at: http://localhost:8000/api/v1")
     print(f"Frontend is ready at: http://localhost:3000")
 
