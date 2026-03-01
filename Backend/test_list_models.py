@@ -1,6 +1,12 @@
 import requests
+from pathlib import Path
+from dotenv import load_dotenv
+import os
 
-api_key = "AIzaSyAQ7yVqtUaCPCBkB7bneZsa-umD9oO6IWI"
+load_dotenv(Path(__file__).resolve().parent / ".env")
+api_key = os.getenv("GEMINI_API_KEY")
+if not api_key:
+    raise RuntimeError("GEMINI_API_KEY is required in Backend/.env")
 url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
 
 print("Listing models...")

@@ -110,7 +110,7 @@ def test_postgres_suggestions_endpoint(monkeypatch):
         def token_classification(self, text, model=None):
             return [{"word": "graph"}]
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,
@@ -225,7 +225,7 @@ def test_postgres_question_raw_text_suggestions_endpoint(monkeypatch):
         def token_classification(self, text, model=None):
             return [{"word": "graph"}, {"word": "search"}]
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,

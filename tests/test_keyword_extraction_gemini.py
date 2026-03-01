@@ -35,8 +35,14 @@ def test_gemini_keyword_extraction(monkeypatch):
     monkeypatch.setattr("requests.post", fake_post)
 
     service = KeywordExtractionService(client=None)
-    # Call the Gemini helper directly with a test API key
-    phrases = service._extract_with_gemini("This text mentions Graph Theory and Algorithms.", api_key="test-key")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        pytest.skip("GEMINI_API_KEY not set in Backend/.env")
+
+    phrases = service._extract_with_gemini(
+        "This text mentions Graph Theory and Algorithms.",
+        api_key=api_key,
+    )
 
     assert isinstance(phrases, list)
     assert len(phrases) >= 1

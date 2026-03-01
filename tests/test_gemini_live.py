@@ -7,16 +7,19 @@ Calls the real Gemini API — no mocks, no dummy data.
 
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
 # Ensure the backend package is importable
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
+project_root = Path(__file__).resolve().parent.parent
+backend_dir = project_root / "Backend"
+sys.path.insert(0, str(backend_dir))
 
 from dotenv import load_dotenv
 
 # Load backend/.env so GEMINI_API_KEY is available
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", "backend", ".env"))
+load_dotenv(backend_dir / ".env")
 
 from app.services.node_suggestions.keyword_extraction_service import KeywordExtractionService
 

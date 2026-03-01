@@ -1,5 +1,7 @@
 """API tests for material CRUD."""
 
+import os
+
 from youtube_transcript_api import YouTubeTranscriptApi
 
 
@@ -745,7 +747,7 @@ def test_material_suggestions_endpoint_returns_candidates(api_client, monkeypatc
         def token_classification(self, text, model=None):
             return [{"word": "graph"}]
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,
@@ -801,7 +803,7 @@ def test_material_suggestions_missing_project_id(api_client, monkeypatch):
         def token_classification(self, text, model=None):
             return [{"word": "graph"}]
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,
@@ -886,7 +888,7 @@ def test_material_suggestions_endpoint_existing_nodes(api_client, monkeypatch):
         async def max_similarity_to_nodes(self, project_id: str, candidate_embedding: list[float]) -> float:
             return 0.1
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,
@@ -972,7 +974,7 @@ def test_material_suggestions_raw_text_returns_candidates(api_client, monkeypatc
         async def max_similarity_to_nodes(self, project_id: str, candidate_embedding: list[float]) -> float:
             return 0.1
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,
@@ -1072,7 +1074,7 @@ def test_material_suggestions_wrapper_matches_raw_text(api_client, monkeypatch):
         async def max_similarity_to_nodes(self, project_id: str, candidate_embedding: list[float]) -> float:
             return 0.1
 
-    monkeypatch.setenv("HF_TOKEN", "test-token")
+    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
     monkeypatch.setattr(
         "huggingface_hub.InferenceClient",
         FakeInferenceClient,

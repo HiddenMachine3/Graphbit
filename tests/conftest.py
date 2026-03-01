@@ -36,7 +36,10 @@ backend_env_values = _load_backend_env_values(backend_dir / ".env")
 # Provide required settings for test imports (PostgreSQL only)
 os.environ.setdefault("CELERY_BROKER_URL", backend_env_values.get("CELERY_BROKER_URL", "redis://localhost:6379/0"))
 os.environ.setdefault("CELERY_RESULT_BACKEND", backend_env_values.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"))
-os.environ.setdefault("SECRET_KEY", backend_env_values.get("SECRET_KEY", "test-secret"))
+secret_key = os.environ.get("SECRET_KEY") or backend_env_values.get("SECRET_KEY")
+if not secret_key:
+    raise RuntimeError("SECRET_KEY is required in Backend/.env")
+os.environ["SECRET_KEY"] = secret_key
 
 database_url = os.environ.get("DATABASE_URL") or backend_env_values.get("DATABASE_URL")
 if not database_url:
