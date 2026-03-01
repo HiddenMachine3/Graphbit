@@ -35,7 +35,10 @@ class Settings(BaseSettings):
     HF_TOKEN: str | None = None
     HF_EMBED_MODEL: str = "BAAI/bge-base-en-v1.5"
     HF_KEYPHRASE_MODEL: str = "dslim/bert-base-NER"
-    HF_QA_SPACE_API_URL: str = "https://hiddenmachine-qaendpoint.hf.space/gradio_api/call/generate_qa"
+
+    # Gemini
+    GEMINI_API_KEY: str | None = None
+    GEMINI_QA_MODEL: str = "gemini-2.5-flash"
 
     # Suggestion pipeline defaults
     SUGGESTION_THRESHOLD: float = 0.75
