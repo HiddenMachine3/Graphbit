@@ -3,11 +3,39 @@ import type { QuestionDTO } from "../types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
+export type GeneratedQAQuestionType = "open" | "mcq";
+
+export type GeneratedOpenQAPair = {
+  question_type: "open";
+  question: string;
+  answer: string;
+};
+
+export type GeneratedMcqQAPair = {
+  question_type: "mcq";
+  question: string;
+  options: string[];
+  answer: string;
+};
+
+export type GeneratedOpenQAResponse = {
+  question_type: "open";
+  qa_pairs: GeneratedOpenQAPair[];
+};
+
+export type GeneratedMcqQAResponse = {
+  question_type: "mcq";
+  qa_pairs: GeneratedMcqQAPair[];
+};
+
+export type GeneratedQAResponse = GeneratedOpenQAResponse | GeneratedMcqQAResponse;
+
 export async function generateQuestionsFromText(payload: {
   text: string;
   n: number;
-}): Promise<{ qa_pairs: Array<{ question: string; answer: string }> }> {
-  return apiFetch<{ qa_pairs: Array<{ question: string; answer: string }> }>(
+  question_type?: GeneratedQAQuestionType;
+}): Promise<GeneratedQAResponse> {
+  return apiFetch<GeneratedQAResponse>(
     "/qa/generate",
     {
       method: "POST",

@@ -8,6 +8,8 @@ import { fetchMaterial } from "@/lib/api/material";
 import {
   createQuestion,
   generateQuestionsFromText,
+  type GeneratedMcqQAPair,
+  type GeneratedOpenQAPair,
   replaceQuestionNodes,
   suggestQuestionNodesByText,
 } from "@/lib/api/question";
@@ -111,6 +113,34 @@ const toDraftQuestion = (question: string, answer: string, index: number): Draft
   strongSuggestions: [],
   weakSuggestions: [],
 });
+
+const toDraftQuestionFromOpen = (item: GeneratedOpenQAPair, index: number): DraftQuestion =>
+  toDraftQuestion(item.question ?? "", item.answer ?? "", index);
+
+const toDraftQuestionFromMcq = (item: GeneratedMcqQAPair, index: number): DraftQuestion => {
+  const question = String(item.question ?? "").trim();
+  const normalizedOptions = Array.isArray(item.options)
+    ? item.options.map((option) => String(option ?? "").trim()).filter(Boolean)
+    : [];
+  const answer = String(item.answer ?? "").trim();
+  const optionsWithAnswer =
+    answer && !normalizedOptions.some((option) => option.toLowerCase() === answer.toLowerCase())
+      ? [...normalizedOptions, answer]
+      : normalizedOptions;
+  const options = [...optionsWithAnswer];
+  while (options.length < 4) {
+    options.push("");
+  }
+  const correctIndex = options.findIndex((option) => option.toLowerCase() === answer.toLowerCase());
+
+  return {
+    ...toDraftQuestion(question, answer || options[0] || "", index),
+    question_type: "MCQ",
+    options,
+    correctOptionIndex: correctIndex >= 0 ? correctIndex : 0,
+    answer: answer || options[0] || "",
+  };
+};
 
 const topNewSuggestionTitles = (weak: SuggestionItem[]) => {
   const newCandidates = weak
@@ -225,11 +255,13 @@ export default function GenerateQuestionsModal({
       const response = await generateQuestionsFromText({
         text: sourceText,
         n: nextCount,
+        question_type: "mcq",
       });
 
-      const drafts = (response.qa_pairs ?? []).map((item, index) =>
-        toDraftQuestion(item.question ?? "", item.answer ?? "", index)
-      );
+      const drafts =
+        response.question_type === "mcq"
+          ? (response.qa_pairs ?? []).map((item, index) => toDraftQuestionFromMcq(item, index))
+          : (response.qa_pairs ?? []).map((item, index) => toDraftQuestionFromOpen(item, index));
       setDraftQuestions(drafts);
       setHasGeneratedOnce(true);
     } catch (error) {

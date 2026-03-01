@@ -557,6 +557,7 @@ async function generateQuizQuestionsForChunks(backendUrl, chunks, questionsPerCh
       body: JSON.stringify({
         text: chunk.text,
         n: questionsPerChunk,
+        question_type: "flashcard",
       }),
     });
 
@@ -603,7 +604,9 @@ async function startInVideoQuiz() {
     }
 
     const backendUrl = normalizeApiBase(backendUrlEl.value);
+    const frontendUrl = (frontendUrlEl.value || "").trim().replace(/\/+$/, "") || DEFAULT_FRONTEND;
     backendUrlEl.value = backendUrl;
+    frontendUrlEl.value = frontendUrl;
 
     setStatus("Fetching transcript…", "info");
     const transcriptResponse = await fetch(`${backendUrl}/materials/youtube/transcript-check`, {
@@ -639,8 +642,8 @@ async function startInVideoQuiz() {
 
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      args: [chunkQuizzes, chunkMinutes, questionsPerChunk],
-      func: (chunkQuizzesArg, chunkMinutesArg, questionsPerChunkArg) => {
+      args: [chunkQuizzes, chunkMinutes, questionsPerChunk, frontendUrl],
+      func: (chunkQuizzesArg, chunkMinutesArg, questionsPerChunkArg, frontendUrlArg) => {
         const video = document.querySelector("video");
         if (!video) {
           throw new Error("Could not find a YouTube video player on the page.");
@@ -664,27 +667,119 @@ async function startInVideoQuiz() {
           nextChunkIndex += 1;
         }
 
-        const askChunkQuestions = (chunk, chunkIndex, totalChunks) => {
-          video.pause();
-          alert(`Quiz time (${chunkIndex + 1}/${totalChunks})!`);
-
-          const qaPairs = Array.isArray(chunk.qaPairs) ? chunk.qaPairs : [];
-          for (let i = 0; i < qaPairs.length; i += 1) {
-            const pair = qaPairs[i] || {};
-            const question = String(pair.question || "").trim();
-            if (!question) continue;
-
-            prompt(`Q${i + 1}: ${question}\n\nType your answer and press OK.`);
-            const expectedAnswer = String(pair.answer || "").trim();
-            if (expectedAnswer) {
-              alert(`Expected answer:\n${expectedAnswer}`);
+        const openFrontendQuizForChunk = (chunk, chunkIndex, totalChunks) =>
+          new Promise((resolve, reject) => {
+            const frontendBase = String(frontendUrlArg || "").replace(/\/+$/, "");
+            if (!frontendBase) {
+              reject(new Error("Frontend URL is not configured."));
+              return;
             }
-          }
 
-          video.play().catch(() => {});
+            const existingOverlay = document.getElementById("graphbit-extension-quiz-overlay");
+            if (existingOverlay) {
+              existingOverlay.remove();
+            }
+
+            const overlay = document.createElement("div");
+            overlay.id = "graphbit-extension-quiz-overlay";
+            overlay.style.position = "fixed";
+            overlay.style.zIndex = "2147483647";
+            overlay.style.pointerEvents = "auto";
+
+            const frame = document.createElement("iframe");
+            frame.src = `${frontendBase}/extension-quiz?embedded=1`;
+            frame.style.width = "100%";
+            frame.style.height = "100%";
+            frame.style.border = "0";
+            frame.style.borderRadius = "14px";
+            frame.style.background = "transparent";
+
+            overlay.appendChild(frame);
+            document.body.appendChild(overlay);
+
+            const positionOverlay = () => {
+              const rect = video.getBoundingClientRect();
+              const width = Math.max(360, Math.min(560, Math.floor(rect.width * 0.5)));
+              const height = Math.max(300, Math.min(520, Math.floor(rect.height * 0.7)));
+              const left = Math.max(16, Math.floor(rect.right - width - 16));
+              const top = Math.max(16, Math.floor(rect.top + 16));
+
+              overlay.style.left = `${left}px`;
+              overlay.style.top = `${top}px`;
+              overlay.style.width = `${width}px`;
+              overlay.style.height = `${height}px`;
+            };
+
+            positionOverlay();
+            window.addEventListener("resize", positionOverlay);
+            window.addEventListener("scroll", positionOverlay, true);
+
+            const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            const message = {
+              type: "GRAPHBIT_QUIZ_INIT",
+              token,
+              chunkIndex,
+              totalChunks,
+              qaPairs: Array.isArray(chunk?.qaPairs) ? chunk.qaPairs : [],
+            };
+
+            const cleanup = () => {
+              window.removeEventListener("message", onMessage);
+              window.removeEventListener("resize", positionOverlay);
+              window.removeEventListener("scroll", positionOverlay, true);
+              clearInterval(sendTimer);
+              clearTimeout(handshakeTimeout);
+              if (overlay.parentElement) {
+                overlay.parentElement.removeChild(overlay);
+              }
+            };
+
+            const onMessage = (event) => {
+              const data = event?.data || {};
+              if (data?.token !== token) {
+                return;
+              }
+              if (data.type === "GRAPHBIT_QUIZ_READY") {
+                try {
+                  frame.contentWindow?.postMessage(message, "*");
+                } catch {}
+                return;
+              }
+              if (data.type === "GRAPHBIT_QUIZ_DONE") {
+                cleanup();
+                resolve();
+              }
+            };
+
+            window.addEventListener("message", onMessage);
+
+            const sendTimer = setInterval(() => {
+              try {
+                frame.contentWindow?.postMessage(message, "*");
+              } catch {}
+            }, 300);
+
+            const handshakeTimeout = setTimeout(() => {
+              cleanup();
+              reject(new Error("Failed to initialize in-video quiz UI."));
+            }, 15000);
+          });
+
+        const askChunkQuestions = async (chunk, chunkIndex, totalChunks) => {
+          video.pause();
+          try {
+            await openFrontendQuizForChunk(chunk, chunkIndex, totalChunks);
+          } finally {
+            video.play().catch(() => {});
+          }
         };
 
+        let askingInProgress = false;
+
         const timerId = setInterval(() => {
+          if (askingInProgress) {
+            return;
+          }
           if (nextChunkIndex >= sortedChunks.length) {
             clearInterval(timerId);
             window.__graphbitQuizState = null;
@@ -694,8 +789,16 @@ async function startInVideoQuiz() {
           const chunk = sortedChunks[nextChunkIndex];
           const endSec = Number(chunk.endSec || 0);
           if (Number(video.currentTime || 0) >= endSec) {
-            askChunkQuestions(chunk, nextChunkIndex, sortedChunks.length);
+            askingInProgress = true;
+            const currentIndex = nextChunkIndex;
             nextChunkIndex += 1;
+            askChunkQuestions(chunk, currentIndex, sortedChunks.length)
+              .catch((error) => {
+                console.error("Graphbit quiz failed", error);
+              })
+              .finally(() => {
+                askingInProgress = false;
+              });
           }
         }, 1000);
 
@@ -704,12 +807,6 @@ async function startInVideoQuiz() {
           totalChunks: sortedChunks.length,
           startedAt: Date.now(),
         };
-
-        alert(
-          `Graphbit in-video quiz is active. The video will pause every ${chunkMinutesArg}-minute chunk to ask ${
-            Number(questionsPerChunkArg) || sortedChunks[0]?.qaPairs?.length || 2
-          } questions.`
-        );
       },
     });
 

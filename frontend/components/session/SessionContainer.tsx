@@ -19,7 +19,7 @@ import AnswerInput from "./AnswerInput";
 import FeedbackPanel from "./FeedbackPanel";
 import SessionProgress from "./SessionProgress";
 import { useAppStore } from "../../lib/store";
-import RichContent from "./RichContent";
+import SharedQuestionAnswerPanel from "../quiz/SharedQuestionAnswerPanel";
 
 export default function SessionContainer() {
   const [session, setSession] = useState<RevisionSessionDTO | null>(null);
@@ -30,7 +30,6 @@ export default function SessionContainer() {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [answeredCount, setAnsweredCount] = useState(0);
-  const [showFlashcardAnswer, setShowFlashcardAnswer] = useState(false);
   const currentProjectId = useAppStore((state) => state.currentProjectId);
 
   const handleStartSession = useCallback(async () => {
@@ -38,7 +37,6 @@ export default function SessionContainer() {
     setError(null);
     setFeedback(null);
     setAnswer("");
-    setShowFlashcardAnswer(false);
     setCompleted(false);
     try {
       if (!currentProjectId) {
@@ -90,7 +88,6 @@ export default function SessionContainer() {
     setError(null);
     setFeedback(null);
     setAnswer("");
-    setShowFlashcardAnswer(false);
     try {
       const next = await getNextQuestion(session.session_id);
       setCurrentQuestion(next);
@@ -248,23 +245,21 @@ export default function SessionContainer() {
               </>
             )}
             {currentQuestion.question_type === "FLASHCARD" && (
-              <>
-                {!showFlashcardAnswer && (
-                  <button
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold font-body text-white transition hover:bg-accent-hover disabled:opacity-60"
-                    onClick={() => setShowFlashcardAnswer(true)}
-                    disabled={loading}
-                  >
-                    Show answer
-                  </button>
-                )}
-                {showFlashcardAnswer && (
-                  <div className="mt-3 rounded-lg border border-border-default bg-bg-elevated p-4">
-                    <div className="label-caps text-text-muted">Answer</div>
-                    <RichContent content={currentQuestion.answer} className="mt-2" />
-                  </div>
-                )}
-              </>
+              <SharedQuestionAnswerPanel
+                pairs={[
+                  {
+                    question: currentQuestion.text,
+                    answer: currentQuestion.answer,
+                  },
+                ]}
+                title="FLASHCARD"
+                subtitle="Rate your recall after revealing the answer"
+                showPerformanceRating={!feedback}
+                disabled={loading || Boolean(feedback)}
+                onRatePerformance={(performance) => {
+                  void handleFlashcardPerformance(performance);
+                }}
+              />
             )}
             {!feedback && (
               <div className="mt-4 flex flex-wrap gap-2">
@@ -285,40 +280,7 @@ export default function SessionContainer() {
                       I don't know
                     </button>
                   </>
-                ) : (
-                  showFlashcardAnswer && (
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className="rounded-lg border border-rose-500/60 px-3 py-2 text-sm font-body text-rose-100 transition hover:border-rose-400 disabled:opacity-60"
-                        onClick={() => void handleFlashcardPerformance("bad")}
-                        disabled={loading}
-                      >
-                        Bad
-                      </button>
-                      <button
-                        className="rounded-lg border border-amber-500/60 px-3 py-2 text-sm font-body text-amber-100 transition hover:border-amber-400 disabled:opacity-60"
-                        onClick={() => void handleFlashcardPerformance("ok")}
-                        disabled={loading}
-                      >
-                        Ok
-                      </button>
-                      <button
-                        className="rounded-lg border border-emerald-500/60 px-3 py-2 text-sm font-body text-emerald-100 transition hover:border-emerald-400 disabled:opacity-60"
-                        onClick={() => void handleFlashcardPerformance("good")}
-                        disabled={loading}
-                      >
-                        Good
-                      </button>
-                      <button
-                        className="rounded-lg border border-blue-500/60 px-3 py-2 text-sm font-body text-blue-100 transition hover:border-blue-400 disabled:opacity-60"
-                        onClick={() => void handleFlashcardPerformance("great")}
-                        disabled={loading}
-                      >
-                        Great
-                      </button>
-                    </div>
-                  )
-                )}
+                ) : null}
               </div>
             )}
           </div>

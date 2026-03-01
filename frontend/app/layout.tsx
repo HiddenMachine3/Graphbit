@@ -3,8 +3,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Syne, DM_Sans } from "next/font/google";
 
-import Topbar from "../components/Topbar";
-import FABCluster from "../components/FABCluster";
+import AppChrome from "../components/AppChrome";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -37,11 +36,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-transparent overflow-hidden font-body">
-        <div className="flex h-screen flex-col">
-          <Topbar />
-          <main className="flex-1 overflow-auto">{children}</main>
-          <FABCluster />
-        </div>
+        <AppChrome>{children}</AppChrome>
       </body>
     </html>
   );
