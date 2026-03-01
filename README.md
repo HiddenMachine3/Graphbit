@@ -1,3 +1,85 @@
+# Graphbit Project Overview
+
+Graphbit is a full-stack learning platform centered on **knowledge graphs**, **study materials**, and **question generation**. The repository includes a Python backend API, a Next.js frontend, and a browser extension that can capture web content (including YouTube context) into the system.
+
+---
+
+## What Graphbit Is
+
+At a high level, Graphbit helps users:
+
+- organize learning content into projects/materials
+- represent knowledge as graph structures (nodes/relationships)
+- generate and practice questions from source material
+- track and review learning through session-oriented workflows
+
+---
+
+## Main Architecture
+
+Graphbit is split into three primary applications:
+
+1. **Backend API** (`Backend/`)
+2. **Frontend Web App** (`frontend/`)
+3. **Browser Extension** (`extension/`)
+
+### Backend (FastAPI)
+
+The backend is a FastAPI service that:
+
+- exposes versioned REST APIs under `/api/v1`
+- initializes database tables at startup
+- enables CORS for local frontend + browser-extension workflows
+- includes health and docs endpoints (`/health`, `/docs`)
+
+**Core backend stack (from requirements):**
+
+- FastAPI + Uvicorn
+- SQLAlchemy (async) + Psycopg
+- PostgreSQL + `pgvector`
+- Pydantic settings/config
+- JWT/password auth libraries (`python-jose`, `passlib`)
+
+### Frontend (Next.js)
+
+The frontend is a Next.js app (App Router) that provides the user-facing interface for Graphbit workflows.
+
+**Core frontend stack (from `frontend/package.json`):**
+
+- Next.js 14
+- React 18
+- TypeScript
+- Tailwind CSS
+- `reactflow` / `d3-force` for graph-oriented UI interactions
+
+### Browser Extension
+
+The extension supports quick ingestion of material from the active tab:
+
+- sends page content to backend as study material
+- supports YouTube-oriented capture/quiz flow
+- configurable backend URL and project selection from popup UI
+
+---
+
+## Repository Structure (High Level)
+
+- `Backend/` — API, domain logic, DB/session/models, backend docs, scripts
+- `frontend/` — Next.js UI and client-side app routes/components
+- `extension/` — browser extension for material ingestion and quiz trigger flows
+- `tests/` — API/integration tests at workspace root
+- `docs/` — phase summaries and implementation notes
+- `data/` — sample/importable data artifacts
+
+---
+
+## API and Service Endpoints
+
+- Backend root: `http://localhost:8000/`
+- Health: `http://localhost:8000/health`
+- OpenAPI/Swagger: `http://localhost:8000/docs`
+- Frontend local dev: typically `http://localhost:3000`
+
 # Graphbit Setup Instructions
 
 This guide will walk you through setting up the Graphbit development environment on your local machine.
@@ -6,7 +88,7 @@ This guide will walk you through setting up the Graphbit development environment
 
 ### 1. Docker
 
-Graphbit ships with a backend docker-compose stack that brings up the API and database together.
+Graphbit ships with a backend docker-compose stack that brings up the API and database together. (You can alternatively use a non-docker, local-only setup, whose setup steps are listed at the end)
 
 ---
 
@@ -193,4 +275,3 @@ powershell -ExecutionPolicy Bypass -File "Backend\scripts\stop_local_pgvector_db
 - Native Windows PostgreSQL + pgvector compilation requires MSVC build tools; Conda avoids this.
 - Graphbit local development does not require manual DB migration scripts; schema is initialized on backend startup, and data can be reset via `seed_data.py --reset`.
 </details>
-
