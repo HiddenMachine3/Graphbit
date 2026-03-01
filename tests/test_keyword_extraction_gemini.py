@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from app.services.node_suggestions.keyword_extraction_service import KeywordExtractionService
@@ -18,7 +16,7 @@ class DummyResp:
 
 def test_gemini_keyword_extraction(monkeypatch):
     # Mock requests.post to return generateContent-style response
-    def fake_post(url, json=None, timeout=None):
+    def fake_post(url, json=None, timeout=None, verify=None):
         payload = {
             "candidates": [
                 {
@@ -35,13 +33,9 @@ def test_gemini_keyword_extraction(monkeypatch):
     monkeypatch.setattr("requests.post", fake_post)
 
     service = KeywordExtractionService(client=None)
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        pytest.skip("GEMINI_API_KEY not set in Backend/.env")
-
     phrases = service._extract_with_gemini(
         "This text mentions Graph Theory and Algorithms.",
-        api_key=api_key,
+        api_key="test-key",
     )
 
     assert isinstance(phrases, list)

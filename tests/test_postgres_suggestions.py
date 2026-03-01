@@ -16,6 +16,41 @@ from app.db.session import get_db
 from app.models import Base, AppUser as AppUserModel, Project as ProjectModel, Node as NodeModel, Material as MaterialModel
 
 
+class _FakeGeminiResponse:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+def _fake_gemini_post(url, json=None, timeout=None, verify=None):
+    if ":embedContent" in url:
+        return _FakeGeminiResponse({"embedding": {"values": [0.1] * 768}})
+
+    if ":generateContent" in url:
+        return _FakeGeminiResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": '{"phrases": ["graph", "search"]}'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+    raise AssertionError(f"Unexpected Gemini endpoint: {url}")
+
+
 def test_postgres_suggestions_endpoint(monkeypatch):
     if sys.platform.startswith("win"):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -100,20 +135,14 @@ def test_postgres_suggestions_endpoint(monkeypatch):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "graph"}]
-
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
 
     try:
@@ -215,20 +244,14 @@ def test_postgres_question_raw_text_suggestions_endpoint(monkeypatch):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "graph"}, {"word": "search"}]
-
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
 
     try:

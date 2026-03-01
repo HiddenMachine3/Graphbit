@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 import pytest
+import requests
+
+pytestmark = pytest.mark.live
 
 # Ensure the backend package is importable
 project_root = Path(__file__).resolve().parent.parent
@@ -42,6 +45,9 @@ SAMPLE_TEXT = (
     "water, and carbon dioxide into glucose and oxygen. It occurs mainly in "
     "the chloroplasts of leaf cells and is essential for life on Earth."
 )
+
+
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 class TestGeminiLive:
@@ -93,4 +99,48 @@ class TestGeminiLive:
 
         assert result_bio != result_cs, (
             "Two completely different inputs produced identical output — API may not be working correctly"
+        )
+
+    def test_list_models_includes_embedding_capability(self, api_key):
+        """Verify Gemini models endpoint is reachable and has embedding-capable models."""
+        url = f"{GEMINI_API_BASE}?key={api_key}"
+        response = requests.get(url, timeout=20)
+        response.raise_for_status()
+
+        payload = response.json()
+        models = payload.get("models", [])
+        assert isinstance(models, list), "Expected 'models' to be a list"
+        assert len(models) > 0, "Expected at least one model from Gemini models endpoint"
+
+        embedding_capable = [
+            model
+            for model in models
+            if "embedContent" in model.get("supportedGenerationMethods", [])
+            or "embed" in model.get("name", "").lower()
+        ]
+        assert embedding_capable, "Expected at least one embedding-capable model"
+
+    def test_embedding_endpoint_smoke_for_known_models(self, api_key):
+        """Verify at least one known embedding model can embed text successfully."""
+        candidate_models = ["text-embedding-004", "embedding-001"]
+        successful_models: list[str] = []
+
+        for model in candidate_models:
+            url = f"{GEMINI_API_BASE}/{model}:embedContent?key={api_key}"
+            body = {
+                "model": f"models/{model}",
+                "content": {"parts": [{"text": "Hello world"}]},
+            }
+            response = requests.post(url, json=body, timeout=20)
+            if response.status_code == 200:
+                data = response.json()
+                values = data.get("embedding", {}).get("values", [])
+                assert isinstance(values, list) and len(values) > 0, (
+                    f"Expected non-empty embedding values for {model}, got: {data}"
+                )
+                successful_models.append(model)
+
+        assert successful_models, (
+            "None of the known embedding models returned success: "
+            f"{candidate_models}"
         )

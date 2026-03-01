@@ -136,7 +136,7 @@ Use `python seed_data.py --reset` to flush the current db, and start fresh with 
 ### 4. (Optional) Running the tests
 
 ```powershell
-python -m pytest tests/ -v --tb=short 2>&1 | Select-Object -Last 50
+python -m pytest -q
 ```
 
 

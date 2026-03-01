@@ -1,8 +1,42 @@
 """API tests for material CRUD."""
 
-import os
-
+import pytest
 from youtube_transcript_api import YouTubeTranscriptApi
+
+
+class _FakeGeminiResponse:
+    def __init__(self, payload: dict):
+        self._payload = payload
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._payload
+
+
+def _fake_gemini_post(url, json=None, timeout=None, verify=None):
+    if ":embedContent" in url:
+        return _FakeGeminiResponse({"embedding": {"values": [0.1] * 768}})
+
+    if ":generateContent" in url:
+        return _FakeGeminiResponse(
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": '{"phrases": ["graph", "search", "memoization"]}'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+    raise AssertionError(f"Unexpected Gemini endpoint: {url}")
 
 
 def test_material_crud(api_client):
@@ -382,6 +416,7 @@ def test_material_create_uses_instance_fetch_when_available(api_client, monkeypa
     assert payload["youtube_video_id"] == "EKOU3JWDNLI"
 
 
+@pytest.mark.live
 def test_live_transcript_fetch_for_exact_youtube_url():
     """Live integration test using the simplest youtube_transcript_api usage."""
     ytt_api = YouTubeTranscriptApi()
@@ -737,20 +772,14 @@ def test_material_suggestions_endpoint_returns_candidates(api_client, monkeypatc
     )
     assert material_resp.status_code == 200
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "graph"}]
-
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
 
     suggest_resp = api_client.post(
@@ -793,20 +822,14 @@ def test_material_suggestions_missing_project_id(api_client, monkeypatch):
     )
     assert material_resp.status_code == 200
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "graph"}]
-
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
 
     suggest_resp = api_client.post(
@@ -851,16 +874,6 @@ def test_material_suggestions_endpoint_existing_nodes(api_client, monkeypatch):
     )
     assert material_resp.status_code == 200
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "graph"}]
-
     class FakeRepo:
         def __init__(self, db):
             self.db = db
@@ -888,10 +901,14 @@ def test_material_suggestions_endpoint_existing_nodes(api_client, monkeypatch):
         async def max_similarity_to_nodes(self, project_id: str, candidate_embedding: list[float]) -> float:
             return 0.1
 
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
     monkeypatch.setattr(
         "app.api.materials.PostgresNodeSuggestionRepository",
@@ -937,16 +954,6 @@ def test_material_suggestions_raw_text_returns_candidates(api_client, monkeypatc
     assert node_resp.status_code == 200
     node_id = node_resp.json()["id"]
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "depth"}, {"word": "search"}]
-
     class FakeRepo:
         def __init__(self, db):
             self.db = db
@@ -974,10 +981,14 @@ def test_material_suggestions_raw_text_returns_candidates(api_client, monkeypatc
         async def max_similarity_to_nodes(self, project_id: str, candidate_embedding: list[float]) -> float:
             return 0.1
 
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
     monkeypatch.setattr(
         "app.api.materials.PostgresNodeSuggestionRepository",
@@ -1037,16 +1048,6 @@ def test_material_suggestions_wrapper_matches_raw_text(api_client, monkeypatch):
     )
     assert material_resp.status_code == 200
 
-    class FakeInferenceClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def feature_extraction(self, text, model=None):
-            return [0.1] * 768
-
-        def token_classification(self, text, model=None):
-            return [{"word": "memoization"}, {"word": "dynamic"}, {"word": "programming"}]
-
     class FakeRepo:
         def __init__(self, db):
             self.db = db
@@ -1074,10 +1075,14 @@ def test_material_suggestions_wrapper_matches_raw_text(api_client, monkeypatch):
         async def max_similarity_to_nodes(self, project_id: str, candidate_embedding: list[float]) -> float:
             return 0.1
 
-    monkeypatch.setenv("HF_TOKEN", os.environ["HF_TOKEN"])
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
     monkeypatch.setattr(
-        "huggingface_hub.InferenceClient",
-        FakeInferenceClient,
+        "app.services.node_suggestions.embedding_service.requests.post",
+        _fake_gemini_post,
+    )
+    monkeypatch.setattr(
+        "app.services.node_suggestions.keyword_extraction_service.requests.post",
+        _fake_gemini_post,
     )
     monkeypatch.setattr(
         "app.api.materials.PostgresNodeSuggestionRepository",
