@@ -1,8 +1,8 @@
 """Text embedding via Gemini Embedding API."""
 
-import json
 import logging
 import os
+from typing import Any
 from typing import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -16,14 +16,40 @@ GEMINI_EMBED_DIM = 768
 
 
 class EmbeddingService:
-    def __init__(self, expected_dim: int = GEMINI_EMBED_DIM):
+    def __init__(
+        self,
+        client: Any = None,
+        expected_dim: int = GEMINI_EMBED_DIM,
+        api_key: str | None = None,
+    ):
+        if isinstance(client, int) and expected_dim == GEMINI_EMBED_DIM:
+            expected_dim = client
+            client = None
+
+        self._client = client
         self.expected_dim = expected_dim
+        self._api_key = api_key
 
     def _embed_single(self, text: str) -> list[float]:
         if not text or not text.strip():
             return [0.0] * self.expected_dim
 
-        api_key = os.environ.get("GEMINI_API_KEY")
+        if self._client and hasattr(self._client, "feature_extraction"):
+            raw_vector = self._client.feature_extraction(text, model=None)
+            if raw_vector and isinstance(raw_vector[0], list):
+                raw_vector = raw_vector[0]
+            embedding = [float(v) for v in raw_vector]
+
+            if len(embedding) != self.expected_dim:
+                if len(embedding) > self.expected_dim:
+                    embedding = embedding[:self.expected_dim]
+                else:
+                    raise ValueError(
+                        f"Expected embedding size {self.expected_dim}, got {len(embedding)}"
+                    )
+            return embedding
+
+        api_key = self._api_key or os.environ.get("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError("GEMINI_API_KEY is not set")
 
