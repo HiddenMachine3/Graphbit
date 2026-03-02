@@ -7,6 +7,7 @@ type NodeDetailPanelProps = {
   onDelete?: (nodeId: string) => void;
   onWatch?: () => void;
   watchLabel?: string;
+  thumbnailUrl?: string | null;
 };
 
 export default function NodeDetailPanel({
@@ -15,6 +16,7 @@ export default function NodeDetailPanel({
   onDelete,
   onWatch,
   watchLabel = "Watch",
+  thumbnailUrl,
 }: NodeDetailPanelProps) {
   if (!node) {
     return (
@@ -34,6 +36,16 @@ export default function NodeDetailPanel({
 
   return (
     <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-sm font-body text-text-secondary">
+      {thumbnailUrl && (
+        <div className="mb-3 overflow-hidden rounded-xl border border-border-default bg-bg-elevated">
+          <img
+            src={thumbnailUrl}
+            alt={`${node.topic_name} video thumbnail`}
+            className="h-24 w-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      )}
       <div className="flex items-start justify-between">
         <div className="text-base font-semibold font-heading text-text-primary">{node.topic_name}</div>
         <div className="flex items-center gap-2">

@@ -151,6 +151,13 @@ export default function HomePage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [brightnessAttribute, setBrightnessAttribute] = useState<keyof GraphNodeDTO>("proven_knowledge_rating");
+  const [glowReach, setGlowReach] = useState(1.6);
+  const [glowLightness, setGlowLightness] = useState(1.6);
+  const [glowWhiteLiftCap, setGlowWhiteLiftCap] = useState(0.55);
+  const [glowAlphaCap, setGlowAlphaCap] = useState(1.0);
+  const [glowEnabled, setGlowEnabled] = useState(true);
+  const [nodeFillOpacity, setNodeFillOpacity] = useState(0.8);
+  const [visualSettingsOpen, setVisualSettingsOpen] = useState(false);
   const [showMaterials, setShowMaterials] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [activityCollapsed, setActivityCollapsed] = useState(false);
@@ -286,6 +293,13 @@ export default function HomePage() {
 
     return selectedNodeYoutubeInfo.embedUrl;
   }, [selectedNode, selectedNodeYoutubeInfo]);
+
+  const selectedNodeYoutubeThumbnailUrl = useMemo(() => {
+    if (!selectedNodeYoutubeInfo.videoId) {
+      return null;
+    }
+    return `https://img.youtube.com/vi/${encodeURIComponent(selectedNodeYoutubeInfo.videoId)}/mqdefault.jpg`;
+  }, [selectedNodeYoutubeInfo.videoId]);
 
   const selectedNodeVideoActionLabel =
     selectedNode?.node_type === "material" ? "View" : "Watch";
@@ -547,6 +561,12 @@ export default function HomePage() {
                 : undefined
           }
           brightnessAttribute={brightnessAttribute}
+          glowReach={glowReach}
+          glowLightness={glowLightness}
+          glowWhiteLiftCap={glowWhiteLiftCap}
+          glowAlphaCap={glowAlphaCap}
+          glowEnabled={glowEnabled}
+          nodeFillOpacity={nodeFillOpacity}
           onGraphUpdated={loadGraph}
           fitTrigger={graphFitTrigger}
         />
@@ -565,14 +585,16 @@ export default function HomePage() {
           </button>
 
           {!sidebarCollapsed && (
-            <div className="h-full overflow-y-auto border-l border-border-default bg-bg-surface p-4">
-              <div className="flex flex-col gap-4">
+            <div className="flex h-full flex-col border-l border-border-default bg-bg-surface p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="flex flex-col gap-4">
                 <NodeDetailPanel
                   node={selectedNode}
                   onEdit={handleEditClick}
                   onDelete={handleDeleteSingleNode}
                   onWatch={selectedNodeYoutubeEmbedUrl ? openSelectedVideo : undefined}
                   watchLabel={selectedNodeVideoActionLabel}
+                  thumbnailUrl={selectedNodeYoutubeThumbnailUrl}
                 />
 
                 {shouldShowMissingYoutubeHint && (
@@ -720,6 +742,137 @@ export default function HomePage() {
                 </div>
 
                 <GraphLegend />
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-border-default bg-bg-surface p-4">
+                <button
+                  type="button"
+                  onClick={() => setVisualSettingsOpen((value) => !value)}
+                  className="flex w-full items-center justify-between text-left"
+                  aria-expanded={visualSettingsOpen}
+                >
+                  <h3 className="font-semibold font-heading text-text-primary">Visual Settings</h3>
+                  <span className="text-xs font-body text-text-muted">{visualSettingsOpen ? "Hide" : "Show"}</span>
+                </button>
+
+                {visualSettingsOpen && (
+                  <div className="mt-4 space-y-4">
+                    <div className="rounded-lg border border-border-default bg-bg-elevated px-3 py-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold font-body text-text-primary">Glow Enabled</span>
+                        <button
+                          type="button"
+                          onClick={() => setGlowEnabled((value) => !value)}
+                          className={`relative inline-flex h-5 w-10 items-center rounded-full border transition ${
+                            glowEnabled
+                              ? "border-accent/70 bg-accent/30"
+                              : "border-border-default bg-bg-surface"
+                          }`}
+                          aria-pressed={glowEnabled}
+                          aria-label="Toggle graph glow"
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white/90 transition ${
+                              glowEnabled ? "translate-x-5" : "translate-x-0.5"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={!glowEnabled ? "opacity-50" : ""}>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold font-body text-text-primary">Glow Reach</span>
+                        <span className="text-xs font-body text-text-muted">{glowReach.toFixed(1)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.4}
+                        max={3.5}
+                        step={0.1}
+                        value={glowReach}
+                        onChange={(event) => setGlowReach(Number(event.target.value))}
+                        disabled={!glowEnabled}
+                        className="mt-2 w-full accent-accent"
+                        aria-label="Adjust graph glow reach"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold font-body text-text-primary">Glow Lightness</span>
+                        <span className="text-xs font-body text-text-muted">{glowLightness.toFixed(1)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.4}
+                        max={3.5}
+                        step={0.1}
+                        value={glowLightness}
+                        onChange={(event) => setGlowLightness(Number(event.target.value))}
+                        disabled={!glowEnabled}
+                        className="mt-2 w-full accent-accent"
+                        aria-label="Adjust graph glow lightness"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold font-body text-text-primary">Node Fill Opacity</span>
+                        <span className="text-xs font-body text-text-muted">{Math.round(nodeFillOpacity * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.25}
+                        max={1}
+                        step={0.05}
+                        value={nodeFillOpacity}
+                        onChange={(event) => setNodeFillOpacity(Number(event.target.value))}
+                        className="mt-2 w-full accent-accent"
+                        aria-label="Adjust graph node fill opacity"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold font-body text-text-primary">Glow White Lift Cap</span>
+                        <span className="text-xs font-body text-text-muted">{glowWhiteLiftCap.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.2}
+                        max={1.2}
+                        step={0.05}
+                        value={glowWhiteLiftCap}
+                        onChange={(event) => setGlowWhiteLiftCap(Number(event.target.value))}
+                        disabled={!glowEnabled}
+                        className="mt-2 w-full accent-accent"
+                        aria-label="Adjust glow white lift cap"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold font-body text-text-primary">Glow Alpha Cap</span>
+                        <span className="text-xs font-body text-text-muted">{glowAlphaCap.toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.2}
+                        max={1.5}
+                        step={0.05}
+                        value={glowAlphaCap}
+                        onChange={(event) => setGlowAlphaCap(Number(event.target.value))}
+                        disabled={!glowEnabled}
+                        className="mt-2 w-full accent-accent"
+                        aria-label="Adjust glow alpha cap"
+                      />
+                    </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
